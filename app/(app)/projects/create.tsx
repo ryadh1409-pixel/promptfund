@@ -6,9 +6,9 @@ import { colors, radii, spacing } from '@/constants/theme';
 export default function CreateProjectScreen() {
   return (
     <Screen
-      eyebrow="Create Project"
-      title="Turn a small tool budget into a funded build."
-      subtitle="This mock form previews the fields that will later save into the `projects` collection."
+      eyebrow="PromptFund Project"
+      title="Turn a precise tool budget into a funded build"
+      subtitle="Package the investor-ready fields that will later save into the `projects` collection."
     >
       <Card>
         <TextInput editable={false} value="AI Changelog Copilot" style={styles.input} />
@@ -24,7 +24,7 @@ export default function CreateProjectScreen() {
           style={[styles.input, styles.textArea]}
         />
         <TextInput editable={false} value="$300 goal" style={styles.input} />
-        <PrimaryLink href="/dashboard" label="Publish mock project" />
+        <PrimaryLink href="/projects" label="Publish PromptFund project" />
       </Card>
 
       <FieldPreview

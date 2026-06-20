@@ -17,10 +17,10 @@ export default function FundingRequestScreen() {
         <TextInput
           editable={false}
           multiline
-          value="Need one month of Claude Max to run larger prompt regression suites before the investor demo."
+          value="Need one month of Claude Max to run larger prompt regression suites before the next investor update."
           style={[styles.input, styles.textArea]}
         />
-        <PrimaryLink href="/investor-feed" label="Post mock request" />
+        <PrimaryLink href="/investor-feed" label="Post PromptFund request" />
       </Card>
 
       <FieldPreview

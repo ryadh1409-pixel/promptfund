@@ -24,21 +24,21 @@ export default function LoginScreen() {
           placeholderTextColor={colors.subtle}
           secureTextEntry
           style={styles.input}
-          value="mock-password"
+          value="promptfund-preview"
           editable={false}
         />
-        <PrimaryLink href="/dashboard" label="Enter demo dashboard" />
+        <PrimaryLink href="/dashboard" label="Enter PromptFund" />
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>New to PromptFund?</Text>
-          <Link href="/register" style={styles.footerLink}>
-            Create account
+          <Link href="/register" asChild>
+            <Text style={styles.footerLink}>Create account</Text>
           </Link>
         </View>
       </Card>
 
       <FieldPreview
-        label="MVP note"
-        value="Authentication is mocked for now. Firebase Auth and Firestore will plug into these screens later."
+        label="Product preview"
+        value="PromptFund Auth and Firestore collections are represented with local preview data until Firebase is connected."
       />
     </Screen>
   );

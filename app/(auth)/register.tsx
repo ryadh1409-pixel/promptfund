@@ -34,11 +34,11 @@ export default function RegisterScreen() {
           value="AI workflow tools for product teams."
           editable={false}
         />
-        <PrimaryLink href="/dashboard" label="Create mock account" />
+        <PrimaryLink href="/dashboard" label="Create PromptFund profile" />
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>Already registered?</Text>
-          <Link href="/login" style={styles.footerLink}>
-            Sign in
+          <Link href="/login" asChild>
+            <Text style={styles.footerLink}>Sign in</Text>
           </Link>
         </View>
       </Card>

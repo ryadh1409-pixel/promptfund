@@ -1,6 +1,7 @@
 import { Link, type Href } from 'expo-router';
 import type { ReactNode } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -23,11 +24,28 @@ export function Screen({ eyebrow, title, subtitle, children }: ScreenProps) {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.screenContent}>
       <View style={styles.heroGlow} />
+      <BrandMark />
       {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
       <Text style={styles.title}>{title}</Text>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       {children}
     </ScrollView>
+  );
+}
+
+export function BrandMark({ compact = false }: { compact?: boolean }) {
+  return (
+    <View style={styles.brandRow}>
+      <View style={compact ? styles.logoCompact : styles.logo}>
+        <Text style={compact ? styles.logoTextCompact : styles.logoText}>PF</Text>
+      </View>
+      {!compact ? (
+        <View>
+          <Text style={styles.brandName}>PromptFund</Text>
+          <Text style={styles.brandTagline}>Micro-capital for AI builders</Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -84,14 +102,46 @@ export function PrimaryLink({
   label: string;
   variant?: 'primary' | 'secondary';
 }) {
+  const buttonStyle = variant === 'secondary' ? styles.secondaryButton : styles.button;
+  const buttonTextStyle = variant === 'secondary' ? styles.secondaryButtonText : styles.buttonText;
+
   return (
     <Link href={href} asChild>
-      <Pressable style={[styles.button, variant === 'secondary' && styles.secondaryButton]}>
-        <Text style={[styles.buttonText, variant === 'secondary' && styles.secondaryButtonText]}>
-          {label}
-        </Text>
+      <Pressable style={buttonStyle}>
+        <Text style={buttonTextStyle}>{label}</Text>
       </Pressable>
     </Link>
+  );
+}
+
+export function LoadingState({ label = 'Loading PromptFund workspace' }: { label?: string }) {
+  return (
+    <Card style={styles.stateCard}>
+      <ActivityIndicator color={colors.accent} />
+      <Text style={styles.stateTitle}>{label}</Text>
+      <Text style={styles.stateCopy}>Preparing investor-grade funding signals and project activity.</Text>
+    </Card>
+  );
+}
+
+export function EmptyState({
+  title,
+  message,
+  action,
+}: {
+  title: string;
+  message: string;
+  action?: ReactNode;
+}) {
+  return (
+    <Card style={styles.stateCard}>
+      <View style={styles.emptyIcon}>
+        <Text style={styles.emptyIconText}>PF</Text>
+      </View>
+      <Text style={styles.stateTitle}>{title}</Text>
+      <Text style={styles.stateCopy}>{message}</Text>
+      {action}
+    </Card>
   );
 }
 
@@ -137,6 +187,51 @@ const styles = StyleSheet.create({
     height: 240,
     borderRadius: 120,
     backgroundColor: 'rgba(139, 92, 246, 0.28)',
+  },
+  brandRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  logo: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 48,
+    height: 48,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.55)',
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+  },
+  logoCompact: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: colors.primary,
+  },
+  logoText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  logoTextCompact: {
+    color: colors.text,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  brandName: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+  },
+  brandTagline: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '600',
   },
   eyebrow: {
     color: colors.accent,
@@ -220,6 +315,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   secondaryButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.panelMuted,
@@ -231,6 +331,38 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: colors.primarySoft,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  stateCard: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+  },
+  stateTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  stateCopy: {
+    color: colors.muted,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  emptyIcon: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 54,
+    height: 54,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    backgroundColor: colors.panelMuted,
+  },
+  emptyIconText: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: '900',
   },
   field: {
     gap: spacing.xs,

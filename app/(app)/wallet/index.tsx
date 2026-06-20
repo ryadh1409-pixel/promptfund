@@ -1,18 +1,30 @@
 import { Text, View } from 'react-native';
 
-import { Card, Pill, Screen, SectionTitle, StatCard, ui } from '@/components/ui/Primitives';
+import {
+  Card,
+  EmptyState,
+  LoadingState,
+  Pill,
+  Screen,
+  SectionTitle,
+  StatCard,
+  ui,
+} from '@/components/ui/Primitives';
 import { colors } from '@/constants/theme';
 import { fundPoints } from '@/data/mockData';
 
 export default function FundPointsWalletScreen() {
+  const isLoading = false;
   const wallet = fundPoints[0];
 
   return (
     <Screen
-      eyebrow="Fund Points Wallet"
+      eyebrow="PromptFund Wallet"
       title={`${wallet.balance.toLocaleString()} points`}
       subtitle="Fund Points reward trustworthy progress: updates, approved expenses, and shipped milestones."
     >
+      {isLoading ? <LoadingState label="Loading Fund Points wallet" /> : null}
+
       <View style={ui.row}>
         <StatCard label="Lifetime earned" value={wallet.lifetimeEarned.toLocaleString()} tone={colors.accent} />
         <StatCard label="Weekly streak" value={`${wallet.streakWeeks}w`} tone={colors.success} />
@@ -30,15 +42,22 @@ export default function FundPointsWalletScreen() {
       </Card>
 
       <SectionTitle title="Point history" />
-      {wallet.history.map((item) => (
-        <Card key={item.id}>
-          <Text style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>{item.label}</Text>
-          <Text style={{ color: colors.muted }}>{item.date}</Text>
-          <Text style={{ color: colors.success, fontSize: 22, fontWeight: '800' }}>
-            +{item.points} points
-          </Text>
-        </Card>
-      ))}
+      {!isLoading && wallet.history.length === 0 ? (
+        <EmptyState
+          title="No Fund Points yet"
+          message="PromptFund awards points when builders publish updates, verify expenses, and hit milestone proof."
+        />
+      ) : null}
+      {!isLoading &&
+        wallet.history.map((item) => (
+          <Card key={item.id}>
+            <Text style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>{item.label}</Text>
+            <Text style={{ color: colors.muted }}>{item.date}</Text>
+            <Text style={{ color: colors.success, fontSize: 22, fontWeight: '800' }}>
+              +{item.points} points
+            </Text>
+          </Card>
+        ))}
     </Screen>
   );
 }

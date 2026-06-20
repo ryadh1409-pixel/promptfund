@@ -1,27 +1,48 @@
 import { Text, View } from 'react-native';
 
-import { Card, Pill, Screen, SectionTitle, StatCard, ui } from '@/components/ui/Primitives';
+import {
+  Card,
+  EmptyState,
+  LoadingState,
+  Pill,
+  PrimaryLink,
+  Screen,
+  SectionTitle,
+  StatCard,
+  ui,
+} from '@/components/ui/Primitives';
 import { colors } from '@/constants/theme';
 import { expenses, projects } from '@/data/mockData';
 import { formatCurrency } from '@/utils/format';
 
 export default function ExpenseTrackingScreen() {
+  const isLoading = false;
   const total = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   const approved = expenses.filter((expense) => expense.status === 'approved').length;
 
   return (
     <Screen
-      eyebrow="Expense Tracking"
-      title="Show where every funded dollar goes."
-      subtitle="Mock receipts and expense statuses prepare the future `expenses` collection without Firebase."
+      eyebrow="PromptFund Expense Ledger"
+      title="Show where every funded dollar goes"
+      subtitle="Track AI-tool spend with receipt-ready expense records that investors can review before funding the next request."
     >
+      {isLoading ? <LoadingState label="Loading verified expenses" /> : null}
+
       <View style={ui.row}>
         <StatCard label="Tracked spend" value={formatCurrency(total)} tone={colors.warning} />
         <StatCard label="Approved" value={String(approved)} tone={colors.success} />
       </View>
 
       <SectionTitle title="Recent expenses" />
-      {expenses.map((expense) => {
+      {!isLoading && expenses.length === 0 ? (
+        <EmptyState
+          title="No expenses tracked"
+          message="PromptFund will show Cursor, Claude, API, hosting, and domain spend here once receipts are added."
+          action={<PrimaryLink href="/funding/request" label="Request funding" variant="secondary" />}
+        />
+      ) : null}
+
+      {!isLoading && expenses.map((expense) => {
         const project = projects.find((item) => item.id === expense.projectId);
 
         return (

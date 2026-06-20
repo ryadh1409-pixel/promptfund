@@ -37,7 +37,7 @@ export const projects: Project[] = [
     id: 'pf-runner',
     developerId: 'user-dev-1',
     title: 'Prompt Runner',
-    tagline: 'Test prompt variants across models in one workspace.',
+    tagline: 'Evaluate prompt variants across models in one investor-ready workspace.',
     description:
       'A lightweight evaluation dashboard for founders who need to compare Claude, OpenAI, and local model outputs before shipping prompt changes.',
     status: 'funding',
@@ -46,7 +46,7 @@ export const projects: Project[] = [
     progress: 0.7,
     tools: ['Cursor Pro', 'Claude Max', 'OpenAI API'],
     milestones: ['Prototype UI', 'Model comparison table', 'Shareable report links'],
-    nextUpdate: 'Demo video due Friday',
+    nextUpdate: 'Investor update due Friday',
   },
   {
     id: 'launch-domain-kit',
@@ -92,7 +92,7 @@ export const fundingRequests: FundingRequest[] = [
     requestedBy: 'user-dev-1',
     amount: 14,
     tool: 'Domain',
-    reason: 'Register the launch demo domain for investor previews.',
+    reason: 'Register the launch preview domain for investor reviews.',
     status: 'funded',
     dueDate: 'Funded',
   },
