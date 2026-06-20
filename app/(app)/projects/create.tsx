@@ -32,6 +32,7 @@ export default function CreateProjectScreen() {
     try {
       const project = await projectService.createProject({
         developerId: authUser.uid,
+        ownerId: authUser.uid,
         title: title.trim(),
         tagline: tagline.trim(),
         description: description.trim(),

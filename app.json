@@ -8,6 +8,7 @@
     "scheme": "promptfund",
     "userInterfaceStyle": "dark",
     "ios": {
+      "bundleIdentifier": "com.thamer.promptfund",
       "supportsTablet": true
     },
     "android": {
@@ -17,7 +18,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.thamer.promptfund"
     },
     "web": {
       "favicon": "./assets/favicon.png"

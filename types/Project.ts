@@ -3,6 +3,7 @@ export type ProjectStatus = 'building' | 'funding' | 'shipped';
 export type Project = {
   id: string;
   developerId: string;
+  ownerId: string;
   title: string;
   tagline: string;
   description: string;
@@ -19,4 +20,4 @@ export type CreateProjectInput = Omit<Project, 'id' | 'fundedAmount' | 'progress
   status?: ProjectStatus;
 };
 
-export type UpdateProjectInput = Partial<Omit<Project, 'id' | 'developerId'>>;
+export type UpdateProjectInput = Partial<Omit<Project, 'id' | 'developerId' | 'ownerId'>>;
