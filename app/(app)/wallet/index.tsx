@@ -11,23 +11,23 @@ import {
   ui,
 } from '@/components/ui/Primitives';
 import { colors } from '@/constants/theme';
-import { fundPoints } from '@/data/mockData';
+import { useAuth } from '@/context/AuthContext';
 
 export default function FundPointsWalletScreen() {
-  const isLoading = false;
-  const wallet = fundPoints[0];
+  const { initializing, profile } = useAuth();
+  const pointsBalance = 0;
 
   return (
     <Screen
       eyebrow="PromptFund Wallet"
-      title={`${wallet.balance.toLocaleString()} points`}
+      title={`${pointsBalance.toLocaleString()} points`}
       subtitle="Fund Points reward trustworthy progress: updates, approved expenses, and shipped milestones."
     >
-      {isLoading ? <LoadingState label="Loading Fund Points wallet" /> : null}
+      {initializing ? <LoadingState label="Loading Fund Points wallet" /> : null}
 
       <View style={ui.row}>
-        <StatCard label="Lifetime earned" value={wallet.lifetimeEarned.toLocaleString()} tone={colors.accent} />
-        <StatCard label="Weekly streak" value={`${wallet.streakWeeks}w`} tone={colors.success} />
+        <StatCard label="Trust score" value={String(profile?.trustScore ?? 0)} tone={colors.accent} />
+        <StatCard label="Weekly streak" value="0w" tone={colors.success} />
       </View>
 
       <Card>
@@ -42,22 +42,12 @@ export default function FundPointsWalletScreen() {
       </Card>
 
       <SectionTitle title="Point history" />
-      {!isLoading && wallet.history.length === 0 ? (
+      {!initializing ? (
         <EmptyState
           title="No Fund Points yet"
           message="PromptFund awards points when builders publish updates, verify expenses, and hit milestone proof."
         />
       ) : null}
-      {!isLoading &&
-        wallet.history.map((item) => (
-          <Card key={item.id}>
-            <Text style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>{item.label}</Text>
-            <Text style={{ color: colors.muted }}>{item.date}</Text>
-            <Text style={{ color: colors.success, fontSize: 22, fontWeight: '800' }}>
-              +{item.points} points
-            </Text>
-          </Card>
-        ))}
     </Screen>
   );
 }

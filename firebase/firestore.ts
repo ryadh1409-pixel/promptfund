@@ -1,12 +1,27 @@
-import { assertFirebaseEnabled } from './config';
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+  type DocumentData,
+  type QueryConstraint,
+} from 'firebase/firestore';
+
+import { getFirebaseApp } from './config';
 
 export const firestoreCollections = {
   users: 'users',
   projects: 'projects',
   fundingRequests: 'fundingRequests',
-  fundings: 'fundings',
+  investments: 'investments',
   expenses: 'expenses',
-  fundPoints: 'fundPoints',
 } as const;
 
 export type FirestoreCollectionName = keyof typeof firestoreCollections;
@@ -19,6 +34,11 @@ export type FirestoreDocument<T> = T & {
 
 export type FirestoreAdapter = {
   list: <T>(collectionName: FirestoreCollectionName) => Promise<Array<FirestoreDocument<T>>>;
+  queryByField: <T>(
+    collectionName: FirestoreCollectionName,
+    field: string,
+    value: string,
+  ) => Promise<Array<FirestoreDocument<T>>>;
   getById: <T>(
     collectionName: FirestoreCollectionName,
     id: string,
@@ -32,23 +52,96 @@ export type FirestoreAdapter = {
     id: string,
     input: Partial<T>,
   ) => Promise<FirestoreDocument<T>>;
+  setWithId: <T>(
+    collectionName: FirestoreCollectionName,
+    id: string,
+    input: T,
+  ) => Promise<FirestoreDocument<T>>;
 };
 
+export function getPromptFundFirestore() {
+  return getFirestore(getFirebaseApp());
+}
+
+function collectionRef(collectionName: FirestoreCollectionName) {
+  return collection(getPromptFundFirestore(), firestoreCollections[collectionName]);
+}
+
+function mapDocument<T>(id: string, data: DocumentData): FirestoreDocument<T> {
+  return {
+    ...(data as T),
+    id,
+  };
+}
+
+function withWriteMetadata<T extends object>(input: T) {
+  return {
+    ...input,
+    updatedAt: serverTimestamp(),
+  };
+}
+
+async function listWithConstraints<T>(
+  collectionName: FirestoreCollectionName,
+  constraints: QueryConstraint[] = [],
+): Promise<Array<FirestoreDocument<T>>> {
+  const snapshot = await getDocs(query(collectionRef(collectionName), ...constraints));
+  return snapshot.docs.map((item) => mapDocument<T>(item.id, item.data()));
+}
+
 export const firestoreAdapter: FirestoreAdapter = {
-  async list() {
-    assertFirebaseEnabled();
-    throw new Error('Live Firestore list adapter is not implemented yet.');
+  async list(collectionName) {
+    return listWithConstraints(collectionName);
   },
-  async getById() {
-    assertFirebaseEnabled();
-    throw new Error('Live Firestore getById adapter is not implemented yet.');
+  async queryByField(collectionName, field, value) {
+    return listWithConstraints(collectionName, [where(field, '==', value)]);
   },
-  async create() {
-    assertFirebaseEnabled();
-    throw new Error('Live Firestore create adapter is not implemented yet.');
+  async getById(collectionName, id) {
+    const snapshot = await getDoc(doc(getPromptFundFirestore(), firestoreCollections[collectionName], id));
+
+    if (!snapshot.exists()) {
+      return null;
+    }
+
+    return mapDocument(snapshot.id, snapshot.data());
   },
-  async update() {
-    assertFirebaseEnabled();
-    throw new Error('Live Firestore update adapter is not implemented yet.');
+  async create(collectionName, input) {
+    const payload = {
+      ...withWriteMetadata(input as object),
+      createdAt: serverTimestamp(),
+    };
+    const reference = await addDoc(collectionRef(collectionName), payload);
+    return {
+      ...(input as object),
+      id: reference.id,
+    } as FirestoreDocument<typeof input>;
+  },
+  async update<T>(
+    collectionName: FirestoreCollectionName,
+    id: string,
+    input: Partial<T>,
+  ): Promise<FirestoreDocument<T>> {
+    const reference = doc(getPromptFundFirestore(), firestoreCollections[collectionName], id);
+    await updateDoc(reference, withWriteMetadata(input as object));
+    const updated = await this.getById<T>(collectionName, id);
+
+    if (!updated) {
+      throw new Error(`Unable to load updated document ${collectionName}/${id}`);
+    }
+
+    return updated;
+  },
+  async setWithId(collectionName, id, input) {
+    const reference = doc(getPromptFundFirestore(), firestoreCollections[collectionName], id);
+    await setDoc(reference, {
+      ...input,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    return {
+      ...input,
+      id,
+    };
   },
 };

@@ -1,10 +1,52 @@
 import { Link } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { Card, PrimaryLink, Screen } from '@/components/ui/Primitives';
+import { Card, PrimaryButton, Screen } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
+import type { UserRole } from '@/types/User';
 
 export default function RegisterScreen() {
+  const router = useRouter();
+  const { error, loading, register } = useAuth();
+  const [name, setName] = useState('');
+  const [handle, setHandle] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState<UserRole>('developer');
+  const [bio, setBio] = useState('');
+  const [location, setLocation] = useState('');
+  const [stack, setStack] = useState('');
+
+  async function handleRegister() {
+    const normalizedHandle = handle.startsWith('@') ? handle : `@${handle}`;
+    const avatar = name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join('');
+
+    await register({
+      email: email.trim(),
+      password,
+      displayName: name.trim(),
+      name: name.trim(),
+      handle: normalizedHandle,
+      role,
+      avatar: avatar || 'PF',
+      bio: bio.trim(),
+      location: location.trim(),
+      stack: stack
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    });
+    router.replace('/dashboard');
+  }
+
   return (
     <Screen
       eyebrow="Create profile"
@@ -16,25 +58,70 @@ export default function RegisterScreen() {
           placeholder="Full name"
           placeholderTextColor={colors.subtle}
           style={styles.input}
-          value="Maya Chen"
-          editable={false}
+          value={name}
+          onChangeText={setName}
         />
         <TextInput
-          placeholder="Role"
+          placeholder="Handle"
           placeholderTextColor={colors.subtle}
           style={styles.input}
-          value="Developer"
-          editable={false}
+          value={handle}
+          autoCapitalize="none"
+          onChangeText={setHandle}
+        />
+        <TextInput
+          placeholder="Email"
+          placeholderTextColor={colors.subtle}
+          style={styles.input}
+          value={email}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          onChangeText={setEmail}
+        />
+        <TextInput
+          placeholder="Password"
+          placeholderTextColor={colors.subtle}
+          secureTextEntry
+          style={styles.input}
+          value={password}
+          onChangeText={setPassword}
+        />
+        <TextInput
+          placeholder="Role: developer or investor"
+          placeholderTextColor={colors.subtle}
+          style={styles.input}
+          value={role}
+          autoCapitalize="none"
+          onChangeText={(value) => setRole(value === 'investor' ? 'investor' : 'developer')}
+        />
+        <TextInput
+          placeholder="Location"
+          placeholderTextColor={colors.subtle}
+          style={styles.input}
+          value={location}
+          onChangeText={setLocation}
         />
         <TextInput
           placeholder="What are you building?"
           placeholderTextColor={colors.subtle}
           multiline
           style={[styles.input, styles.textArea]}
-          value="AI workflow tools for product teams."
-          editable={false}
+          value={bio}
+          onChangeText={setBio}
         />
-        <PrimaryLink href="/dashboard" label="Create PromptFund profile" />
+        <TextInput
+          placeholder="Stack, separated by commas"
+          placeholderTextColor={colors.subtle}
+          style={styles.input}
+          value={stack}
+          onChangeText={setStack}
+        />
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        <PrimaryButton
+          label={loading ? 'Creating profile...' : 'Create PromptFund profile'}
+          disabled={loading || name.length === 0 || email.length === 0 || password.length === 0}
+          onPress={handleRegister}
+        />
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>Already registered?</Text>
           <Link href="/login" asChild>
@@ -73,5 +160,9 @@ const styles = StyleSheet.create({
   footerLink: {
     color: colors.accent,
     fontWeight: '800',
+  },
+  errorText: {
+    color: colors.danger,
+    lineHeight: 20,
   },
 });

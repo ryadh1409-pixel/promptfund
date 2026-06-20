@@ -17,7 +17,7 @@ export type CreateFundingRequestInput = Omit<FundingRequest, 'id' | 'status'> & 
 
 export type UpdateFundingRequestInput = Partial<Omit<FundingRequest, 'id' | 'projectId' | 'requestedBy'>>;
 
-export type Funding = {
+export type Investment = {
   id: string;
   investorId: string;
   projectId: string;
@@ -26,6 +26,10 @@ export type Funding = {
   note: string;
 };
 
-export type CreateFundingInput = Omit<Funding, 'id' | 'fundedAt'> & {
+export type Funding = Investment;
+
+export type CreateInvestmentInput = Omit<Investment, 'id' | 'fundedAt'> & {
   fundedAt?: string;
 };
+
+export type CreateFundingInput = CreateInvestmentInput;

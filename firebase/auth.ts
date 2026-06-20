@@ -1,4 +1,14 @@
-import { assertFirebaseEnabled } from './config';
+import {
+  createUserWithEmailAndPassword,
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  updateProfile,
+  type User as FirebaseAuthUser,
+} from 'firebase/auth';
+
+import { getFirebaseApp } from './config';
 
 export type AuthUser = {
   uid: string;
@@ -16,22 +26,41 @@ export type AuthAdapter = {
   signIn: (credentials: AuthCredentials) => Promise<AuthUser>;
   register: (credentials: AuthCredentials & { displayName: string }) => Promise<AuthUser>;
   signOut: () => Promise<void>;
+  onAuthStateChanged: (callback: (user: AuthUser | null) => void) => () => void;
 };
+
+function getFirebaseAuth() {
+  return getAuth(getFirebaseApp());
+}
+
+function mapFirebaseUser(user: FirebaseAuthUser): AuthUser {
+  return {
+    uid: user.uid,
+    email: user.email,
+    displayName: user.displayName,
+  };
+}
 
 export const firebaseAuth: AuthAdapter = {
   async getCurrentUser() {
-    return null;
+    const user = getFirebaseAuth().currentUser;
+    return user ? mapFirebaseUser(user) : null;
   },
-  async signIn() {
-    assertFirebaseEnabled();
-    throw new Error('Live Firebase signIn adapter is not implemented yet.');
+  async signIn({ email, password }) {
+    const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
+    return mapFirebaseUser(credential.user);
   },
-  async register() {
-    assertFirebaseEnabled();
-    throw new Error('Live Firebase register adapter is not implemented yet.');
+  async register({ email, password, displayName }) {
+    const credential = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
+    await updateProfile(credential.user, { displayName });
+    return mapFirebaseUser(credential.user);
   },
   async signOut() {
-    assertFirebaseEnabled();
-    throw new Error('Live Firebase signOut adapter is not implemented yet.');
+    await firebaseSignOut(getFirebaseAuth());
+  },
+  onAuthStateChanged(callback) {
+    return onAuthStateChanged(getFirebaseAuth(), (user) => {
+      callback(user ? mapFirebaseUser(user) : null);
+    });
   },
 };

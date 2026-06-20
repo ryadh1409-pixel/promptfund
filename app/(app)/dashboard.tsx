@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { ProjectCard } from '@/components/project/ProjectCard';
@@ -13,17 +14,52 @@ import {
   ui,
 } from '@/components/ui/Primitives';
 import { colors } from '@/constants/theme';
-import { currentUser, expenses, fundingRequests, fundings, projects } from '@/data/mockData';
+import { useAuth } from '@/context/AuthContext';
+import { firestoreAdapter } from '@/firebase/firestore';
+import { fundingService } from '@/services/fundingService';
+import { projectService } from '@/services/projectService';
+import type { Expense } from '@/types/Expense';
+import type { Investment, FundingRequest } from '@/types/FundingRequest';
+import type { Project } from '@/types/Project';
 import { formatCurrency } from '@/utils/format';
 
 export default function DashboardScreen() {
-  const isLoading = false;
+  const { profile } = useAuth();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [fundingRequests, setFundingRequests] = useState<FundingRequest[]>([]);
+  const [investments, setInvestments] = useState<Investment[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const totalRaised = projects.reduce((sum, project) => sum + project.fundedAmount, 0);
   const pendingExpenses = expenses.filter((expense) => expense.status === 'pending').length;
 
+  useEffect(() => {
+    async function loadDashboard() {
+      setIsLoading(true);
+
+      try {
+        const [nextProjects, nextRequests, nextInvestments, nextExpenses] = await Promise.all([
+          projectService.listProjects(),
+          fundingService.listFundingRequests(),
+          fundingService.listInvestments(),
+          firestoreAdapter.list<Expense>('expenses'),
+        ]);
+
+        setProjects(nextProjects);
+        setFundingRequests(nextRequests);
+        setInvestments(nextInvestments);
+        setExpenses(nextExpenses);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadDashboard();
+  }, []);
+
   return (
     <Screen
-      eyebrow={`PromptFund workspace for ${currentUser.name}`}
+      eyebrow={`PromptFund workspace for ${profile?.name ?? 'your team'}`}
       title="Investor-grade funding command center"
       subtitle="Track project capital, verified expenses, investor activity, and Fund Points from one startup-ready dashboard."
     >
@@ -34,7 +70,7 @@ export default function DashboardScreen() {
         <StatCard label="Open asks" value={String(fundingRequests.length)} tone={colors.accent} />
       </View>
       <View style={ui.row}>
-        <StatCard label="Backers" value={String(fundings.length)} />
+        <StatCard label="Investments" value={String(investments.length)} />
         <StatCard label="Pending expenses" value={String(pendingExpenses)} tone={colors.warning} />
       </View>
 

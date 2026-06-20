@@ -1,10 +1,23 @@
 import { Link } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { Card, FieldPreview, PrimaryLink, Screen } from '@/components/ui/Primitives';
+import { Card, FieldPreview, PrimaryButton, Screen } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 
 export default function LoginScreen() {
+  const router = useRouter();
+  const { error, loading, signIn } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  async function handleLogin() {
+    await signIn({ email: email.trim(), password });
+    router.replace('/dashboard');
+  }
+
   return (
     <Screen
       eyebrow="PromptFund"
@@ -16,18 +29,25 @@ export default function LoginScreen() {
           placeholder="Email"
           placeholderTextColor={colors.subtle}
           style={styles.input}
-          value="maya@promptfund.dev"
-          editable={false}
+          value={email}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          onChangeText={setEmail}
         />
         <TextInput
           placeholder="Password"
           placeholderTextColor={colors.subtle}
           secureTextEntry
           style={styles.input}
-          value="promptfund-preview"
-          editable={false}
+          value={password}
+          onChangeText={setPassword}
         />
-        <PrimaryLink href="/dashboard" label="Enter PromptFund" />
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        <PrimaryButton
+          label={loading ? 'Signing in...' : 'Enter PromptFund'}
+          disabled={loading || email.length === 0 || password.length === 0}
+          onPress={handleLogin}
+        />
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>New to PromptFund?</Text>
           <Link href="/register" asChild>
@@ -37,8 +57,8 @@ export default function LoginScreen() {
       </Card>
 
       <FieldPreview
-        label="Product preview"
-        value="PromptFund Auth and Firestore collections are represented with local preview data until Firebase is connected."
+        label="Firebase Auth"
+        value="Sign in with a Firebase Authentication account. PromptFund loads the matching profile from Firestore."
       />
     </Screen>
   );
@@ -66,5 +86,9 @@ const styles = StyleSheet.create({
   footerLink: {
     color: colors.accent,
     fontWeight: '800',
+  },
+  errorText: {
+    color: colors.danger,
+    lineHeight: 20,
   },
 });

@@ -1,8 +1,10 @@
 import { useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import {
   Card,
+  LoadingState,
   Pill,
   PrimaryLink,
   ProgressBar,
@@ -12,15 +14,67 @@ import {
   ui,
 } from '@/components/ui/Primitives';
 import { colors } from '@/constants/theme';
-import { expenses, fundingRequests, fundings, projects } from '@/data/mockData';
+import { firestoreAdapter } from '@/firebase/firestore';
+import { fundingService } from '@/services/fundingService';
+import { projectService } from '@/services/projectService';
+import type { Expense } from '@/types/Expense';
+import type { Investment, FundingRequest } from '@/types/FundingRequest';
+import type { Project } from '@/types/Project';
 import { formatCurrency, formatPercent } from '@/utils/format';
 
 export default function ProjectDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const project = projects.find((item) => item.id === id) ?? projects[0];
-  const request = fundingRequests.find((item) => item.projectId === project.id);
-  const projectExpenses = expenses.filter((expense) => expense.projectId === project.id);
-  const projectFundings = fundings.filter((funding) => funding.projectId === project.id);
+  const [project, setProject] = useState<Project | null>(null);
+  const [requests, setRequests] = useState<FundingRequest[]>([]);
+  const [projectExpenses, setProjectExpenses] = useState<Expense[]>([]);
+  const [projectInvestments, setProjectInvestments] = useState<Investment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const request = requests[0];
+
+  useEffect(() => {
+    async function loadProjectDetails() {
+      if (!id) {
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+
+      try {
+        const [nextProject, nextRequests, nextExpenses, nextInvestments] = await Promise.all([
+          projectService.getProjectById(id),
+          fundingService.listFundingRequestsByProject(id),
+          firestoreAdapter.queryByField<Expense>('expenses', 'projectId', id),
+          fundingService.listInvestmentsByProject(id),
+        ]);
+
+        setProject(nextProject);
+        setRequests(nextRequests);
+        setProjectExpenses(nextExpenses);
+        setProjectInvestments(nextInvestments);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadProjectDetails();
+  }, [id]);
+
+  if (isLoading) {
+    return (
+      <Screen eyebrow="Project Details" title="Loading project" subtitle="Loading this PromptFund project from Firestore.">
+        <LoadingState label="Loading project details" />
+      </Screen>
+    );
+  }
+
+  if (!project) {
+    return (
+      <Screen eyebrow="Project Details" title="Project not found" subtitle="This PromptFund project is not available in Firestore.">
+        <PrimaryLink href="/projects" label="Back to projects" />
+      </Screen>
+    );
+  }
 
   return (
     <Screen eyebrow="Project Details" title={project.title} subtitle={project.description}>
@@ -40,7 +94,7 @@ export default function ProjectDetailsScreen() {
       </Card>
 
       <View style={ui.row}>
-        <StatCard label="Backers" value={String(projectFundings.length)} />
+        <StatCard label="Investments" value={String(projectInvestments.length)} />
         <StatCard label="Expenses" value={String(projectExpenses.length)} tone={colors.warning} />
       </View>
 

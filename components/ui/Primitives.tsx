@@ -114,6 +114,32 @@ export function PrimaryLink({
   );
 }
 
+export function PrimaryButton({
+  label,
+  onPress,
+  variant = 'primary',
+  disabled = false,
+}: {
+  label: string;
+  onPress: () => void | Promise<void>;
+  variant?: 'primary' | 'secondary';
+  disabled?: boolean;
+}) {
+  const buttonStyle = variant === 'secondary' ? styles.secondaryButton : styles.button;
+  const buttonTextStyle = variant === 'secondary' ? styles.secondaryButtonText : styles.buttonText;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={disabled ? styles.disabledButton : buttonStyle}
+    >
+      <Text style={buttonTextStyle}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export function LoadingState({ label = 'Loading PromptFund workspace' }: { label?: string }) {
   return (
     <Card style={styles.stateCard}>
@@ -323,6 +349,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.panelMuted,
+  },
+  disabledButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+    borderRadius: radii.pill,
+    backgroundColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    opacity: 0.72,
   },
   buttonText: {
     color: colors.text,

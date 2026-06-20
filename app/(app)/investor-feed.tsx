@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import {
@@ -5,23 +6,71 @@ import {
   EmptyState,
   LoadingState,
   Pill,
+  PrimaryButton,
   PrimaryLink,
   Screen,
   SectionTitle,
   ui,
 } from '@/components/ui/Primitives';
 import { colors } from '@/constants/theme';
-import { fundingRequests, investorUser, projects } from '@/data/mockData';
+import { useAuth } from '@/context/AuthContext';
+import { fundingService } from '@/services/fundingService';
+import { projectService } from '@/services/projectService';
+import type { FundingRequest } from '@/types/FundingRequest';
+import type { Project } from '@/types/Project';
 import { formatCurrency } from '@/utils/format';
 
 export default function InvestorFeedScreen() {
-  const isLoading = false;
+  const { authUser, profile } = useAuth();
+  const [fundingRequests, setFundingRequests] = useState<FundingRequest[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fundingRequestId, setFundingRequestId] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadInvestorFeed() {
+      setIsLoading(true);
+
+      try {
+        const [nextRequests, nextProjects] = await Promise.all([
+          fundingService.listFundingRequests(),
+          projectService.listProjects(),
+        ]);
+
+        setFundingRequests(nextRequests);
+        setProjects(nextProjects);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadInvestorFeed();
+  }, []);
+
+  async function handleFundRequest(request: FundingRequest) {
+    if (!authUser) {
+      return;
+    }
+
+    setFundingRequestId(request.id);
+
+    try {
+      await fundingService.createInvestment({
+        investorId: authUser.uid,
+        projectId: request.projectId,
+        amount: request.amount,
+        note: `Investment for ${request.tool}`,
+      });
+    } finally {
+      setFundingRequestId(null);
+    }
+  }
 
   return (
     <Screen
       eyebrow="PromptFund Investor Feed"
       title="Small checks with visible progress"
-      subtitle={`${investorUser.name}'s feed surfaces focused AI-tool requests from developers with traction, receipts, and milestone proof.`}
+      subtitle={`${profile?.name ?? 'Your'} feed surfaces focused AI-tool requests from developers with traction, receipts, and milestone proof.`}
     >
       {isLoading ? <LoadingState label="Loading investor-ready requests" /> : null}
 
@@ -50,7 +99,11 @@ export default function InvestorFeedScreen() {
             <Text style={{ color: colors.muted, lineHeight: 21 }}>{request.reason}</Text>
             <View style={ui.row}>
               <PrimaryLink href={`/projects/${request.projectId}`} label="View progress" variant="secondary" />
-              <PrimaryLink href="/wallet" label="Fund with PromptFund" />
+              <PrimaryButton
+                label={fundingRequestId === request.id ? 'Funding...' : 'Fund with PromptFund'}
+                disabled={fundingRequestId === request.id}
+                onPress={() => handleFundRequest(request)}
+              />
             </View>
           </Card>
         );

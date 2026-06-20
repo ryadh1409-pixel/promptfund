@@ -1,9 +1,59 @@
-import { StyleSheet, TextInput } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { StyleSheet, Text, TextInput } from 'react-native';
 
-import { Card, FieldPreview, PrimaryLink, Screen } from '@/components/ui/Primitives';
+import { Card, FieldPreview, PrimaryButton, Screen } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
+import { projectService } from '@/services/projectService';
 
 export default function CreateProjectScreen() {
+  const router = useRouter();
+  const { authUser } = useAuth();
+  const [title, setTitle] = useState('');
+  const [tagline, setTagline] = useState('');
+  const [description, setDescription] = useState('');
+  const [goalAmount, setGoalAmount] = useState('');
+  const [tools, setTools] = useState('');
+  const [milestones, setMilestones] = useState('');
+  const [nextUpdate, setNextUpdate] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleCreateProject() {
+    if (!authUser) {
+      setError('Sign in before creating a project.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const project = await projectService.createProject({
+        developerId: authUser.uid,
+        title: title.trim(),
+        tagline: tagline.trim(),
+        description: description.trim(),
+        goalAmount: Number(goalAmount),
+        tools: tools
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean),
+        milestones: milestones
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean),
+        nextUpdate: nextUpdate.trim(),
+      });
+      router.replace(`/projects/${project.id}`);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Unable to create project.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <Screen
       eyebrow="PromptFund Project"
@@ -11,20 +61,57 @@ export default function CreateProjectScreen() {
       subtitle="Package the investor-ready fields that will later save into the `projects` collection."
     >
       <Card>
-        <TextInput editable={false} value="AI Changelog Copilot" style={styles.input} />
+        <TextInput placeholder="Project title" placeholderTextColor={colors.subtle} value={title} onChangeText={setTitle} style={styles.input} />
         <TextInput
-          editable={false}
-          value="Summarize commits into investor-friendly progress updates."
+          placeholder="Investor-ready tagline"
+          placeholderTextColor={colors.subtle}
+          value={tagline}
+          onChangeText={setTagline}
           style={styles.input}
         />
         <TextInput
-          editable={false}
+          placeholder="Project description"
+          placeholderTextColor={colors.subtle}
           multiline
-          value="I need funding for Cursor, Claude, and a small hosting plan to build an MVP that watches GitHub commits and drafts weekly updates."
+          value={description}
+          onChangeText={setDescription}
           style={[styles.input, styles.textArea]}
         />
-        <TextInput editable={false} value="$300 goal" style={styles.input} />
-        <PrimaryLink href="/projects" label="Publish PromptFund project" />
+        <TextInput
+          placeholder="Funding goal, for example 300"
+          placeholderTextColor={colors.subtle}
+          value={goalAmount}
+          keyboardType="numeric"
+          onChangeText={setGoalAmount}
+          style={styles.input}
+        />
+        <TextInput
+          placeholder="Tools, separated by commas"
+          placeholderTextColor={colors.subtle}
+          value={tools}
+          onChangeText={setTools}
+          style={styles.input}
+        />
+        <TextInput
+          placeholder="Milestones, separated by commas"
+          placeholderTextColor={colors.subtle}
+          value={milestones}
+          onChangeText={setMilestones}
+          style={styles.input}
+        />
+        <TextInput
+          placeholder="Next investor update"
+          placeholderTextColor={colors.subtle}
+          value={nextUpdate}
+          onChangeText={setNextUpdate}
+          style={styles.input}
+        />
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        <PrimaryButton
+          label={isSaving ? 'Publishing...' : 'Publish PromptFund project'}
+          disabled={isSaving || title.length === 0 || goalAmount.length === 0}
+          onPress={handleCreateProject}
+        />
       </Card>
 
       <FieldPreview
@@ -50,5 +137,9 @@ const styles = StyleSheet.create({
     minHeight: 132,
     paddingTop: spacing.md,
     textAlignVertical: 'top',
+  },
+  errorText: {
+    color: colors.danger,
+    lineHeight: 20,
   },
 });

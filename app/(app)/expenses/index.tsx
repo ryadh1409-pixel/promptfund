@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import {
@@ -12,13 +13,38 @@ import {
   ui,
 } from '@/components/ui/Primitives';
 import { colors } from '@/constants/theme';
-import { expenses, projects } from '@/data/mockData';
+import { firestoreAdapter } from '@/firebase/firestore';
+import { projectService } from '@/services/projectService';
+import type { Expense } from '@/types/Expense';
+import type { Project } from '@/types/Project';
 import { formatCurrency } from '@/utils/format';
 
 export default function ExpenseTrackingScreen() {
-  const isLoading = false;
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const total = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   const approved = expenses.filter((expense) => expense.status === 'approved').length;
+
+  useEffect(() => {
+    async function loadExpenses() {
+      setIsLoading(true);
+
+      try {
+        const [nextExpenses, nextProjects] = await Promise.all([
+          firestoreAdapter.list<Expense>('expenses'),
+          projectService.listProjects(),
+        ]);
+
+        setExpenses(nextExpenses);
+        setProjects(nextProjects);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadExpenses();
+  }, []);
 
   return (
     <Screen

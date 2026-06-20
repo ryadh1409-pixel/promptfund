@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { ProjectCard } from '@/components/project/ProjectCard';
@@ -11,13 +12,29 @@ import {
   ui,
 } from '@/components/ui/Primitives';
 import { colors } from '@/constants/theme';
-import { projects } from '@/data/mockData';
+import { projectService } from '@/services/projectService';
+import type { Project } from '@/types/Project';
 import { formatCurrency } from '@/utils/format';
 
 export default function ProjectsScreen() {
-  const isLoading = false;
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const totalGoal = projects.reduce((sum, project) => sum + project.goalAmount, 0);
   const totalFunded = projects.reduce((sum, project) => sum + project.fundedAmount, 0);
+
+  useEffect(() => {
+    async function loadProjects() {
+      setIsLoading(true);
+
+      try {
+        setProjects(await projectService.listProjects());
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadProjects();
+  }, []);
 
   return (
     <Screen
