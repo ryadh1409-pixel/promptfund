@@ -1,22 +1,22 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { Card, FieldPreview, PrimaryButton, Screen } from '@/components/ui/Primitives';
+import { StartupPlayingCard } from '@/components/cards/StartupPlayingCard';
+import { Card, PrimaryButton, Screen } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { projectService } from '@/services/projectService';
 
 export default function CreateProjectScreen() {
   const router = useRouter();
-  const { authUser } = useAuth();
+  const { authUser, profile } = useAuth();
   const [title, setTitle] = useState('');
-  const [tagline, setTagline] = useState('');
+  const [coverImage, setCoverImage] = useState('');
   const [description, setDescription] = useState('');
   const [goalAmount, setGoalAmount] = useState('');
-  const [tools, setTools] = useState('');
-  const [milestones, setMilestones] = useState('');
-  const [nextUpdate, setNextUpdate] = useState('');
+  const [equityOffered, setEquityOffered] = useState('');
+  const [metric, setMetric] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,18 +34,19 @@ export default function CreateProjectScreen() {
         developerId: authUser.uid,
         ownerId: authUser.uid,
         title: title.trim(),
-        tagline: tagline.trim(),
+        tagline: metric.trim(),
         description: description.trim(),
         goalAmount: Number(goalAmount),
-        tools: tools
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean),
-        milestones: milestones
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean),
-        nextUpdate: nextUpdate.trim(),
+        equityOffered: Number(equityOffered),
+        metric: metric.trim(),
+        coverImage: coverImage.trim(),
+        founderName: profile?.name ?? 'Founder',
+        founderAvatar: profile?.avatar ?? 'PF',
+        founderVerified: true,
+        rank: 'J',
+        tools: ['Startup Card'],
+        milestones: ['Start discussion', 'Agree terms', 'Close deal'],
+        nextUpdate: 'Ready for investor discussion',
       });
       router.replace(`/projects/${project.id}`);
     } catch (createError) {
@@ -57,29 +58,21 @@ export default function CreateProjectScreen() {
 
   return (
     <Screen
-      eyebrow="PromptFund Project"
-      title="Turn a precise tool budget into a funded build"
-      subtitle="Package the investor-ready fields that will later save into the `projects` collection."
+      eyebrow="Founder"
+      title="Create Your Card"
+      subtitle="Startup Name. Metric. Goal. Publish in 60 seconds."
     >
       <Card>
-        <TextInput placeholder="Project title" placeholderTextColor={colors.subtle} value={title} onChangeText={setTitle} style={styles.input} />
+        <TextInput placeholder="Startup Name" placeholderTextColor={colors.subtle} value={title} onChangeText={setTitle} style={styles.input} />
         <TextInput
-          placeholder="Investor-ready tagline"
+          placeholder="Cover Image URL"
           placeholderTextColor={colors.subtle}
-          value={tagline}
-          onChangeText={setTagline}
+          value={coverImage}
+          onChangeText={setCoverImage}
           style={styles.input}
         />
         <TextInput
-          placeholder="Project description"
-          placeholderTextColor={colors.subtle}
-          multiline
-          value={description}
-          onChangeText={setDescription}
-          style={[styles.input, styles.textArea]}
-        />
-        <TextInput
-          placeholder="Funding goal, for example 300"
+          placeholder="Funding Goal"
           placeholderTextColor={colors.subtle}
           value={goalAmount}
           keyboardType="numeric"
@@ -87,38 +80,53 @@ export default function CreateProjectScreen() {
           style={styles.input}
         />
         <TextInput
-          placeholder="Tools, separated by commas"
+          placeholder="Equity Offered"
           placeholderTextColor={colors.subtle}
-          value={tools}
-          onChangeText={setTools}
+          value={equityOffered}
+          keyboardType="numeric"
+          onChangeText={setEquityOffered}
           style={styles.input}
         />
         <TextInput
-          placeholder="Milestones, separated by commas"
+          placeholder="Short Description"
           placeholderTextColor={colors.subtle}
-          value={milestones}
-          onChangeText={setMilestones}
-          style={styles.input}
+          multiline
+          value={description}
+          onChangeText={setDescription}
+          style={[styles.input, styles.textArea]}
         />
         <TextInput
-          placeholder="Next investor update"
+          placeholder="One Metric, for example 1,200 Active Users"
           placeholderTextColor={colors.subtle}
-          value={nextUpdate}
-          onChangeText={setNextUpdate}
+          value={metric}
+          onChangeText={setMetric}
           style={styles.input}
         />
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
         <PrimaryButton
-          label={isSaving ? 'Publishing...' : 'Publish PromptFund project'}
-          disabled={isSaving || title.length === 0 || goalAmount.length === 0}
+          label={isSaving ? 'Publishing...' : 'Publish'}
+          disabled={isSaving || title.length === 0 || goalAmount.length === 0 || metric.length === 0}
           onPress={handleCreateProject}
         />
       </Card>
 
-      <FieldPreview
-        label="Firestore target"
-        value="projects: title, tagline, description, goalAmount, tools, milestones, status, developerId"
-      />
+      <View style={styles.preview}>
+        <StartupPlayingCard
+          card={{
+            id: 'preview',
+            title: title || 'Startup Name',
+            tagline: metric || 'One traction metric',
+            description: description || 'Short description',
+            goalAmount: Number(goalAmount) || 50000,
+            equityOffered: Number(equityOffered) || 4,
+            metric: metric || '1,200 Active Users',
+            founderName: profile?.name ?? 'Founder',
+            founderAvatar: profile?.avatar ?? 'PF',
+            founderVerified: true,
+            rank: 'J',
+          }}
+        />
+      </View>
     </Screen>
   );
 }
@@ -127,9 +135,9 @@ const styles = StyleSheet.create({
   input: {
     minHeight: 52,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(200, 162, 74, 0.36)',
     borderRadius: radii.md,
-    backgroundColor: colors.black,
+    backgroundColor: colors.panelMuted,
     color: colors.text,
     paddingHorizontal: spacing.md,
     fontSize: 15,
@@ -142,5 +150,10 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.danger,
     lineHeight: 20,
+  },
+  preview: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 360,
   },
 });

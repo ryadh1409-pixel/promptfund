@@ -11,10 +11,20 @@ export const userService = {
   },
 
   async createUser(userId: string, input: CreateUserInput): Promise<User> {
-    return firestoreAdapter.setWithId<Omit<User, 'id'>>('users', userId, {
-      ...input,
-      trustScore: input.trustScore ?? 50,
-    });
+    const path = `users/${userId}`;
+
+    try {
+      console.info('[PromptFund UserService] createUser start', { uid: userId, path });
+      const user = await firestoreAdapter.setWithId<Omit<User, 'id'>>('users', userId, {
+        ...input,
+        trustScore: input.trustScore ?? 50,
+      });
+      console.info('[PromptFund UserService] createUser success', { uid: userId, path });
+      return user;
+    } catch (error) {
+      console.error('[PromptFund UserService] createUser failure', { uid: userId, path, error });
+      throw error;
+    }
   },
 
   async updateUser(userId: string, input: UpdateUserInput): Promise<User | null> {

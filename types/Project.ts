@@ -1,4 +1,5 @@
 export type ProjectStatus = 'building' | 'funding' | 'shipped';
+export type StartupCardRank = 'A' | 'K' | 'Q' | 'J';
 
 export type Project = {
   id: string;
@@ -14,6 +15,13 @@ export type Project = {
   tools: string[];
   milestones: string[];
   nextUpdate: string;
+  coverImage?: string;
+  equityOffered?: number;
+  metric?: string;
+  founderName?: string;
+  founderAvatar?: string;
+  founderVerified?: boolean;
+  rank?: StartupCardRank;
 };
 
 export type CreateProjectInput = Omit<Project, 'id' | 'fundedAmount' | 'progress' | 'status'> & {

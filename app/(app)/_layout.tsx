@@ -33,31 +33,31 @@ export default function AppLayout() {
       }}
     >
       <Tabs.Screen
-        name="dashboard"
-        options={{
-          title: 'Dashboard',
-          tabBarIcon: ({ color }) => <TabGlyph color={color} label="D" />,
-        }}
-      />
-      <Tabs.Screen
-        name="projects/index"
-        options={{
-          title: 'Projects',
-          tabBarIcon: ({ color }) => <TabGlyph color={color} label="P" />,
-        }}
-      />
-      <Tabs.Screen
         name="investor-feed"
         options={{
-          title: 'Investors',
-          tabBarIcon: ({ color }) => <TabGlyph color={color} label="I" />,
+          title: 'Discover',
+          tabBarIcon: ({ color }) => <TabGlyph color={color} label="A" />,
         }}
       />
       <Tabs.Screen
-        name="wallet/index"
+        name="deck/index"
         options={{
-          title: 'Wallet',
-          tabBarIcon: ({ color }) => <TabGlyph color={color} label="W" />,
+          title: 'Deck',
+          tabBarIcon: ({ color }) => <TabGlyph color={color} label="K" />,
+        }}
+      />
+      <Tabs.Screen
+        name="deals/index"
+        options={{
+          title: 'Deals',
+          tabBarIcon: ({ color }) => <TabGlyph color={color} label="Q" />,
+        }}
+      />
+      <Tabs.Screen
+        name="messages/index"
+        options={{
+          title: 'Messages',
+          tabBarIcon: ({ color }) => <TabGlyph color={color} label="J" />,
         }}
       />
       <Tabs.Screen
@@ -67,10 +67,13 @@ export default function AppLayout() {
           tabBarIcon: ({ color }) => <TabGlyph color={color} label="U" />,
         }}
       />
+      <Tabs.Screen name="dashboard" options={{ href: null }} />
+      <Tabs.Screen name="projects/index" options={{ href: null }} />
       <Tabs.Screen name="projects/create" options={{ href: null }} />
       <Tabs.Screen name="projects/[id]" options={{ href: null }} />
       <Tabs.Screen name="funding/request" options={{ href: null }} />
       <Tabs.Screen name="expenses/index" options={{ href: null }} />
+      <Tabs.Screen name="wallet/index" options={{ href: null }} />
     </Tabs>
   );
 }

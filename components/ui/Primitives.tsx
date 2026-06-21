@@ -23,7 +23,6 @@ type ScreenProps = {
 export function Screen({ eyebrow, title, subtitle, children }: ScreenProps) {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.screenContent}>
-      <View style={styles.heroGlow} />
       <BrandMark />
       {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
       <Text style={styles.title}>{title}</Text>
@@ -42,7 +41,7 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
       {!compact ? (
         <View>
           <Text style={styles.brandName}>PromptFund</Text>
-          <Text style={styles.brandTagline}>Micro-capital for AI builders</Text>
+          <Text style={styles.brandTagline}>Discover. Swipe. Invest.</Text>
         </View>
       ) : null}
     </View>
@@ -145,7 +144,7 @@ export function LoadingState({ label = 'Loading PromptFund workspace' }: { label
     <Card style={styles.stateCard}>
       <ActivityIndicator color={colors.accent} />
       <Text style={styles.stateTitle}>{label}</Text>
-      <Text style={styles.stateCopy}>Preparing investor-grade funding signals and project activity.</Text>
+      <Text style={styles.stateCopy}>Shuffling startup cards.</Text>
     </Card>
   );
 }
@@ -162,7 +161,7 @@ export function EmptyState({
   return (
     <Card style={styles.stateCard}>
       <View style={styles.emptyIcon}>
-        <Text style={styles.emptyIconText}>PF</Text>
+        <Text style={styles.emptyIconText}>A</Text>
       </View>
       <Text style={styles.stateTitle}>{title}</Text>
       <Text style={styles.stateCopy}>{message}</Text>
@@ -205,15 +204,6 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingBottom: 56,
   },
-  heroGlow: {
-    position: 'absolute',
-    right: -80,
-    top: -120,
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: 'rgba(139, 92, 246, 0.28)',
-  },
   brandRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -225,9 +215,9 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderWidth: 1,
-    borderColor: 'rgba(34, 211, 238, 0.55)',
+    borderColor: colors.luxuryGold,
     borderRadius: 16,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.cardIvory,
   },
   logoCompact: {
     alignItems: 'center',
@@ -235,16 +225,16 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 9,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.cardIvory,
   },
   logoText: {
-    color: colors.text,
+    color: colors.pokerRed,
     fontSize: 16,
     fontWeight: '900',
     letterSpacing: -0.5,
   },
   logoTextCompact: {
-    color: colors.text,
+    color: colors.pokerRed,
     fontSize: 10,
     fontWeight: '900',
   },
@@ -267,9 +257,9 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   title: {
-    color: colors.text,
-    fontSize: 36,
-    fontWeight: '800',
+    color: colors.ivory,
+    fontSize: 34,
+    fontWeight: '900',
     letterSpacing: -1,
   },
   subtitle: {
@@ -281,7 +271,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(200, 162, 74, 0.34)',
     borderRadius: radii.lg,
     backgroundColor: colors.panel,
   },
@@ -315,6 +305,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
+    borderWidth: 1,
+    borderColor: 'rgba(200, 162, 74, 0.32)',
   },
   pillText: {
     color: colors.text,
@@ -330,7 +322,7 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: radii.pill,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.pokerRed,
   },
   button: {
     alignItems: 'center',
@@ -347,7 +339,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.luxuryGold,
     backgroundColor: colors.panelMuted,
   },
   disabledButton: {
@@ -365,7 +357,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   secondaryButtonText: {
-    color: colors.primarySoft,
+    color: colors.ivory,
     fontSize: 15,
     fontWeight: '800',
   },
@@ -390,12 +382,12 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.luxuryGold,
     borderRadius: radii.md,
-    backgroundColor: colors.panelMuted,
+    backgroundColor: colors.cardIvory,
   },
   emptyIconText: {
-    color: colors.accent,
+    color: colors.pokerRed,
     fontSize: 14,
     fontWeight: '900',
   },

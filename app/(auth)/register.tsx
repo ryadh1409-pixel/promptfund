@@ -44,14 +44,14 @@ export default function RegisterScreen() {
         .map((item) => item.trim())
         .filter(Boolean),
     });
-    router.replace('/dashboard');
+    router.replace(role === 'developer' ? '/projects/create' : '/investor-feed');
   }
 
   return (
     <Screen
       eyebrow="Create profile"
-      title="Join as a builder or backer."
-      subtitle="Set up the public profile investors use to evaluate funding requests and developer progress."
+      title="Founders create cards. Investors swipe them."
+      subtitle="Keep it simple. Your profile only supports the card experience."
     >
       <Card>
         <TextInput
@@ -118,7 +118,7 @@ export default function RegisterScreen() {
         />
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
         <PrimaryButton
-          label={loading ? 'Creating profile...' : 'Create PromptFund profile'}
+          label={loading ? 'Creating profile...' : 'Create profile'}
           disabled={loading || name.length === 0 || email.length === 0 || password.length === 0}
           onPress={handleRegister}
         />

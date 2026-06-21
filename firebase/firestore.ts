@@ -133,11 +133,20 @@ export const firestoreAdapter: FirestoreAdapter = {
   },
   async setWithId(collectionName, id, input) {
     const reference = doc(getPromptFundFirestore(), firestoreCollections[collectionName], id);
-    await setDoc(reference, {
-      ...input,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+    const path = `${firestoreCollections[collectionName]}/${id}`;
+
+    try {
+      console.info('[PromptFund Firestore] setWithId start', { path });
+      await setDoc(reference, {
+        ...input,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      console.info('[PromptFund Firestore] setWithId success', { path });
+    } catch (error) {
+      console.error('[PromptFund Firestore] setWithId failure', { path, error });
+      throw error;
+    }
 
     return {
       ...input,

@@ -36,6 +36,34 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function getInitials(value: string | null) {
+  const source = value?.trim() || 'PromptFund User';
+
+  return source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'PF';
+}
+
+function buildRecoveredProfile(user: AuthUser): CreateUserInput {
+  const emailName = user.email?.split('@')[0] ?? 'promptfund-user';
+  const displayName = user.displayName?.trim() || emailName;
+  const handle = `@${emailName.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() || user.uid.slice(0, 8)}`;
+
+  return {
+    name: displayName,
+    handle,
+    role: 'investor',
+    avatar: getInitials(displayName),
+    bio: 'PromptFund profile restored automatically after Firebase Auth sign-in.',
+    location: '',
+    stack: [],
+    trustScore: 50,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<User | null>(null);
@@ -49,9 +77,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null;
     }
 
+    console.info('[PromptFund Auth] loadUserProfile', {
+      uid: user.uid,
+      path: `users/${user.uid}`,
+    });
     const nextProfile = await userService.getUserById(user.uid);
     setProfile(nextProfile);
     return nextProfile;
+  }, []);
+
+  const createMissingProfile = useCallback(async (user: AuthUser): Promise<User> => {
+    const path = `users/${user.uid}`;
+
+    try {
+      console.info('[PromptFund Auth] createMissingProfile start', {
+        uid: user.uid,
+        path,
+      });
+      const nextProfile = await userService.createUser(user.uid, buildRecoveredProfile(user));
+      setProfile(nextProfile);
+      console.info('[PromptFund Auth] createMissingProfile success', {
+        uid: user.uid,
+        path,
+      });
+      return nextProfile;
+    } catch (profileError) {
+      console.error('[PromptFund Auth] createMissingProfile failure', {
+        uid: user.uid,
+        path,
+        error: profileError,
+      });
+      throw profileError;
+    }
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -69,7 +126,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthUser(user);
 
       try {
-        await loadUserProfile(user);
+        const nextProfile = await loadUserProfile(user);
+        if (user && !nextProfile) {
+          await createMissingProfile(user);
+        }
         setError(null);
       } catch (profileError) {
         setProfile(null);
@@ -80,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return unsubscribe;
-  }, [loadUserProfile]);
+  }, [createMissingProfile, loadUserProfile]);
 
   const signIn = useCallback(
     async (credentials: AuthCredentials) => {
@@ -89,13 +149,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       try {
         const user = await firebaseAuth.signIn(credentials);
+        console.info('[PromptFund Auth] signIn success', {
+          uid: user.uid,
+          path: `users/${user.uid}`,
+        });
         setAuthUser(user);
-        const nextProfile = await loadUserProfile(user);
+        let nextProfile = await loadUserProfile(user);
 
         if (!nextProfile) {
-          await firebaseAuth.signOut();
-          setAuthUser(null);
-          throw new Error('No PromptFund profile was found for this Firebase account.');
+          nextProfile = await createMissingProfile(user);
         }
       } catch (signInError) {
         const message = signInError instanceof Error ? signInError.message : 'Unable to sign in.';
@@ -105,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     },
-    [loadUserProfile],
+    [createMissingProfile, loadUserProfile],
   );
 
   const register = useCallback(
@@ -115,7 +177,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       try {
         const user = await firebaseAuth.register({ email, password, displayName });
+        const path = `users/${user.uid}`;
+        console.info('[PromptFund Auth] register auth user created', {
+          uid: user.uid,
+          path,
+        });
         const nextProfile = await userService.createUser(user.uid, profileInput);
+        console.info('[PromptFund Auth] register profile created', {
+          uid: user.uid,
+          path,
+        });
         setAuthUser(user);
         setProfile(nextProfile);
       } catch (registerError) {

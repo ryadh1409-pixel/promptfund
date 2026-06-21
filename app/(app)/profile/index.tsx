@@ -2,27 +2,29 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
-import { Card, LoadingState, Pill, PrimaryButton, Screen, SectionTitle, StatCard, ui } from '@/components/ui/Primitives';
+import { Card, LoadingState, PrimaryButton, Screen, StatCard, ui } from '@/components/ui/Primitives';
 import { colors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
-import { projectService } from '@/services/projectService';
-import type { Project } from '@/types/Project';
+import { fundingService } from '@/services/fundingService';
+import type { Investment } from '@/types/FundingRequest';
+import { formatCurrency } from '@/utils/format';
 
 export default function UserProfileScreen() {
   const router = useRouter();
   const { authUser, profile, signOut } = useAuth();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [investments, setInvestments] = useState<Investment[]>([]);
+  const totalInvested = investments.reduce((sum, investment) => sum + investment.amount, 0);
 
   useEffect(() => {
-    async function loadProjects() {
+    async function loadInvestments() {
       if (!authUser) {
         return;
       }
 
-      setProjects(await projectService.listProjectsByDeveloper(authUser.uid));
+      setInvestments(await fundingService.listInvestmentsByInvestor(authUser.uid));
     }
 
-    loadProjects();
+    loadInvestments();
   }, [authUser]);
 
   async function handleSignOut() {
@@ -32,7 +34,7 @@ export default function UserProfileScreen() {
 
   if (!profile) {
     return (
-      <Screen eyebrow="User Profile" title="Loading profile" subtitle="Loading your PromptFund profile from Firestore.">
+      <Screen eyebrow="Profile" title="Loading profile" subtitle="Loading your card profile.">
         <LoadingState label="Loading profile" />
       </Screen>
     );
@@ -40,9 +42,9 @@ export default function UserProfileScreen() {
 
   return (
     <Screen
-      eyebrow="User Profile"
+      eyebrow="Profile"
       title={profile.name}
-      subtitle={`${profile.handle} · ${profile.location}`}
+      subtitle="Your PromptFund card stats."
     >
       <Card>
         <View style={{ alignItems: 'center', gap: 14 }}>
@@ -53,36 +55,26 @@ export default function UserProfileScreen() {
               width: 84,
               height: 84,
               borderRadius: 42,
-              backgroundColor: colors.primary,
+              backgroundColor: colors.pokerRed,
             }}
           >
             <Text style={{ color: colors.text, fontSize: 26, fontWeight: '900' }}>{profile.avatar}</Text>
           </View>
-          <Text style={{ color: colors.text, fontSize: 18, fontWeight: '800' }}>{profile.role}</Text>
-          <Text style={{ color: colors.muted, lineHeight: 21, textAlign: 'center' }}>{profile.bio}</Text>
+          <Text style={{ color: colors.text, fontSize: 18, fontWeight: '800' }}>{profile.handle}</Text>
         </View>
       </Card>
 
       <View style={ui.row}>
-        <StatCard label="Trust score" value={`${profile.trustScore}`} tone={colors.success} />
-        <StatCard label="Projects" value={String(projects.length)} tone={colors.accent} />
+        <StatCard label="Cards invested" value={String(investments.length)} tone={colors.accent} />
+        <StatCard label="Total invested" value={formatCurrency(totalInvested)} tone={colors.luxuryGold} />
       </View>
 
-      <SectionTitle title="Stack and needs" />
-      <Card>
-        <View style={ui.wrap}>
-          {profile.stack.map((item) => (
-            <Pill key={item} label={item} />
-          ))}
-        </View>
-      </Card>
+      <View style={ui.row}>
+        <StatCard label="Deals completed" value="0" tone={colors.pokerRed} />
+        <StatCard label="Profile" value="Minimal" />
+      </View>
 
-      <SectionTitle title="Public proof" />
       <Card>
-        <Text style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>Progress-first profile</Text>
-        <Text style={{ color: colors.muted, lineHeight: 21 }}>
-          Investors can review active projects, funding history, expenses, and Fund Points before backing a request.
-        </Text>
         <PrimaryButton label="Sign out" variant="secondary" onPress={handleSignOut} />
       </Card>
     </Screen>

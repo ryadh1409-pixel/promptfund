@@ -15,14 +15,14 @@ export default function LoginScreen() {
 
   async function handleLogin() {
     await signIn({ email: email.trim(), password });
-    router.replace('/dashboard');
+    router.replace('/investor-feed');
   }
 
   return (
     <Screen
       eyebrow="PromptFund"
-      title="Fund the tools that ship the next product."
-      subtitle="Developers request small AI-tool budgets. Investors back builders and track what ships."
+      title="Discover. Swipe. Invest."
+      subtitle="Investors swipe startup cards. Founders create one card and meet investors."
     >
       <Card>
         <TextInput
@@ -44,7 +44,7 @@ export default function LoginScreen() {
         />
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
         <PrimaryButton
-          label={loading ? 'Signing in...' : 'Enter PromptFund'}
+          label={loading ? 'Signing in...' : 'Start swiping'}
           disabled={loading || email.length === 0 || password.length === 0}
           onPress={handleLogin}
         />
@@ -56,10 +56,7 @@ export default function LoginScreen() {
         </View>
       </Card>
 
-      <FieldPreview
-        label="Firebase Auth"
-        value="Sign in with a Firebase Authentication account. PromptFund loads the matching profile from Firestore."
-      />
+      <FieldPreview label="PromptFund V2" value="Startup investing through cards." />
     </Screen>
   );
 }

@@ -42,6 +42,10 @@ export const fundingService = {
     return firestoreAdapter.queryByField<Investment>('investments', 'projectId', projectId);
   },
 
+  async listInvestmentsByInvestor(investorId: string): Promise<Investment[]> {
+    return firestoreAdapter.queryByField<Investment>('investments', 'investorId', investorId);
+  },
+
   async createInvestment(input: CreateInvestmentInput): Promise<Investment> {
     return firestoreAdapter.create<Omit<Investment, 'id'>>('investments', {
       ...input,
