@@ -12,13 +12,17 @@ import {
   ui,
 } from '@/components/ui/Primitives';
 import { colors } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 import { projectService } from '@/services/projectService';
 import type { Project } from '@/types/Project';
 import { formatCurrency } from '@/utils/format';
+import { isEntrepreneurRole } from '@/utils/roles';
 
 export default function ProjectsScreen() {
+  const { authUser, profile } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const isEntrepreneur = isEntrepreneurRole(profile?.role);
   const totalGoal = projects.reduce((sum, project) => sum + project.goalAmount, 0);
   const totalFunded = projects.reduce((sum, project) => sum + project.fundedAmount, 0);
 
@@ -27,29 +31,37 @@ export default function ProjectsScreen() {
       setIsLoading(true);
 
       try {
-        setProjects(await projectService.listProjects());
+        setProjects(
+          isEntrepreneur && authUser
+            ? await projectService.listProjectsByDeveloper(authUser.uid)
+            : await projectService.listProjects(),
+        );
       } finally {
         setIsLoading(false);
       }
     }
 
     loadProjects();
-  }, []);
+  }, [authUser, isEntrepreneur]);
 
   return (
     <Screen
       eyebrow="PromptFund Projects"
-      title="Portfolio of funded builds"
-      subtitle="Review each developer project, funding goal, milestone proof, and tool budget from one investor-ready workspace."
+      title={isEntrepreneur ? 'Funding Progress' : 'Portfolio of funded builds'}
+      subtitle={
+        isEntrepreneur
+          ? 'Track your startup card, investor matches, and capital progress.'
+          : 'Review each startup, funding goal, milestone proof, and tool budget from one investor-ready workspace.'
+      }
     >
       <View style={ui.row}>
-        <StatCard label="Pipeline" value={formatCurrency(totalGoal)} tone={colors.accent} />
-        <StatCard label="Committed" value={formatCurrency(totalFunded)} tone={colors.success} />
+        <StatCard label={isEntrepreneur ? 'Target raise' : 'Pipeline'} value={formatCurrency(totalGoal)} tone={colors.accent} />
+        <StatCard label={isEntrepreneur ? 'Raised so far' : 'Committed'} value={formatCurrency(totalFunded)} tone={colors.success} />
       </View>
 
       <SectionTitle
-        title="Active portfolio"
-        action={<PrimaryLink href="/projects/create" label="New project" variant="secondary" />}
+        title={isEntrepreneur ? 'My Startup' : 'Active portfolio'}
+        action={<PrimaryLink href="/projects/create" label={isEntrepreneur ? 'Edit card' : 'New project'} variant="secondary" />}
       />
 
       {isLoading ? <LoadingState label="Loading PromptFund projects" /> : null}
@@ -57,8 +69,8 @@ export default function ProjectsScreen() {
       {!isLoading && projects.length === 0 ? (
         <EmptyState
           title="No projects yet"
-          message="Create a PromptFund project to give investors a clear funding goal, tool list, and milestone trail."
-          action={<PrimaryLink href="/projects/create" label="Create first project" />}
+          message={isEntrepreneur ? 'Create your startup card to start receiving investor interest.' : 'Create a PromptFund project to give investors a clear funding goal, tool list, and milestone trail.'}
+          action={<PrimaryLink href="/projects/create" label={isEntrepreneur ? 'Create My Startup' : 'Create first project'} />}
         />
       ) : null}
 

@@ -10,14 +10,56 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isAdmin() {
+      return request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    function agreementRoom(agreementId) {
+      return get(/databases/$(database)/documents/agreementRooms/$(agreementId));
+    }
+
+    function hasAgreementAccess(agreementId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/agreementRooms/$(agreementId))
+        && (
+          isAdmin()
+          ||
+          agreementRoom(agreementId).data.founderId == request.auth.uid
+          || agreementRoom(agreementId).data.investorId == request.auth.uid
+          || request.auth.uid in agreementRoom(agreementId).data.adminIds
+        );
+    }
+
+    function createsOwnAgreementRoom() {
+      return isSignedIn()
+        && (
+          request.resource.data.founderId == request.auth.uid
+          || request.resource.data.investorId == request.auth.uid
+          || request.auth.uid in request.resource.data.adminIds
+        );
+    }
+
+    function isBlockedBetween(firstUid, secondUid) {
+      return exists(/databases/$(database)/documents/blockedUsers/$(firstUid + '_' + secondUid))
+        || exists(/databases/$(database)/documents/blockedUsers/$(secondUid + '_' + firstUid));
+    }
+
+    function projectOwner(projectId) {
+      return get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId;
+    }
+
     match /users/{userId} {
-      allow create, read, update: if isUser(userId);
-      allow delete: if false;
+      allow create: if isUser(userId);
+      allow read: if isUser(userId) || isAdmin();
+      allow update: if isUser(userId) || isAdmin();
+      allow delete: if isUser(userId) || isAdmin();
     }
 
     match /projects/{projectId} {
-      allow read, create: if isSignedIn();
-      allow update, delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow read: if isSignedIn() || isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
     }
 
     match /fundingRequests/{requestId} {
@@ -26,8 +68,114 @@ service cloud.firestore {
     }
 
     match /investments/{investmentId} {
-      allow create: if isSignedIn();
-      allow read, update: if isSignedIn() && resource.data.investorId == request.auth.uid;
+      allow create: if isSignedIn()
+        && exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId))
+        && !isBlockedBetween(request.auth.uid, projectOwner(request.resource.data.projectId));
+      allow read, update: if isAdmin() || (isSignedIn() && resource.data.investorId == request.auth.uid);
+      allow delete: if false;
+    }
+
+    match /investmentInterests/{interestId} {
+      allow create: if isSignedIn()
+        && request.resource.data.investorId == request.auth.uid
+        && request.resource.data.status == 'interested'
+        && exists(/databases/$(database)/documents/projects/$(request.resource.data.startupId))
+        && request.resource.data.founderUid == projectOwner(request.resource.data.startupId)
+        && !isBlockedBetween(request.auth.uid, request.resource.data.founderUid);
+      allow read: if isAdmin()
+        || (isSignedIn() && (
+          resource.data.investorId == request.auth.uid
+          || resource.data.founderUid == request.auth.uid
+        ));
+      allow update: if isAdmin()
+        || (isSignedIn()
+          && resource.data.founderUid == request.auth.uid
+          && request.resource.data.status in ['accepted', 'expired']);
+      allow delete: if false;
+    }
+
+    match /matches/{matchId} {
+      allow create: if isSignedIn()
+        && request.resource.data.founderUid == request.auth.uid
+        && exists(/databases/$(database)/documents/projects/$(request.resource.data.startupId))
+        && request.resource.data.founderUid == projectOwner(request.resource.data.startupId)
+        && !isBlockedBetween(request.resource.data.founderUid, request.resource.data.investorUid);
+      allow read, update: if isAdmin()
+        || (isSignedIn() && (
+          resource.data.founderUid == request.auth.uid
+          || resource.data.investorUid == request.auth.uid
+        ));
+      allow delete: if false;
+    }
+
+    match /blockedUsers/{blockId} {
+      allow create: if isSignedIn() && request.resource.data.blockerUid == request.auth.uid;
+      allow read: if isAdmin() || (isSignedIn() && resource.data.blockerUid == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    match /userReports/{reportId} {
+      allow create: if isSignedIn() && request.resource.data.reporterUid == request.auth.uid;
+      allow read, update: if isAdmin() || (isSignedIn() && resource.data.reporterUid == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /reports/{reportId} {
+      allow create: if isSignedIn() && request.resource.data.reporterUid == request.auth.uid;
+      allow read, update: if isAdmin() || (isSignedIn() && resource.data.reporterUid == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /agreementRooms/{agreementId} {
+      allow create: if createsOwnAgreementRoom();
+      allow read, update: if isAdmin() || hasAgreementAccess(agreementId);
+      allow delete: if false;
+    }
+
+    match /agreements/{agreementId} {
+      allow create: if createsOwnAgreementRoom();
+      allow read, update: if isAdmin() || hasAgreementAccess(agreementId);
+      allow delete: if false;
+    }
+
+    match /investmentContracts/{agreementId} {
+      allow create, read, update: if isAdmin() || hasAgreementAccess(agreementId);
+      allow delete: if false;
+    }
+
+    match /investmentContractVersions/{versionId} {
+      allow create: if isSignedIn() && hasAgreementAccess(request.resource.data.agreementId);
+      allow read: if isAdmin() || hasAgreementAccess(resource.data.agreementId);
+      allow update, delete: if false;
+    }
+
+    match /agreementMeetings/{meetingId} {
+      allow create: if isSignedIn() && hasAgreementAccess(request.resource.data.agreementId);
+      allow read, update: if isAdmin() || hasAgreementAccess(resource.data.agreementId);
+      allow delete: if false;
+    }
+
+    match /agreementParticipants/{participantId} {
+      allow create: if isSignedIn() && hasAgreementAccess(request.resource.data.agreementId);
+      allow read, update: if isAdmin() || hasAgreementAccess(resource.data.agreementId);
+      allow delete: if false;
+    }
+
+    match /agreementTranscripts/{transcriptId} {
+      allow create: if isSignedIn() && hasAgreementAccess(request.resource.data.agreementId);
+      allow read, update: if isAdmin() || hasAgreementAccess(resource.data.agreementId);
+      allow delete: if false;
+    }
+
+    match /agreementSummaries/{agreementId} {
+      allow create, update: if isAdmin() || hasAgreementAccess(agreementId);
+      allow read: if isAdmin() || hasAgreementAccess(agreementId);
+      allow delete: if false;
+    }
+
+    match /agreementCertificates/{agreementId} {
+      allow create, update: if isAdmin() || hasAgreementAccess(agreementId);
+      allow read: if isAdmin() || hasAgreementAccess(agreementId);
       allow delete: if false;
     }
 

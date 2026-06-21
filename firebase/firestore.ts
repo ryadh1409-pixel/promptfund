@@ -9,6 +9,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  deleteDoc,
   where,
   type DocumentData,
   type QueryConstraint,
@@ -21,7 +22,19 @@ export const firestoreCollections = {
   projects: 'projects',
   fundingRequests: 'fundingRequests',
   investments: 'investments',
+  investmentInterests: 'investmentInterests',
+  matches: 'matches',
   expenses: 'expenses',
+  agreementRooms: 'agreementRooms',
+  investmentContracts: 'investmentContracts',
+  investmentContractVersions: 'investmentContractVersions',
+  agreementMeetings: 'agreementMeetings',
+  agreementParticipants: 'agreementParticipants',
+  agreementTranscripts: 'agreementTranscripts',
+  agreementSummaries: 'agreementSummaries',
+  agreementCertificates: 'agreementCertificates',
+  blockedUsers: 'blockedUsers',
+  userReports: 'userReports',
 } as const;
 
 export type FirestoreCollectionName = keyof typeof firestoreCollections;
@@ -57,6 +70,10 @@ export type FirestoreAdapter = {
     id: string,
     input: T,
   ) => Promise<FirestoreDocument<T>>;
+  deleteById: (
+    collectionName: FirestoreCollectionName,
+    id: string,
+  ) => Promise<void>;
 };
 
 export function getPromptFundFirestore() {
@@ -152,5 +169,8 @@ export const firestoreAdapter: FirestoreAdapter = {
       ...input,
       id,
     };
+  },
+  async deleteById(collectionName, id) {
+    await deleteDoc(doc(getPromptFundFirestore(), firestoreCollections[collectionName], id));
   },
 };

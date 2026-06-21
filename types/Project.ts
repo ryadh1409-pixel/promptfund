@@ -16,12 +16,24 @@ export type Project = {
   milestones: string[];
   nextUpdate: string;
   coverImage?: string;
+  logoUrl?: string;
   equityOffered?: number;
   metric?: string;
   founderName?: string;
+  founderPhotoURL?: string;
   founderAvatar?: string;
   founderVerified?: boolean;
   rank?: StartupCardRank;
+  industry?: string;
+  location?: string;
+  raisedSoFar?: number;
+  valuation?: number;
+  stage?: string;
+  traction?: string;
+  monthlyRevenue?: number;
+  growthPercent?: number;
+  riskRating?: 'Low' | 'Medium' | 'High';
+  shortPitch?: string;
 };
 
 export type CreateProjectInput = Omit<Project, 'id' | 'fundedAmount' | 'progress' | 'status'> & {

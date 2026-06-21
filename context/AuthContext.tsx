@@ -14,12 +14,14 @@ import {
   type AuthUser,
 } from '@/firebase/auth';
 import { isFirebaseEnabled, missingFirebaseConfigKeys } from '@/firebase/config';
+import { isAdminEmail } from '@/services/adminService';
 import { userService } from '@/services/userService';
 import type { CreateUserInput, User } from '@/types/User';
 
 type RegisterInput = AuthCredentials &
   CreateUserInput & {
     displayName: string;
+    profilePhotoUri?: string;
   };
 
 type AuthContextValue = {
@@ -50,12 +52,15 @@ function getInitials(value: string | null) {
 function buildRecoveredProfile(user: AuthUser): CreateUserInput {
   const emailName = user.email?.split('@')[0] ?? 'promptfund-user';
   const displayName = user.displayName?.trim() || emailName;
-  const handle = `@${emailName.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() || user.uid.slice(0, 8)}`;
+  const username = emailName.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() || user.uid.slice(0, 8);
 
   return {
     name: displayName,
-    handle,
-    role: 'investor',
+    handle: username,
+    displayName,
+    username,
+    role: isAdminEmail(user.email) ? 'admin' : 'investor',
+    intent: 'investor',
     avatar: getInitials(displayName),
     bio: 'PromptFund profile restored automatically after Firebase Auth sign-in.',
     location: '',
@@ -171,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const register = useCallback(
-    async ({ email, password, displayName, ...profileInput }: RegisterInput) => {
+    async ({ email, password, displayName, profilePhotoUri, ...profileInput }: RegisterInput) => {
       setLoading(true);
       setError(null);
 
@@ -182,7 +187,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           uid: user.uid,
           path,
         });
-        const nextProfile = await userService.createUser(user.uid, profileInput);
+        const normalizedProfileInput: CreateUserInput = {
+          ...profileInput,
+          role: isAdminEmail(user.email) ? 'admin' : profileInput.role,
+          displayName: displayName || profileInput.name,
+          username: profileInput.username ?? profileInput.handle,
+        };
+        let nextProfile = await userService.createUser(user.uid, normalizedProfileInput);
+
+        if (profilePhotoUri) {
+          const photoURL = await userService.uploadProfilePhoto(user.uid, profilePhotoUri);
+          await firebaseAuth.updateProfile({ photoURL });
+          nextProfile = {
+            ...nextProfile,
+            photoURL,
+          };
+        }
         console.info('[PromptFund Auth] register profile created', {
           uid: user.uid,
           path,

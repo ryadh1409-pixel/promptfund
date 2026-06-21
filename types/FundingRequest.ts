@@ -33,3 +33,36 @@ export type CreateInvestmentInput = Omit<Investment, 'id' | 'fundedAt'> & {
 };
 
 export type CreateFundingInput = CreateInvestmentInput;
+
+export type InvestmentInterestStatus = 'interested' | 'accepted' | 'passed' | 'expired';
+
+export type InvestmentInterest = {
+  id: string;
+  startupId: string;
+  investorId: string;
+  founderUid: string;
+  createdAt: string;
+  status: InvestmentInterestStatus;
+};
+
+export type CreateInvestmentInterestInput = Omit<InvestmentInterest, 'id' | 'createdAt' | 'status'> & {
+  status?: InvestmentInterestStatus;
+  createdAt?: string;
+};
+
+export type MatchStatus = 'matched' | 'agreementStarted' | 'completed';
+
+export type Match = {
+  id: string;
+  founderUid: string;
+  investorUid: string;
+  startupId: string;
+  matchedAt: string;
+  status: MatchStatus;
+  agreementId?: string;
+};
+
+export type CreateMatchInput = Omit<Match, 'id' | 'matchedAt' | 'status'> & {
+  status?: MatchStatus;
+  matchedAt?: string;
+};

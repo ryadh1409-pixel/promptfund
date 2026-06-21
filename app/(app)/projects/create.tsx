@@ -40,7 +40,7 @@ export default function CreateProjectScreen() {
         equityOffered: Number(equityOffered),
         metric: metric.trim(),
         coverImage: coverImage.trim(),
-        founderName: profile?.name ?? 'Founder',
+        founderName: profile?.name ?? 'Entrepreneur',
         founderAvatar: profile?.avatar ?? 'PF',
         founderVerified: true,
         rank: 'J',
@@ -58,9 +58,9 @@ export default function CreateProjectScreen() {
 
   return (
     <Screen
-      eyebrow="Founder"
-      title="Create Your Card"
-      subtitle="Startup Name. Metric. Goal. Publish in 60 seconds."
+      eyebrow="Entrepreneur"
+      title="My Startup"
+      subtitle="Create your startup card, raise capital, and track investor matches."
     >
       <Card>
         <TextInput placeholder="Startup Name" placeholderTextColor={colors.subtle} value={title} onChangeText={setTitle} style={styles.input} />
@@ -120,7 +120,7 @@ export default function CreateProjectScreen() {
             goalAmount: Number(goalAmount) || 50000,
             equityOffered: Number(equityOffered) || 4,
             metric: metric || '1,200 Active Users',
-            founderName: profile?.name ?? 'Founder',
+            founderName: profile?.name ?? 'Entrepreneur',
             founderAvatar: profile?.avatar ?? 'PF',
             founderVerified: true,
             rank: 'J',

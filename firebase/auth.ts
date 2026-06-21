@@ -1,9 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createUserWithEmailAndPassword,
+  EmailAuthProvider,
+  deleteUser,
   getAuth,
   initializeAuth,
   onAuthStateChanged,
+  reauthenticateWithCredential,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   updateProfile,
@@ -29,6 +32,9 @@ export type AuthAdapter = {
   getCurrentUser: () => Promise<AuthUser | null>;
   signIn: (credentials: AuthCredentials) => Promise<AuthUser>;
   register: (credentials: AuthCredentials & { displayName: string }) => Promise<AuthUser>;
+  updateProfile: (input: { displayName?: string; photoURL?: string }) => Promise<AuthUser>;
+  reauthenticate: (credentials: AuthCredentials) => Promise<void>;
+  deleteCurrentUser: () => Promise<void>;
   signOut: () => Promise<void>;
   onAuthStateChanged: (callback: (user: AuthUser | null) => void) => () => void;
 };
@@ -82,6 +88,34 @@ export const firebaseAuth: AuthAdapter = {
     const credential = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
     await updateProfile(credential.user, { displayName });
     return mapFirebaseUser(credential.user);
+  },
+  async updateProfile(input) {
+    const user = getFirebaseAuth().currentUser;
+
+    if (!user) {
+      throw new Error('No authenticated user is available.');
+    }
+
+    await updateProfile(user, input);
+    return mapFirebaseUser(user);
+  },
+  async reauthenticate({ email, password }) {
+    const user = getFirebaseAuth().currentUser;
+
+    if (!user || !user.email || user.email !== email) {
+      throw new Error('Re-authentication requires the current account email.');
+    }
+
+    await reauthenticateWithCredential(user, EmailAuthProvider.credential(email, password));
+  },
+  async deleteCurrentUser() {
+    const user = getFirebaseAuth().currentUser;
+
+    if (!user) {
+      throw new Error('No authenticated user is available.');
+    }
+
+    await deleteUser(user);
   },
   async signOut() {
     await firebaseSignOut(getFirebaseAuth());

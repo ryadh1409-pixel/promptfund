@@ -9,7 +9,12 @@
     "userInterfaceStyle": "dark",
     "ios": {
       "bundleIdentifier": "com.thamer.promptfund",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "PromptFund needs camera access for Agreement Room video sessions.",
+        "NSMicrophoneUsageDescription": "PromptFund needs microphone access to record agreement meetings.",
+        "NSPhotoLibraryUsageDescription": "PromptFund needs photo library access to update your profile photo."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +30,30 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow PromptFund to access your camera for Agreement Room video sessions.",
+          "microphonePermission": "Allow PromptFund to access your microphone for Agreement Room recordings.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow PromptFund to record Agreement Room audio.",
+          "enableBackgroundRecording": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow PromptFund to access your photos to update your profile image.",
+          "cameraPermission": "Allow PromptFund to use your camera for profile photos.",
+          "microphonePermission": false
+        }
+      ]
     ]
   }
 }
