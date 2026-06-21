@@ -1,12 +1,16 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createUserWithEmailAndPassword,
   getAuth,
+  initializeAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   updateProfile,
+  type Auth,
   type User as FirebaseAuthUser,
 } from 'firebase/auth';
+import * as FirebaseAuthModule from 'firebase/auth';
 
 import { getFirebaseApp } from './config';
 
@@ -29,8 +33,32 @@ export type AuthAdapter = {
   onAuthStateChanged: (callback: (user: AuthUser | null) => void) => () => void;
 };
 
+let authInstance: Auth | null = null;
+
+type AuthDependencies = NonNullable<Parameters<typeof initializeAuth>[1]>;
+type ReactNativePersistenceFactory = (storage: typeof AsyncStorage) => AuthDependencies['persistence'];
+
+const { getReactNativePersistence } = FirebaseAuthModule as typeof FirebaseAuthModule & {
+  getReactNativePersistence: ReactNativePersistenceFactory;
+};
+
 function getFirebaseAuth() {
-  return getAuth(getFirebaseApp());
+  if (authInstance) {
+    return authInstance;
+  }
+
+  const app = getFirebaseApp();
+
+  try {
+    authInstance = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } catch (error) {
+    // Auth may already be initialized by Fast Refresh or another Firebase boundary.
+    authInstance = getAuth(app);
+  }
+
+  return authInstance;
 }
 
 function mapFirebaseUser(user: FirebaseAuthUser): AuthUser {
