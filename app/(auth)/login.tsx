@@ -6,16 +6,23 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Card, FieldPreview, PrimaryButton, Screen } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { getFriendlyErrorMessage } from '@/services/errorHandler';
 
 export default function LoginScreen() {
   const router = useRouter();
   const { error, loading, signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
 
   async function handleLogin() {
-    await signIn({ email: email.trim(), password });
-    router.replace('/investor-feed');
+    setLocalError(null);
+    try {
+      await signIn({ email: email.trim(), password });
+      router.replace('/choose-path');
+    } catch (loginError) {
+      setLocalError(getFriendlyErrorMessage(loginError));
+    }
   }
 
   return (
@@ -42,12 +49,15 @@ export default function LoginScreen() {
           value={password}
           onChangeText={setPassword}
         />
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {localError || error ? <Text style={styles.errorText}>{localError ?? error}</Text> : null}
         <PrimaryButton
           label={loading ? 'Signing in...' : 'Start swiping'}
           disabled={loading || email.length === 0 || password.length === 0}
           onPress={handleLogin}
         />
+        <Link href="/reset-password" asChild>
+          <Text style={styles.forgotLink}>Forgot Password?</Text>
+        </Link>
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>New to PromptFund?</Text>
           <Link href="/register" asChild>
@@ -83,6 +93,11 @@ const styles = StyleSheet.create({
   footerLink: {
     color: colors.accent,
     fontWeight: '800',
+  },
+  forgotLink: {
+    color: colors.luxuryGold,
+    fontWeight: '900',
+    textAlign: 'center',
   },
   errorText: {
     color: colors.danger,

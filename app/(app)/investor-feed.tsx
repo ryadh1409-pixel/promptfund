@@ -17,6 +17,7 @@ import {
   sampleStartupCards,
   type StartupCard,
 } from '@/components/cards/StartupPlayingCard';
+import { IdentityCard } from '@/components/cards/IdentityCard';
 import {
   EmptyState,
   LoadingState,
@@ -30,10 +31,36 @@ import { useAuth } from '@/context/AuthContext';
 import { fundingService } from '@/services/fundingService';
 import { projectService } from '@/services/projectService';
 import type { Project } from '@/types/Project';
-import { getRoleBadgeLabel } from '@/utils/roles';
+import { getFriendlyErrorMessage } from '@/services/errorHandler';
+import { getActiveRole, getRoleBadgeLabel } from '@/utils/roles';
+
+const sampleInvestorCards = [
+  {
+    id: 'investor-nova',
+    fullName: 'Mira Khalid',
+    username: 'mirakhalid',
+    role: 'angel_investor' as const,
+    avatar: 'MK',
+    location: 'Toronto, Canada',
+    bio: 'Angel investor backing AI, healthcare, and SaaS founders. Investment range $10K-$75K.',
+    memberSince: '2026-06-01T00:00:00.000Z',
+  },
+  {
+    id: 'investor-carter',
+    fullName: 'Daniel Carter',
+    username: 'danielvc',
+    role: 'angel_investor' as const,
+    avatar: 'DC',
+    location: 'New York, USA',
+    bio: 'Operator-investor focused on developer tools, fintech infrastructure, and robotics.',
+    memberSince: '2026-06-01T00:00:00.000Z',
+  },
+];
 
 export default function InvestorFeedScreen() {
   const { authUser, profile } = useAuth();
+  const activeRole = getActiveRole(profile);
+  const isFounderMode = activeRole === 'founder';
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -45,6 +72,7 @@ export default function InvestorFeedScreen() {
     return projectCards.length > 0 ? projectCards : sampleStartupCards;
   }, [projects]);
   const activeCard = cards[activeIndex % cards.length];
+  const activeInvestorCard = sampleInvestorCards[activeIndex % sampleInvestorCards.length];
   const nextCard = cards[(activeIndex + 1) % cards.length];
   const thirdCard = cards[(activeIndex + 2) % cards.length];
 
@@ -54,6 +82,8 @@ export default function InvestorFeedScreen() {
 
       try {
         setProjects(await projectService.listProjects());
+      } catch (loadError) {
+        setNotice(getFriendlyErrorMessage(loadError));
       } finally {
         setIsLoading(false);
       }
@@ -63,7 +93,7 @@ export default function InvestorFeedScreen() {
   }, []);
 
   async function handleSwipeComplete(direction: 'left' | 'right') {
-    if (!activeCard) {
+    if (!activeCard && !isFounderMode) {
       return;
     }
 
@@ -78,7 +108,7 @@ export default function InvestorFeedScreen() {
     setNotice('Interested sent.');
     setIsInterested(true);
 
-    if (authUser && !activeCard.isSample && activeCard.ownerId) {
+    if (authUser && activeCard && !isFounderMode && !activeCard.isSample && activeCard.ownerId) {
       try {
         await fundingService.createInvestmentInterest({
           startupId: activeCard.id,
@@ -86,7 +116,7 @@ export default function InvestorFeedScreen() {
           founderUid: activeCard.ownerId,
         });
       } catch (interestError) {
-        setNotice(interestError instanceof Error ? interestError.message : 'Unable to send interest.');
+        setNotice(getFriendlyErrorMessage(interestError));
       } finally {
         setIsInterested(false);
       }
@@ -98,13 +128,13 @@ export default function InvestorFeedScreen() {
   return (
     <Screen
       eyebrow="Discover"
-      title="Discover startups."
-      subtitle="Review investment opportunities with a swipe."
+      title={isFounderMode ? 'Discover investors.' : 'Discover startups.'}
+      subtitle="One card at a time. Interested, skip, or save."
     >
       {profile ? <Pill label={getRoleBadgeLabel(profile.role)} tone="rgba(200,162,74,0.18)" /> : null}
       {isLoading ? <LoadingState label="Loading cards" /> : null}
 
-      {!isLoading && !activeCard ? (
+      {!isLoading && !activeCard && !isFounderMode ? (
         <EmptyState
           title="No cards in the deck"
           message="Founders can publish a card in under 60 seconds."
@@ -112,7 +142,7 @@ export default function InvestorFeedScreen() {
         />
       ) : null}
 
-      {!isLoading && activeCard ? (
+      {!isLoading && (activeCard || isFounderMode) ? (
         <>
           {notice ? (
             <View style={styles.notice}>
@@ -120,24 +150,31 @@ export default function InvestorFeedScreen() {
             </View>
           ) : null}
 
-          <SwipeCardStack
-            activeCard={activeCard}
-            nextCard={nextCard}
-            thirdCard={thirdCard}
-            showBack={showBack}
-            onToggleBack={() => setShowBack((value) => !value)}
-            onSwipeComplete={handleSwipeComplete}
-          />
+          {isFounderMode ? (
+            <View style={styles.identityStage}>
+              <IdentityCard {...activeInvestorCard} />
+            </View>
+          ) : (
+            <SwipeCardStack
+              activeCard={activeCard}
+              nextCard={nextCard}
+              thirdCard={thirdCard}
+              showBack={showBack}
+              onToggleBack={() => setShowBack((value) => !value)}
+              onSwipeComplete={handleSwipeComplete}
+            />
+          )}
 
           <View style={styles.actionRow}>
-            <PrimaryButton label="Pass" variant="secondary" onPress={() => handleSwipeComplete('left')} />
+            <PrimaryButton label="Skip" variant="secondary" onPress={() => handleSwipeComplete('left')} />
+            <PrimaryButton label="Save" variant="secondary" onPress={() => setNotice('Saved to My Cards.')} />
             <PrimaryButton
               label={isInterested ? 'Sending...' : 'Interested'}
               disabled={isInterested}
               onPress={() => handleSwipeComplete('right')}
             />
           </View>
-          <Text style={styles.hint}>Swipe left to pass. Swipe right to show interest. Tap to flip.</Text>
+          <Text style={styles.hint}>Funding happens through cards.</Text>
         </>
       ) : null}
     </Screen>
@@ -340,6 +377,11 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     gap: 12,
+  },
+  identityStage: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 380,
   },
   hint: {
     color: colors.muted,

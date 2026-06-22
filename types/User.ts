@@ -1,5 +1,6 @@
-export type UserRole = 'entrepreneur' | 'investor' | 'admin';
-export type UserIntent = 'entrepreneur' | 'investor';
+export type ActiveRole = 'founder' | 'investor';
+export type UserRole = ActiveRole | 'angel_investor' | 'entrepreneur' | 'admin';
+export type UserIntent = ActiveRole;
 export type UserStatus = 'active' | 'suspended' | 'banned' | 'deleted';
 
 export type User = {
@@ -10,6 +11,8 @@ export type User = {
   username?: string;
   photoURL?: string;
   role: UserRole;
+  roles?: ActiveRole[];
+  activeRole?: ActiveRole;
   intent?: UserIntent;
   avatar: string;
   bio: string;

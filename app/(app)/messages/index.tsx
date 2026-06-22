@@ -1,8 +1,9 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, PrimaryLink, Screen } from '@/components/ui/Primitives';
+import { Card, Pill, PrimaryLink, Screen } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { getRoleBadgeLabel } from '@/utils/roles';
 
 export default function MessagesScreen() {
   const { profile } = useAuth();
@@ -10,6 +11,7 @@ export default function MessagesScreen() {
   return (
     <Screen eyebrow="Messages" title="Start the discussion." subtitle="No inbox clutter. Just active founder-investor talks.">
       <Card>
+        {profile ? <Pill label={getRoleBadgeLabel(profile.role)} tone="rgba(200,162,74,0.18)" /> : null}
         <View style={styles.avatarPair}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{profile?.avatar ?? 'PF'}</Text>

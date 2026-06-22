@@ -6,19 +6,16 @@ import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { Card, PrimaryButton, Screen } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
-import type { UserRole } from '@/types/User';
 
 type ImagePickerModule = typeof import('expo-image-picker');
 
 export default function RegisterScreen() {
   const router = useRouter();
   const { error, loading, register } = useAuth();
-  const [step, setStep] = useState<1 | 2>(1);
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<Extract<UserRole, 'entrepreneur' | 'investor'>>('entrepreneur');
   const [bio, setBio] = useState('');
   const [location, setLocation] = useState('');
   const [stack, setStack] = useState('');
@@ -104,8 +101,10 @@ export default function RegisterScreen() {
       name: name.trim(),
       handle: normalizedUsername,
       username: normalizedUsername,
-      role,
-      intent: role,
+      role: 'angel_investor',
+      roles: ['investor'],
+      activeRole: 'investor',
+      intent: 'investor',
       avatar: avatar || 'PF',
       profilePhotoUri: profilePhotoUri ?? undefined,
       bio: bio.trim(),
@@ -115,18 +114,17 @@ export default function RegisterScreen() {
         .map((item) => item.trim())
         .filter(Boolean),
     });
-    router.replace(role === 'entrepreneur' ? '/projects/create' : '/investor-feed');
+    router.replace('/choose-path');
   }
 
   return (
     <Screen
       eyebrow="Create profile"
-      title={step === 1 ? 'Create Account' : 'Choose Role'}
-      subtitle={step === 1 ? 'Start with your account details.' : 'Choose how you want to use PromptFund.'}
+      title="Create Account"
+      subtitle="Create your PromptFund identity. You will choose your path next."
     >
       <Card>
-        {step === 1 ? (
-          <>
+        <>
             <View style={styles.photoBlock}>
               {profilePhotoUri ? (
                 <Image source={{ uri: profilePhotoUri }} style={styles.profilePhoto} />
@@ -202,40 +200,13 @@ export default function RegisterScreen() {
               value={stack}
               onChangeText={setStack}
             />
-          </>
-        ) : (
-          <View style={styles.roleGrid}>
-            <RoleCard
-              title="Entrepreneur"
-              description="Raise capital for your startup"
-              selected={role === 'entrepreneur'}
-              onPress={() => setRole('entrepreneur')}
-            />
-            <RoleCard
-              title="Angel Investor"
-              description="Discover and invest in startups"
-              selected={role === 'investor'}
-              onPress={() => setRole('investor')}
-            />
-          </View>
-        )}
+        </>
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
-        {step === 1 ? (
-          <PrimaryButton
-            label="Continue"
-            disabled={name.length === 0 || email.length === 0 || password.length === 0}
-            onPress={() => setStep(2)}
-          />
-        ) : (
-          <>
-            <PrimaryButton
-              label={loading ? 'Creating account...' : 'Create account'}
-              disabled={loading}
-              onPress={handleRegister}
-            />
-            <PrimaryButton label="Back" variant="secondary" disabled={loading} onPress={() => setStep(1)} />
-          </>
-        )}
+        <PrimaryButton
+          label={loading ? 'Creating account...' : 'Create account'}
+          disabled={loading || name.length === 0 || email.length === 0 || password.length === 0}
+          onPress={handleRegister}
+        />
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>Already registered?</Text>
           <Link href="/login" asChild>
@@ -244,32 +215,6 @@ export default function RegisterScreen() {
         </View>
       </Card>
     </Screen>
-  );
-}
-
-function RoleCard({
-  title,
-  description,
-  selected,
-  onPress,
-}: {
-  title: string;
-  description: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={[styles.roleCard, selected ? styles.roleCardSelected : null]}
-    >
-      <Text style={styles.roleTitle}>{title}</Text>
-      <Text style={styles.roleDescription}>{description}</Text>
-      <Text style={[styles.roleStatus, selected ? styles.roleStatusSelected : null]}>
-        {selected ? 'Selected' : 'Choose'}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -340,40 +285,6 @@ const styles = StyleSheet.create({
     minHeight: 96,
     paddingTop: spacing.md,
     textAlignVertical: 'top',
-  },
-  roleGrid: {
-    gap: spacing.md,
-  },
-  roleCard: {
-    gap: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.lg,
-    backgroundColor: colors.black,
-    padding: spacing.lg,
-  },
-  roleCardSelected: {
-    borderColor: colors.luxuryGold,
-    backgroundColor: 'rgba(200, 162, 74, 0.14)',
-  },
-  roleTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  roleDescription: {
-    color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  roleStatus: {
-    color: colors.subtle,
-    fontSize: 12,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  roleStatusSelected: {
-    color: colors.luxuryGold,
   },
   footerRow: {
     flexDirection: 'row',

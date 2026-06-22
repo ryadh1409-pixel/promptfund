@@ -7,6 +7,7 @@ import {
   initializeAuth,
   onAuthStateChanged,
   reauthenticateWithCredential,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   updateProfile,
@@ -16,6 +17,7 @@ import {
 import * as FirebaseAuthModule from 'firebase/auth';
 
 import { getFirebaseApp } from './config';
+import { AppError, withFriendlyErrors } from '@/services/errorHandler';
 
 export type AuthUser = {
   uid: string;
@@ -32,6 +34,7 @@ export type AuthAdapter = {
   getCurrentUser: () => Promise<AuthUser | null>;
   signIn: (credentials: AuthCredentials) => Promise<AuthUser>;
   register: (credentials: AuthCredentials & { displayName: string }) => Promise<AuthUser>;
+  sendPasswordReset: (email: string) => Promise<void>;
   updateProfile: (input: { displayName?: string; photoURL?: string }) => Promise<AuthUser>;
   reauthenticate: (credentials: AuthCredentials) => Promise<void>;
   deleteCurrentUser: () => Promise<void>;
@@ -81,44 +84,61 @@ export const firebaseAuth: AuthAdapter = {
     return user ? mapFirebaseUser(user) : null;
   },
   async signIn({ email, password }) {
-    const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
-    return mapFirebaseUser(credential.user);
+    return withFriendlyErrors(async () => {
+      const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
+      return mapFirebaseUser(credential.user);
+    });
   },
   async register({ email, password, displayName }) {
-    const credential = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
-    await updateProfile(credential.user, { displayName });
-    return mapFirebaseUser(credential.user);
+    return withFriendlyErrors(async () => {
+      const credential = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
+      await updateProfile(credential.user, { displayName });
+      return mapFirebaseUser(credential.user);
+    });
+  },
+  async sendPasswordReset(email) {
+    return withFriendlyErrors(async () => {
+      await sendPasswordResetEmail(getFirebaseAuth(), email);
+    });
   },
   async updateProfile(input) {
     const user = getFirebaseAuth().currentUser;
 
     if (!user) {
-      throw new Error('No authenticated user is available.');
+      throw new AppError('Please sign in again before continuing.');
     }
 
-    await updateProfile(user, input);
-    return mapFirebaseUser(user);
+    return withFriendlyErrors(async () => {
+      await updateProfile(user, input);
+      return mapFirebaseUser(user);
+    });
   },
   async reauthenticate({ email, password }) {
     const user = getFirebaseAuth().currentUser;
 
     if (!user || !user.email || user.email !== email) {
-      throw new Error('Re-authentication requires the current account email.');
+      throw new AppError('Please confirm the email for your current account.');
     }
 
-    await reauthenticateWithCredential(user, EmailAuthProvider.credential(email, password));
+    await withFriendlyErrors(async () => {
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(email, password));
+    });
   },
   async deleteCurrentUser() {
     const user = getFirebaseAuth().currentUser;
 
     if (!user) {
-      throw new Error('No authenticated user is available.');
+      throw new AppError('Please sign in again before continuing.');
     }
 
-    await deleteUser(user);
+    await withFriendlyErrors(async () => {
+      await deleteUser(user);
+    });
   },
   async signOut() {
-    await firebaseSignOut(getFirebaseAuth());
+    await withFriendlyErrors(async () => {
+      await firebaseSignOut(getFirebaseAuth());
+    });
   },
   onAuthStateChanged(callback) {
     return onAuthStateChanged(getFirebaseAuth(), (user) => {

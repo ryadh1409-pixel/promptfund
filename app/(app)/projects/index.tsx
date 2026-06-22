@@ -16,12 +16,14 @@ import { useAuth } from '@/context/AuthContext';
 import { projectService } from '@/services/projectService';
 import type { Project } from '@/types/Project';
 import { formatCurrency } from '@/utils/format';
+import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { isEntrepreneurRole } from '@/utils/roles';
 
 export default function ProjectsScreen() {
   const { authUser, profile } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const isEntrepreneur = isEntrepreneurRole(profile?.role);
   const totalGoal = projects.reduce((sum, project) => sum + project.goalAmount, 0);
   const totalFunded = projects.reduce((sum, project) => sum + project.fundedAmount, 0);
@@ -29,6 +31,7 @@ export default function ProjectsScreen() {
   useEffect(() => {
     async function loadProjects() {
       setIsLoading(true);
+      setError(null);
 
       try {
         setProjects(
@@ -36,6 +39,8 @@ export default function ProjectsScreen() {
             ? await projectService.listProjectsByDeveloper(authUser.uid)
             : await projectService.listProjects(),
         );
+      } catch (loadError) {
+        setError(getFriendlyErrorMessage(loadError));
       } finally {
         setIsLoading(false);
       }
@@ -65,6 +70,7 @@ export default function ProjectsScreen() {
       />
 
       {isLoading ? <LoadingState label="Loading PromptFund projects" /> : null}
+      {error ? <Text style={{ color: colors.danger, lineHeight: 22 }}>{error}</Text> : null}
 
       {!isLoading && projects.length === 0 ? (
         <EmptyState

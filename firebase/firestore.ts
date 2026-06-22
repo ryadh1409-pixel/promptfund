@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 
 import { getFirebaseApp } from './config';
+import { withFriendlyErrors } from '@/services/errorHandler';
 
 export const firestoreCollections = {
   users: 'users',
@@ -102,8 +103,10 @@ async function listWithConstraints<T>(
   collectionName: FirestoreCollectionName,
   constraints: QueryConstraint[] = [],
 ): Promise<Array<FirestoreDocument<T>>> {
-  const snapshot = await getDocs(query(collectionRef(collectionName), ...constraints));
-  return snapshot.docs.map((item) => mapDocument<T>(item.id, item.data()));
+  return withFriendlyErrors(async () => {
+    const snapshot = await getDocs(query(collectionRef(collectionName), ...constraints));
+    return snapshot.docs.map((item) => mapDocument<T>(item.id, item.data()));
+  });
 }
 
 export const firestoreAdapter: FirestoreAdapter = {
@@ -114,7 +117,7 @@ export const firestoreAdapter: FirestoreAdapter = {
     return listWithConstraints(collectionName, [where(field, '==', value)]);
   },
   async getById(collectionName, id) {
-    const snapshot = await getDoc(doc(getPromptFundFirestore(), firestoreCollections[collectionName], id));
+    const snapshot = await withFriendlyErrors(async () => getDoc(doc(getPromptFundFirestore(), firestoreCollections[collectionName], id)));
 
     if (!snapshot.exists()) {
       return null;
@@ -127,7 +130,7 @@ export const firestoreAdapter: FirestoreAdapter = {
       ...withWriteMetadata(input as object),
       createdAt: serverTimestamp(),
     };
-    const reference = await addDoc(collectionRef(collectionName), payload);
+    const reference = await withFriendlyErrors(async () => addDoc(collectionRef(collectionName), payload));
     return {
       ...(input as object),
       id: reference.id,
@@ -139,7 +142,9 @@ export const firestoreAdapter: FirestoreAdapter = {
     input: Partial<T>,
   ): Promise<FirestoreDocument<T>> {
     const reference = doc(getPromptFundFirestore(), firestoreCollections[collectionName], id);
-    await updateDoc(reference, withWriteMetadata(input as object));
+    await withFriendlyErrors(async () => {
+      await updateDoc(reference, withWriteMetadata(input as object));
+    });
     const updated = await this.getById<T>(collectionName, id);
 
     if (!updated) {
@@ -154,10 +159,12 @@ export const firestoreAdapter: FirestoreAdapter = {
 
     try {
       console.info('[PromptFund Firestore] setWithId start', { path });
-      await setDoc(reference, {
-        ...input,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+      await withFriendlyErrors(async () => {
+        await setDoc(reference, {
+          ...input,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
       });
       console.info('[PromptFund Firestore] setWithId success', { path });
     } catch (error) {
@@ -171,6 +178,8 @@ export const firestoreAdapter: FirestoreAdapter = {
     };
   },
   async deleteById(collectionName, id) {
-    await deleteDoc(doc(getPromptFundFirestore(), firestoreCollections[collectionName], id));
+    await withFriendlyErrors(async () => {
+      await deleteDoc(doc(getPromptFundFirestore(), firestoreCollections[collectionName], id));
+    });
   },
 };

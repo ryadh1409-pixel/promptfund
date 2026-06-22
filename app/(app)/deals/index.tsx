@@ -11,6 +11,7 @@ import { fundingService } from '@/services/fundingService';
 import { projectService } from '@/services/projectService';
 import type { InvestmentInterest, Match } from '@/types/FundingRequest';
 import { formatCurrency } from '@/utils/format';
+import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { getRoleBadgeLabel, isEntrepreneurRole } from '@/utils/roles';
 
 export default function DealsScreen() {
@@ -72,6 +73,8 @@ export default function DealsScreen() {
         ]);
         setIncomingInterests(founderInterests.filter((interest) => interest.status === 'interested'));
         setMatches([...founderMatches, ...investorMatches]);
+      } catch (loadError) {
+        setNotice(getFriendlyErrorMessage(loadError));
       } finally {
         setIsLoading(false);
       }
@@ -96,21 +99,26 @@ export default function DealsScreen() {
 
   async function handleAcceptInterest(interest: InvestmentInterest) {
     setNotice(null);
-    const match = await fundingService.acceptInvestmentInterest(interest);
-    setIncomingInterests((items) => items.filter((item) => item.id !== interest.id));
-    setMatches((items) => [match, ...items]);
-    setNotice('Match created. Agreement unlocked.');
+    try {
+      const match = await fundingService.acceptInvestmentInterest(interest);
+      setIncomingInterests((items) => items.filter((item) => item.id !== interest.id));
+      setMatches((items) => [match, ...items]);
+      setNotice('Match created. Agreement unlocked.');
+    } catch (acceptError) {
+      setNotice(getFriendlyErrorMessage(acceptError));
+    }
   }
 
   async function handleStartAgreement(match: Match) {
-    const project = await projectService.getProjectById(match.startupId);
-    const agreementId = match.agreementId ?? `agreement-${match.id}`;
-    const amount = Math.max(Math.round((project?.goalAmount ?? 50000) * 0.1), 1000);
-    const equity = project?.equityOffered ?? 4;
+    try {
+      const project = await projectService.getProjectById(match.startupId);
+      const agreementId = match.agreementId ?? `agreement-${match.id}`;
+      const amount = Math.max(Math.round((project?.goalAmount ?? 50000) * 0.1), 1000);
+      const equity = project?.equityOffered ?? 4;
 
-    const existingRoom = await agreementService.getAgreementRoom(agreementId);
-    if (!existingRoom) {
-      await agreementService.createAgreementRoom({
+      const existingRoom = await agreementService.getAgreementRoom(agreementId);
+      if (!existingRoom) {
+        await agreementService.createAgreementRoom({
         agreementId,
         meetingId: `meeting-${agreementId}`,
         founderId: match.founderUid,
@@ -135,9 +143,9 @@ export default function DealsScreen() {
         agreementText: `${project?.title ?? 'Startup'} investment draft. Both parties can edit terms before signing.`,
         investorSigned: false,
         founderSigned: false,
-      });
-    }
-    await agreementService.saveContract({
+        });
+      }
+      await agreementService.saveContract({
       agreementId,
       matchId: match.id,
       projectId: match.startupId,
@@ -148,12 +156,15 @@ export default function DealsScreen() {
       termType: 'SAFE',
       customTerms: 'Investor and founder will review SAFE, convertible note, revenue share, or custom terms with PromptFund Witness.',
       editedBy: profile?.id ?? match.investorUid,
-    });
-    await fundingService.updateMatch(match.id, {
-      agreementId,
-      status: 'agreementStarted',
-    });
-    router.push(`/agreement-room/${agreementId}`);
+      });
+      await fundingService.updateMatch(match.id, {
+        agreementId,
+        status: 'agreementStarted',
+      });
+      router.push(`/agreement-room/${agreementId}`);
+    } catch (agreementError) {
+      setNotice(getFriendlyErrorMessage(agreementError));
+    }
   }
 
   return (

@@ -6,6 +6,7 @@ import { Card, PrimaryButton, Screen } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { firebaseAuth } from '@/firebase/auth';
+import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { userService } from '@/services/userService';
 
 export default function DeleteAccountScreen() {
@@ -31,7 +32,7 @@ export default function DeleteAccountScreen() {
       await firebaseAuth.deleteCurrentUser();
       router.replace('/register');
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete account.');
+      setError(getFriendlyErrorMessage(deleteError));
     } finally {
       setIsDeleting(false);
     }

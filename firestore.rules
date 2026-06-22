@@ -50,15 +50,26 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow create: if isUser(userId);
+      allow create: if isUser(userId)
+        && (
+          request.resource.data.role in ['angel_investor', 'entrepreneur']
+          || (request.resource.data.role == 'admin' && request.auth.token.email == 'ryadh1409@gmail.com')
+        );
       allow read: if isUser(userId) || isAdmin();
-      allow update: if isUser(userId) || isAdmin();
+      allow update: if isAdmin()
+        || (
+          isUser(userId)
+          && request.resource.data.role in ['angel_investor', 'entrepreneur']
+          && resource.data.role != 'admin'
+        );
       allow delete: if isUser(userId) || isAdmin();
     }
 
     match /projects/{projectId} {
       allow read: if isSignedIn() || isAdmin();
-      allow create: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.developerId == request.auth.uid;
       allow update, delete: if isAdmin() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
     }
 

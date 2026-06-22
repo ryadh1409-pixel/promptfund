@@ -53,7 +53,8 @@
           "cameraPermission": "Allow PromptFund to use your camera for profile photos.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-asset"
     ]
   }
 }

@@ -5,8 +5,7 @@ import { colors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 
 export default function AppLayout() {
-  const { authUser, initializing, profile } = useAuth();
-  const isEntrepreneur = profile?.role === 'entrepreneur';
+  const { authUser, initializing } = useAuth();
 
   if (!initializing && !authUser) {
     return <Redirect href="/login" />;
@@ -36,31 +35,15 @@ export default function AppLayout() {
       <Tabs.Screen
         name="investor-feed"
         options={{
-          title: 'Discover Startups',
-          href: isEntrepreneur ? null : undefined,
+          title: 'Discover',
           tabBarIcon: ({ color }) => <TabGlyph color={color} label="A" />,
         }}
       />
       <Tabs.Screen
         name="deck/index"
         options={{
-          title: 'Deck',
-          href: isEntrepreneur ? null : undefined,
+          title: 'My Cards',
           tabBarIcon: ({ color }) => <TabGlyph color={color} label="K" />,
-        }}
-      />
-      <Tabs.Screen
-        name="deals/index"
-        options={{
-          title: isEntrepreneur ? 'Investor Matches' : 'Deals',
-          tabBarIcon: ({ color }) => <TabGlyph color={color} label="Q" />,
-        }}
-      />
-      <Tabs.Screen
-        name="messages/index"
-        options={{
-          title: 'Messages',
-          tabBarIcon: ({ color }) => <TabGlyph color={color} label="J" />,
         }}
       />
       <Tabs.Screen
@@ -71,27 +54,17 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen name="dashboard" options={{ href: null }} />
-      <Tabs.Screen
-        name="projects/index"
-        options={{
-          title: 'Funding Progress',
-          href: isEntrepreneur ? undefined : null,
-          tabBarIcon: ({ color }) => <TabGlyph color={color} label="F" />,
-        }}
-      />
-      <Tabs.Screen
-        name="projects/create"
-        options={{
-          title: 'My Startup',
-          href: isEntrepreneur ? undefined : null,
-          tabBarIcon: ({ color }) => <TabGlyph color={color} label="M" />,
-        }}
-      />
+      <Tabs.Screen name="deals/index" options={{ href: null }} />
+      <Tabs.Screen name="messages/index" options={{ href: null }} />
+      <Tabs.Screen name="projects/index" options={{ href: null }} />
+      <Tabs.Screen name="projects/create" options={{ href: null }} />
       <Tabs.Screen name="projects/[id]" options={{ href: null }} />
+      <Tabs.Screen name="choose-path" options={{ href: null }} />
       <Tabs.Screen name="funding/request" options={{ href: null }} />
       <Tabs.Screen name="expenses/index" options={{ href: null }} />
       <Tabs.Screen name="wallet/index" options={{ href: null }} />
       <Tabs.Screen name="profile/edit" options={{ href: null }} />
+      <Tabs.Screen name="profile/settings" options={{ href: null }} />
       <Tabs.Screen name="profile/delete-account" options={{ href: null }} />
       <Tabs.Screen name="profile/blocked-users" options={{ href: null }} />
       <Tabs.Screen name="profile/report-user" options={{ href: null }} />

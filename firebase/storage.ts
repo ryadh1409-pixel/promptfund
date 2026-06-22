@@ -1,6 +1,7 @@
 import { deleteObject, getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 
 import { getFirebaseApp } from './config';
+import { withFriendlyErrors } from '@/services/errorHandler';
 
 export type AgreementArtifactKind = 'video' | 'audio' | 'transcript' | 'summary' | 'contract';
 
@@ -34,17 +35,19 @@ export async function uploadAgreementArtifact({
   const path = getAgreementArtifactPath(agreementId, kind);
   const reference = ref(getPromptFundStorage(), path);
 
-  await uploadBytes(reference, blob, {
-    contentType,
-    customMetadata: {
-      agreementId,
-      artifactKind: kind,
-    },
+  await withFriendlyErrors(async () => {
+    await uploadBytes(reference, blob, {
+      contentType,
+      customMetadata: {
+        agreementId,
+        artifactKind: kind,
+      },
+    });
   });
 
   return {
     path,
-    downloadUrl: await getDownloadURL(reference),
+    downloadUrl: await withFriendlyErrors(async () => getDownloadURL(reference)),
   };
 }
 
@@ -80,28 +83,32 @@ export async function uploadUserProfilePhoto({
   userId: string;
   uri: string;
 }) {
-  const response = await fetch(uri);
-  const blob = await response.blob();
+  const response = await withFriendlyErrors(async () => fetch(uri));
+  const blob = await withFriendlyErrors(async () => response.blob());
   const path = getUserProfilePhotoPath(userId);
   const reference = ref(getPromptFundStorage(), path);
 
-  await uploadBytes(reference, blob, {
-    contentType: 'image/jpeg',
-    customMetadata: {
-      userId,
-      artifactKind: 'profilePhoto',
-    },
+  await withFriendlyErrors(async () => {
+    await uploadBytes(reference, blob, {
+      contentType: 'image/jpeg',
+      customMetadata: {
+        userId,
+        artifactKind: 'profilePhoto',
+      },
+    });
   });
 
   return {
     path,
-    downloadUrl: await getDownloadURL(reference),
+    downloadUrl: await withFriendlyErrors(async () => getDownloadURL(reference)),
   };
 }
 
 export async function deleteUserProfilePhoto(userId: string) {
   try {
-    await deleteObject(ref(getPromptFundStorage(), getUserProfilePhotoPath(userId)));
+    await withFriendlyErrors(async () => {
+      await deleteObject(ref(getPromptFundStorage(), getUserProfilePhotoPath(userId)));
+    });
   } catch (error) {
     // Missing profile photos should not block account deletion.
     console.info('[PromptFund Storage] profile photo delete skipped', { userId, error });

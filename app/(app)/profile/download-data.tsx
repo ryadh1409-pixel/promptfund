@@ -4,12 +4,14 @@ import { ScrollView, Text } from 'react-native';
 import { Card, LoadingState, Screen } from '@/components/ui/Primitives';
 import { colors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { fundingService } from '@/services/fundingService';
 import { userService } from '@/services/userService';
 
 export default function DownloadDataScreen() {
   const { authUser, profile } = useAuth();
   const [data, setData] = useState<object | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -17,17 +19,22 @@ export default function DownloadDataScreen() {
         return;
       }
 
-      const [blockedUsers, investments] = await Promise.all([
-        userService.listBlockedUsers(authUser.uid),
-        fundingService.listInvestmentsByInvestor(authUser.uid),
-      ]);
+      try {
+        setError(null);
+        const [blockedUsers, investments] = await Promise.all([
+          userService.listBlockedUsers(authUser.uid),
+          fundingService.listInvestmentsByInvestor(authUser.uid),
+        ]);
 
-      setData({
-        profile,
-        blockedUsers,
-        investments,
-        exportedAt: new Date().toISOString(),
-      });
+        setData({
+          profile,
+          blockedUsers,
+          investments,
+          exportedAt: new Date().toISOString(),
+        });
+      } catch (loadError) {
+        setError(getFriendlyErrorMessage(loadError));
+      }
     }
 
     loadData();
@@ -36,6 +43,11 @@ export default function DownloadDataScreen() {
   return (
     <Screen eyebrow="Data" title="Download My Data" subtitle="Review your exportable PromptFund account data.">
       {!data ? <LoadingState label="Preparing data export" /> : null}
+      {error ? (
+        <Card>
+          <Text style={{ color: colors.danger, lineHeight: 22 }}>{error}</Text>
+        </Card>
+      ) : null}
       {data ? (
         <Card>
           <ScrollView horizontal>

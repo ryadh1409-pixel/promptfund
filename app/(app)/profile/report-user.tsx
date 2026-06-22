@@ -4,6 +4,7 @@ import { StyleSheet, Text, TextInput } from 'react-native';
 import { Card, PrimaryButton, Screen } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { userService } from '@/services/userService';
 
 export default function ReportUserScreen() {
@@ -12,22 +13,28 @@ export default function ReportUserScreen() {
   const [reason, setReason] = useState('');
   const [details, setDetails] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleReport() {
     if (!authUser) {
       return;
     }
 
-    await userService.reportUser({
-      reporterUid: authUser.uid,
-      reportedUid: reportedUid.trim(),
-      reason: reason.trim(),
-      details: details.trim(),
-    });
-    setMessage('Report submitted for admin review.');
-    setReportedUid('');
-    setReason('');
-    setDetails('');
+    try {
+      setError(null);
+      await userService.reportUser({
+        reporterUid: authUser.uid,
+        reportedUid: reportedUid.trim(),
+        reason: reason.trim(),
+        details: details.trim(),
+      });
+      setMessage('Report submitted for admin review.');
+      setReportedUid('');
+      setReason('');
+      setDetails('');
+    } catch (reportError) {
+      setError(getFriendlyErrorMessage(reportError));
+    }
   }
 
   return (
@@ -37,6 +44,7 @@ export default function ReportUserScreen() {
         <TextInput placeholder="Reason" placeholderTextColor={colors.subtle} value={reason} onChangeText={setReason} style={styles.input} />
         <TextInput placeholder="Details" placeholderTextColor={colors.subtle} value={details} onChangeText={setDetails} multiline style={[styles.input, styles.textArea]} />
         {message ? <Text style={styles.success}>{message}</Text> : null}
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
         <PrimaryButton label="Submit Report" disabled={reportedUid.length === 0 || reason.length === 0} onPress={handleReport} />
       </Card>
     </Screen>
@@ -62,5 +70,9 @@ const styles = StyleSheet.create({
   success: {
     color: colors.success,
     fontWeight: '800',
+  },
+  errorText: {
+    color: colors.danger,
+    lineHeight: 20,
   },
 });

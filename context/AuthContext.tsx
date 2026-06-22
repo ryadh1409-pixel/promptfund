@@ -15,6 +15,7 @@ import {
 } from '@/firebase/auth';
 import { isFirebaseEnabled, missingFirebaseConfigKeys } from '@/firebase/config';
 import { isAdminEmail } from '@/services/adminService';
+import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { userService } from '@/services/userService';
 import type { CreateUserInput, User } from '@/types/User';
 
@@ -59,7 +60,9 @@ function buildRecoveredProfile(user: AuthUser): CreateUserInput {
     handle: username,
     displayName,
     username,
-    role: isAdminEmail(user.email) ? 'admin' : 'investor',
+    role: isAdminEmail(user.email) ? 'admin' : 'angel_investor',
+    roles: ['investor'],
+    activeRole: 'investor',
     intent: 'investor',
     avatar: getInitials(displayName),
     bio: 'PromptFund profile restored automatically after Firebase Auth sign-in.',
@@ -138,7 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setError(null);
       } catch (profileError) {
         setProfile(null);
-        setError(profileError instanceof Error ? profileError.message : 'Unable to load user profile.');
+        setError(getFriendlyErrorMessage(profileError));
       } finally {
         setInitializing(false);
       }
@@ -165,7 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           nextProfile = await createMissingProfile(user);
         }
       } catch (signInError) {
-        const message = signInError instanceof Error ? signInError.message : 'Unable to sign in.';
+        const message = getFriendlyErrorMessage(signInError);
         setError(message);
         throw signInError;
       } finally {
@@ -190,6 +193,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const normalizedProfileInput: CreateUserInput = {
           ...profileInput,
           role: isAdminEmail(user.email) ? 'admin' : profileInput.role,
+          roles: profileInput.roles ?? [profileInput.activeRole ?? 'investor'],
+          activeRole: profileInput.activeRole ?? profileInput.roles?.[0] ?? 'investor',
           displayName: displayName || profileInput.name,
           username: profileInput.username ?? profileInput.handle,
         };
@@ -210,7 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthUser(user);
         setProfile(nextProfile);
       } catch (registerError) {
-        const message = registerError instanceof Error ? registerError.message : 'Unable to register.';
+        const message = getFriendlyErrorMessage(registerError);
         setError(message);
         throw registerError;
       } finally {

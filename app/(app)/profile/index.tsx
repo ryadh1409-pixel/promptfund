@@ -1,35 +1,31 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
+import { IdentityCard } from '@/components/cards/IdentityCard';
 import { Card, LoadingState, Pill, PrimaryButton, PrimaryLink, Screen, StatCard, ui } from '@/components/ui/Primitives';
 import { colors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { fundingService } from '@/services/fundingService';
 import type { Investment } from '@/types/FundingRequest';
 import { formatCurrency } from '@/utils/format';
+import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { getRoleBadgeLabel, isEntrepreneurRole } from '@/utils/roles';
-
-function formatMemberSince(value: string | undefined) {
-  if (!value) {
-    return 'Member Since Recently';
-  }
-
-  return `Member Since ${new Intl.DateTimeFormat('en', {
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(value))}`;
-}
+import { getActiveRole } from '@/utils/roles';
+import { userService } from '@/services/userService';
+import type { ActiveRole } from '@/types/User';
 
 export default function UserProfileScreen() {
   const router = useRouter();
   const { authUser, profile, signOut } = useAuth();
   const [investments, setInvestments] = useState<Investment[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const totalInvested = investments.reduce((sum, investment) => sum + investment.amount, 0);
   const portfolioValue = totalInvested * 1.18;
   const dealsCompleted = investments.length;
   const successRate = dealsCompleted > 0 ? '92%' : 'New';
-  const isEntrepreneur = isEntrepreneurRole(profile?.role);
+  const activeRole = getActiveRole(profile);
+  const isEntrepreneur = activeRole === 'founder' || isEntrepreneurRole(profile?.role);
 
   useEffect(() => {
     async function loadInvestments() {
@@ -37,15 +33,42 @@ export default function UserProfileScreen() {
         return;
       }
 
-      setInvestments(await fundingService.listInvestmentsByInvestor(authUser.uid));
+      try {
+        setError(null);
+        setInvestments(await fundingService.listInvestmentsByInvestor(authUser.uid));
+      } catch (loadError) {
+        setError(getFriendlyErrorMessage(loadError));
+      }
     }
 
     loadInvestments();
   }, [authUser]);
 
   async function handleSignOut() {
-    await signOut();
-    router.replace('/login');
+    try {
+      await signOut();
+    } finally {
+      router.replace('/login');
+    }
+  }
+
+  async function handleSwitchRole(nextRole: ActiveRole) {
+    if (!authUser || !profile) {
+      return;
+    }
+
+    try {
+      setError(null);
+      await userService.updateUser(authUser.uid, {
+        roles: Array.from(new Set([...(profile.roles ?? []), nextRole])),
+        activeRole: nextRole,
+        role: nextRole === 'founder' ? 'entrepreneur' : 'angel_investor',
+        intent: nextRole,
+      });
+      router.replace('/choose-path');
+    } catch (switchError) {
+      setError(getFriendlyErrorMessage(switchError));
+    }
   }
 
   if (!profile) {
@@ -63,31 +86,26 @@ export default function UserProfileScreen() {
       subtitle={isEntrepreneur ? 'Founder identity, startup controls, and investor readiness.' : 'Professional investment identity and account controls.'}
     >
       <Card style={styles.heroCard}>
-        <View style={styles.profileHeader}>
-          {profile.photoURL ? (
-            <Image source={{ uri: profile.photoURL }} style={styles.avatarImage} />
-          ) : (
-            <View style={styles.avatarFallback}>
-              <Text style={styles.avatarText}>{profile.avatar}</Text>
-            </View>
-          )}
-          <View style={styles.identity}>
-            <View style={ui.wrap}>
-              <Pill label={getRoleBadgeLabel(profile.role)} tone="rgba(200,162,74,0.18)" />
-              {profile.verified ? <Pill label="Verified" tone="rgba(46,125,50,0.24)" /> : null}
-            </View>
-            <Text style={styles.name}>{profile.displayName ?? profile.name}</Text>
-            <Text style={styles.profileLine}>Username: {profile.username ?? profile.handle}</Text>
-            <Text style={styles.profileLine}>{profile.location || 'Location not added'}</Text>
-            <Text style={styles.profileLine}>{formatMemberSince(profile.memberSince)}</Text>
-            <Text style={styles.bio}>{profile.bio || 'PromptFund member building a verified investment record.'}</Text>
-          </View>
-        </View>
+        <IdentityCard
+          fullName={profile.displayName ?? profile.name}
+          username={profile.username ?? profile.handle}
+          role={profile.role}
+          avatar={profile.avatar}
+          photoURL={profile.photoURL}
+          location={profile.location}
+          bio={profile.bio || 'PromptFund member building a verified investment record.'}
+          memberSince={profile.memberSince}
+        />
         <View style={ui.wrap}>
           <PrimaryLink href="/profile/edit" label="Edit profile" />
-          <PrimaryLink href="/profile/edit" label="Settings" variant="secondary" />
+          <PrimaryLink href="/profile/settings" label="Settings" variant="secondary" />
         </View>
       </Card>
+      {error ? (
+        <Card>
+          <Text style={styles.errorText}>{error}</Text>
+        </Card>
+      ) : null}
 
       <View style={ui.row}>
         <StatCard label={isEntrepreneur ? 'Investor matches' : 'Total investments'} value={String(investments.length)} tone={colors.accent} />
@@ -95,8 +113,8 @@ export default function UserProfileScreen() {
       </View>
 
       <View style={ui.row}>
-        <StatCard label={isEntrepreneur ? 'Startup card' : 'Deals completed'} value={isEntrepreneur ? 'Live' : String(dealsCompleted)} tone={colors.pokerRed} />
-        <StatCard label={isEntrepreneur ? 'Role badge' : 'Portfolio value'} value={isEntrepreneur ? 'Active' : formatCurrency(portfolioValue)} />
+        <StatCard label={isEntrepreneur ? 'Startup card' : 'Deal Cards'} value={isEntrepreneur ? 'Live' : String(dealsCompleted)} tone={colors.pokerRed} />
+        <StatCard label={isEntrepreneur ? 'Role badge' : 'Card Value'} value={isEntrepreneur ? 'Active' : formatCurrency(portfolioValue)} />
       </View>
 
       <View style={ui.row}>
@@ -108,8 +126,25 @@ export default function UserProfileScreen() {
         title="Account"
         links={[
           ['Edit Profile', '/profile/edit'],
-          ['Change Photo', '/profile/edit'],
-          ['Change Username', '/profile/edit'],
+        ]}
+      />
+      <Card>
+        <Text style={styles.sectionTitle}>Verification</Text>
+        <Text style={styles.settingsCopy}>Identity, role, and agreement verification are represented through PromptFund cards.</Text>
+      </Card>
+      <Card>
+        <Text style={styles.sectionTitle}>Switch Role</Text>
+        <Text style={styles.settingsCopy}>Current role: {activeRole === 'founder' ? 'Founder' : 'Angel Investor'}</Text>
+        <View style={ui.wrap}>
+          <PrimaryButton label="Founder" variant={activeRole === 'founder' ? 'primary' : 'secondary'} onPress={() => handleSwitchRole('founder')} />
+          <PrimaryButton label="Angel Investor" variant={activeRole === 'investor' ? 'primary' : 'secondary'} onPress={() => handleSwitchRole('investor')} />
+        </View>
+      </Card>
+      <SettingsSection
+        title="Settings"
+        links={[
+          ['Settings', '/profile/settings'],
+          ['Help Center', '/profile/help-center'],
         ]}
       />
       <SettingsSection
@@ -145,7 +180,7 @@ export default function UserProfileScreen() {
         <SettingsSection
           title="Admin"
           links={[
-            ['Admin Dashboard', '/admin'],
+            ['Admin Console', '/admin'],
           ]}
         />
       ) : null}
@@ -172,50 +207,17 @@ const styles = StyleSheet.create({
   heroCard: {
     borderColor: 'rgba(200, 162, 74, 0.42)',
   },
-  profileHeader: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  avatarImage: {
-    width: 92,
-    height: 92,
-    borderRadius: 46,
-    backgroundColor: colors.panelMuted,
-  },
-  avatarFallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 92,
-    height: 92,
-    borderRadius: 46,
-    backgroundColor: colors.pokerRed,
-  },
-  avatarText: {
-    color: colors.text,
-    fontSize: 28,
-    fontWeight: '900',
-  },
-  identity: {
-    flex: 1,
-    gap: 8,
-  },
-  name: {
-    color: colors.text,
-    fontSize: 26,
-    fontWeight: '900',
-  },
-  profileLine: {
-    color: colors.accent,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  bio: {
-    color: colors.muted,
-    lineHeight: 21,
-  },
   sectionTitle: {
     color: colors.text,
     fontSize: 18,
     fontWeight: '900',
+  },
+  settingsCopy: {
+    color: colors.muted,
+    lineHeight: 22,
+  },
+  errorText: {
+    color: colors.danger,
+    lineHeight: 22,
   },
 });

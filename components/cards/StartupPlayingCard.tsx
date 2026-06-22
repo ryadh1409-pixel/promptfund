@@ -198,6 +198,7 @@ export function StartupPlayingCard({
                   <Text style={styles.verified}>
                     {card.founderVerified === false ? 'Founder' : 'Founder Verified'}
                   </Text>
+                  <Text style={styles.roleBadge}>Entrepreneur Badge</Text>
                 </View>
               </View>
             </View>
@@ -461,6 +462,13 @@ const styles = StyleSheet.create({
     color: colors.luxuryGold,
     fontSize: 13,
     fontWeight: '900',
+  },
+  roleBadge: {
+    color: '#409CFF',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
   },
   backContent: {
     flex: 1,

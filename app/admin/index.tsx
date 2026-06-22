@@ -11,6 +11,8 @@ import type { Investment, Match } from '@/types/FundingRequest';
 import type { Project } from '@/types/Project';
 import type { BlockedUser, User, UserReport } from '@/types/User';
 import { formatCurrency } from '@/utils/format';
+import { getRoleBadgeLabel } from '@/utils/roles';
+import { getFriendlyErrorMessage } from '@/services/errorHandler';
 
 type AdminData = {
   users: User[];
@@ -41,7 +43,7 @@ export default function AdminDashboardScreen() {
         setError(null);
         setData(await adminService.getDashboardData());
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : 'Unable to load admin dashboard.');
+        setError(getFriendlyErrorMessage(loadError));
       } finally {
         setIsLoading(false);
       }
@@ -59,18 +61,33 @@ export default function AdminDashboardScreen() {
   }
 
   async function handleUserStatus(userId: string, status: 'suspended' | 'banned') {
-    await adminService.updateUserStatus(userId, status);
-    setData(await adminService.getDashboardData());
+    try {
+      setError(null);
+      await adminService.updateUserStatus(userId, status);
+      setData(await adminService.getDashboardData());
+    } catch (statusError) {
+      setError(getFriendlyErrorMessage(statusError));
+    }
   }
 
   async function handleProjectStatus(projectId: string, status: Project['status']) {
-    await adminService.updateProjectStatus(projectId, status);
-    setData(await adminService.getDashboardData());
+    try {
+      setError(null);
+      await adminService.updateProjectStatus(projectId, status);
+      setData(await adminService.getDashboardData());
+    } catch (projectError) {
+      setError(getFriendlyErrorMessage(projectError));
+    }
   }
 
   async function handleResolveReport(reportId: string) {
-    await adminService.resolveReport(reportId);
-    setData(await adminService.getDashboardData());
+    try {
+      setError(null);
+      await adminService.resolveReport(reportId);
+      setData(await adminService.getDashboardData());
+    } catch (reportError) {
+      setError(getFriendlyErrorMessage(reportError));
+    }
   }
 
   return (
@@ -97,7 +114,7 @@ export default function AdminDashboardScreen() {
             {data.users.slice(0, 8).map((user) => (
               <Card key={user.id}>
                 <Text style={styles.itemTitle}>{user.displayName ?? user.name}</Text>
-                <Text style={styles.itemMeta}>{user.username ?? user.handle} · {user.status ?? 'active'} · {user.role}</Text>
+                <Text style={styles.itemMeta}>{user.username ?? user.handle} · {user.status ?? 'active'} · {getRoleBadgeLabel(user.role)}</Text>
                 <View style={ui.wrap}>
                   <PrimaryButton label="Suspend user" variant="secondary" onPress={() => handleUserStatus(user.id, 'suspended')} />
                   <PrimaryButton label="Ban user" variant="secondary" onPress={() => handleUserStatus(user.id, 'banned')} />
