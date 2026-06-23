@@ -2,11 +2,12 @@ import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'r
 
 import { colors, radii, spacing } from '@/constants/theme';
 import type { Project, StartupCardRank } from '@/types/Project';
-import { formatCurrency } from '@/utils/format';
 
 export type StartupCard = Pick<
   Project,
   | 'id'
+  | 'startupName'
+  | 'imageUrl'
   | 'title'
   | 'tagline'
   | 'description'
@@ -101,6 +102,10 @@ export const sampleStartupCards: StartupCard[] = [
 export function mapProjectToStartupCard(project: Project): StartupCard {
   return {
     ...project,
+    developerId: project.developerId ?? project.founderId,
+    ownerId: project.ownerId ?? project.founderId,
+    title: project.startupName ?? project.title ?? 'Startup',
+    coverImage: project.imageUrl ?? project.coverImage,
     metric: project.metric ?? project.tagline,
     founderName: project.founderName ?? 'Founder',
     founderAvatar: project.founderAvatar ?? 'PF',
@@ -137,10 +142,6 @@ export function StartupPlayingCard({
             <Text style={styles.backLabel}>Founder Card</Text>
             <Text style={styles.backTitle}>{card.title}</Text>
             <Text style={styles.backCopy}>{card.description}</Text>
-            <View style={styles.backRow}>
-              <Text style={styles.backStat}>{formatCurrency(card.goalAmount)}</Text>
-              <Text style={styles.backStat}>{card.equityOffered ?? 0}% Equity</Text>
-            </View>
           </View>
         ) : (
           <>
@@ -162,29 +163,8 @@ export function StartupPlayingCard({
               </View>
             </View>
             <View style={styles.content}>
-              <View style={styles.metaRow}>
-                <Text style={styles.metaText}>{card.industry ?? 'Startup'}</Text>
-                <Text style={styles.metaDot}>•</Text>
-                <Text style={styles.metaText}>{card.location ?? 'Global'}</Text>
-              </View>
               <Text style={styles.title}>{card.title}</Text>
               <Text style={styles.pitch}>{card.shortPitch ?? card.tagline}</Text>
-              <View style={styles.statGrid}>
-                <CardStat label="Funding Goal" value={formatCurrency(card.goalAmount)} />
-                <CardStat label="Raised" value={formatCurrency(card.raisedSoFar ?? 0)} />
-                <CardStat label="Valuation" value={card.valuation ? formatCurrency(card.valuation) : 'TBD'} />
-                <CardStat label="Stage" value={card.stage ?? 'Early'} />
-              </View>
-              <View style={styles.tractionRow}>
-                <Text style={styles.metric}>{card.traction ?? card.metric ?? card.tagline}</Text>
-                <Text style={styles.growth}>{card.growthPercent ?? 0}% MoM</Text>
-              </View>
-              <View style={styles.tractionRow}>
-                <Text style={styles.revenue}>
-                  Revenue {card.monthlyRevenue ? formatCurrency(card.monthlyRevenue) : 'Pre-revenue'}
-                </Text>
-                <Text style={styles.risk}>Risk {card.riskRating ?? 'Medium'}</Text>
-              </View>
               <View style={styles.founderRow}>
                 <View style={styles.avatar}>
                   {card.founderPhotoURL ? (
@@ -198,7 +178,6 @@ export function StartupPlayingCard({
                   <Text style={styles.verified}>
                     {card.founderVerified === false ? 'Founder' : 'Founder Verified'}
                   </Text>
-                  <Text style={styles.roleBadge}>Entrepreneur Badge</Text>
                 </View>
               </View>
             </View>
@@ -208,15 +187,6 @@ export function StartupPlayingCard({
       <View style={styles.mirroredCorner}>
         <Corner rank={rank} suit={suit} color={suitColor} />
       </View>
-    </View>
-  );
-}
-
-function CardStat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.statBox}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
     </View>
   );
 }

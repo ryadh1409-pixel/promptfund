@@ -34,7 +34,7 @@ export default function DeckScreen() {
       try {
         const nextInvestments = isFounderMode ? [] : await fundingService.listInvestmentsByInvestor(authUser.uid);
         const nextProjects = isFounderMode
-          ? await projectService.listProjectsByDeveloper(authUser.uid)
+          ? await projectService.listProjectsForFounder(authUser.uid)
           : (await Promise.all(
               Array.from(new Set(nextInvestments.map((investment) => investment.projectId))).map((projectId) =>
                 projectService.getProjectById(projectId),

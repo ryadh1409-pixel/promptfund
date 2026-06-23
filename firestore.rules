@@ -68,9 +68,22 @@ service cloud.firestore {
     match /projects/{projectId} {
       allow read: if isSignedIn() || isAdmin();
       allow create: if isSignedIn()
-        && request.resource.data.ownerId == request.auth.uid
-        && request.resource.data.developerId == request.auth.uid;
-      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.ownerId == request.auth.uid);
+        && (
+          (
+            request.resource.data.ownerId == request.auth.uid
+            && request.resource.data.developerId == request.auth.uid
+          )
+          || request.resource.data.ownerId == request.auth.uid
+          || request.resource.data.founderId == request.auth.uid
+        );
+      allow update, delete: if isAdmin()
+        || (
+          isSignedIn()
+          && (
+            resource.data.ownerId == request.auth.uid
+            || resource.data.founderId == request.auth.uid
+          )
+        );
     }
 
     match /fundingRequests/{requestId} {

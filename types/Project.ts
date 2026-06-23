@@ -5,6 +5,9 @@ export type Project = {
   id: string;
   developerId: string;
   ownerId: string;
+  founderId?: string;
+  startupName?: string;
+  imageUrl?: string;
   title: string;
   tagline: string;
   description: string;
@@ -38,6 +41,13 @@ export type Project = {
 
 export type CreateProjectInput = Omit<Project, 'id' | 'fundedAmount' | 'progress' | 'status'> & {
   status?: ProjectStatus;
+};
+
+export type CreateStartupCardInput = {
+  startupName: string;
+  description: string;
+  imageUrl: string;
+  founderId: string;
 };
 
 export type UpdateProjectInput = Partial<Omit<Project, 'id' | 'developerId' | 'ownerId'>>;

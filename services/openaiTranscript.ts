@@ -1,6 +1,7 @@
 import type { AgreementTranscript } from '@/types/Agreement';
 
 const transcriptEndpoint = process.env.EXPO_PUBLIC_AGREEMENT_TRANSCRIPT_ENDPOINT;
+type FormDataValue = Parameters<FormData['append']>[1];
 
 export async function transcribeAgreementAudio({
   agreementId,
@@ -22,7 +23,7 @@ export async function transcribeAgreementAudio({
     uri: audioUri,
     name: 'audio.m4a',
     type: 'audio/m4a',
-  } as unknown as Blob);
+  } as unknown as FormDataValue);
 
   const response = await fetch(transcriptEndpoint, {
     method: 'POST',

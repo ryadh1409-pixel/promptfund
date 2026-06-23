@@ -5,7 +5,7 @@ import { generateAgreementPdf } from '@/services/agreementPdfService';
 import { askPromptFundWitness } from '@/services/openaiAgreementAgent';
 import { generateAgreementSummary } from '@/services/openaiSummary';
 import { transcribeAgreementAudio } from '@/services/openaiTranscript';
-import { uploadAgreementArtifact, uploadJsonAgreementArtifact } from '@/firebase/storage';
+import { uploadAgreementArtifactFromUri, uploadJsonAgreementArtifact } from '@/firebase/storage';
 import type {
   AgreementAgentStatus,
   AgreementCertificate,
@@ -245,13 +245,21 @@ You may now proceed to Phase 2.`
       }
 
       if (audioUri) {
-        const audioBlob = await fetch(audioUri).then((response) => response.blob());
-        await uploadAgreementArtifact({ agreementId, kind: 'audio', blob: audioBlob, contentType: 'audio/m4a' });
+        await uploadAgreementArtifactFromUri({
+          agreementId,
+          kind: 'audio',
+          uri: audioUri,
+          contentType: 'audio/m4a',
+        });
       }
 
       if (videoUri) {
-        const videoBlob = await fetch(videoUri).then((response) => response.blob());
-        await uploadAgreementArtifact({ agreementId, kind: 'video', blob: videoBlob, contentType: 'video/mp4' });
+        await uploadAgreementArtifactFromUri({
+          agreementId,
+          kind: 'video',
+          uri: videoUri,
+          contentType: 'video/mp4',
+        });
       }
 
       const summaryInput = await generateAgreementSummary({ room, transcript: finalTranscript });
@@ -283,11 +291,10 @@ You may now proceed to Phase 2.`
         summary: savedSummary,
         certificate: savedCertificate,
       });
-      const pdfBlob = await fetch(pdf.uri).then((response) => response.blob());
-      await uploadAgreementArtifact({
+      await uploadAgreementArtifactFromUri({
         agreementId,
         kind: 'contract',
-        blob: pdfBlob,
+        uri: pdf.uri,
         contentType: 'application/pdf',
       });
       const archivedRoom = await agreementService.updateAgreementRoom(agreementId, {

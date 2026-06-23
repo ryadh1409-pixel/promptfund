@@ -1,6 +1,8 @@
-import { deleteObject, getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
+import * as FileSystem from 'expo-file-system/legacy';
+import { getAuth } from 'firebase/auth';
+import { deleteObject, getStorage, ref } from 'firebase/storage';
 
-import { getFirebaseApp } from './config';
+import { firebaseConfig, getFirebaseApp } from './config';
 import { withFriendlyErrors } from '@/services/errorHandler';
 
 export type AgreementArtifactKind = 'video' | 'audio' | 'transcript' | 'summary' | 'contract';
@@ -21,34 +23,141 @@ export function getAgreementArtifactPath(agreementId: string, kind: AgreementArt
   return `agreements/${agreementId}/${agreementArtifactNames[kind]}`;
 }
 
-export async function uploadAgreementArtifact({
-  agreementId,
-  kind,
-  blob,
+type FirebaseStorageRestMetadata = {
+  bucket?: string;
+  contentType?: string;
+  downloadTokens?: string;
+  mediaLink?: string;
+  name?: string;
+  size?: string;
+};
+
+async function getCurrentUserIdToken() {
+  const user = getAuth(getFirebaseApp()).currentUser;
+
+  if (!user) {
+    throw new Error('Sign in before uploading files.');
+  }
+
+  return user.getIdToken();
+}
+
+function mediaUploadUrl(path: string) {
+  return `https://firebasestorage.googleapis.com/v0/b/${firebaseConfig.storageBucket}/o?name=${encodeURIComponent(path)}`;
+}
+
+function getFirebaseDownloadUrl(path: string, metadata: FirebaseStorageRestMetadata) {
+  if (metadata.downloadTokens) {
+    const token = metadata.downloadTokens.split(',')[0];
+    return `https://firebasestorage.googleapis.com/v0/b/${metadata.bucket ?? firebaseConfig.storageBucket}/o/${encodeURIComponent(
+      path,
+    )}?alt=media&token=${token}`;
+  }
+
+  if (metadata.mediaLink) {
+    return metadata.mediaLink;
+  }
+
+  return `https://firebasestorage.googleapis.com/v0/b/${metadata.bucket ?? firebaseConfig.storageBucket}/o/${encodeURIComponent(
+    path,
+  )}?alt=media`;
+}
+
+async function uploadUriWithStorageRest({
+  path,
+  uri,
   contentType,
 }: {
-  agreementId: string;
-  kind: AgreementArtifactKind;
-  blob: Blob;
+  path: string;
+  uri: string;
   contentType: string;
 }) {
-  const path = getAgreementArtifactPath(agreementId, kind);
-  const reference = ref(getPromptFundStorage(), path);
+  const idToken = await getCurrentUserIdToken();
 
-  await withFriendlyErrors(async () => {
-    await uploadBytes(reference, blob, {
-      contentType,
-      customMetadata: {
-        agreementId,
-        artifactKind: kind,
-      },
-    });
+  console.log('[Storage] Upload started', { path, contentType });
+
+  const response = await FileSystem.uploadAsync(mediaUploadUrl(path), uri, {
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      'Content-Type': contentType,
+    },
+    httpMethod: 'POST',
+    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+  });
+
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`Firebase Storage upload failed: ${response.status} ${response.body}`);
+  }
+
+  const metadata = JSON.parse(response.body) as FirebaseStorageRestMetadata;
+
+  console.log('[Storage] Upload success', {
+    bucket: metadata.bucket,
+    fullPath: metadata.name,
+    size: metadata.size,
   });
 
   return {
     path,
-    downloadUrl: await withFriendlyErrors(async () => getDownloadURL(reference)),
+    metadata: {
+      bucket: metadata.bucket ?? firebaseConfig.storageBucket,
+      fullPath: metadata.name ?? path,
+      name: path.split('/').at(-1) ?? path,
+      size: Number(metadata.size ?? 0),
+      contentType: metadata.contentType ?? contentType,
+    },
+    downloadUrl: getFirebaseDownloadUrl(path, metadata),
   };
+}
+
+async function uploadTextWithStorageRest({
+  path,
+  value,
+  contentType,
+}: {
+  path: string;
+  value: string;
+  contentType: string;
+}) {
+  const idToken = await getCurrentUserIdToken();
+
+  const response = await fetch(mediaUploadUrl(path), {
+    body: value,
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      'Content-Type': contentType,
+    },
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Firebase Storage upload failed: ${response.status} ${await response.text()}`);
+  }
+
+  const metadata = (await response.json()) as FirebaseStorageRestMetadata;
+
+  return {
+    path,
+    downloadUrl: getFirebaseDownloadUrl(path, metadata),
+  };
+}
+
+export async function uploadAgreementArtifactFromUri({
+  agreementId,
+  kind,
+  uri,
+  contentType,
+}: {
+  agreementId: string;
+  kind: AgreementArtifactKind;
+  uri: string;
+  contentType: string;
+}): Promise<{ path: string; downloadUrl: string }> {
+  return uploadUriWithStorageRest({
+    path: getAgreementArtifactPath(agreementId, kind),
+    uri,
+    contentType,
+  });
 }
 
 export async function uploadJsonAgreementArtifact({
@@ -59,15 +168,10 @@ export async function uploadJsonAgreementArtifact({
   agreementId: string;
   kind: Extract<AgreementArtifactKind, 'transcript' | 'summary'>;
   value: unknown;
-}) {
-  const blob = new Blob([JSON.stringify(value, null, 2)], {
-    type: 'application/json',
-  });
-
-  return uploadAgreementArtifact({
-    agreementId,
-    kind,
-    blob,
+}): Promise<{ path: string; downloadUrl: string }> {
+  return uploadTextWithStorageRest({
+    path: getAgreementArtifactPath(agreementId, kind),
+    value: JSON.stringify(value, null, 2),
     contentType: 'application/json',
   });
 }
@@ -76,32 +180,57 @@ export function getUserProfilePhotoPath(userId: string) {
   return `users/${userId}/profile.jpg`;
 }
 
+export function getStartupImagePath(userId: string) {
+  return `startup-images/${userId}/${Date.now()}.jpg`;
+}
+
 export async function uploadUserProfilePhoto({
   userId,
   uri,
 }: {
   userId: string;
   uri: string;
-}) {
-  const response = await withFriendlyErrors(async () => fetch(uri));
-  const blob = await withFriendlyErrors(async () => response.blob());
-  const path = getUserProfilePhotoPath(userId);
-  const reference = ref(getPromptFundStorage(), path);
-
-  await withFriendlyErrors(async () => {
-    await uploadBytes(reference, blob, {
+}): Promise<{ path: string; downloadUrl: string }> {
+  const upload = await withFriendlyErrors(async () => {
+    return uploadUriWithStorageRest({
+      path: getUserProfilePhotoPath(userId),
+      uri,
       contentType: 'image/jpeg',
-      customMetadata: {
-        userId,
-        artifactKind: 'profilePhoto',
-      },
     });
   });
 
   return {
-    path,
-    downloadUrl: await withFriendlyErrors(async () => getDownloadURL(reference)),
+    path: upload.path,
+    downloadUrl: upload.downloadUrl,
   };
+}
+
+export async function uploadStartupImage({
+  userId,
+  uri,
+}: {
+  userId: string;
+  uri: string;
+}) {
+  const path = getStartupImagePath(userId);
+
+  try {
+    await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    return await uploadUriWithStorageRest({
+      path,
+      uri,
+      contentType: 'image/jpeg',
+    });
+  } catch (error) {
+    console.error('[Storage Upload Error]', error);
+    if (error instanceof Error) {
+      console.error('[Storage Upload Error Stack]', error.stack);
+    }
+    throw error;
+  }
 }
 
 export async function deleteUserProfilePhoto(userId: string) {

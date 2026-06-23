@@ -49,7 +49,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow PromptFund to access your photos to update your profile image.",
+          "photosPermission": "Allow PromptFund to access your photos so you can upload startup screenshots.",
           "cameraPermission": "Allow PromptFund to use your camera for profile photos.",
           "microphonePermission": false
         }

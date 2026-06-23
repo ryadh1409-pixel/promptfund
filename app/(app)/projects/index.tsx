@@ -25,8 +25,8 @@ export default function ProjectsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isEntrepreneur = isEntrepreneurRole(profile?.role);
-  const totalGoal = projects.reduce((sum, project) => sum + project.goalAmount, 0);
-  const totalFunded = projects.reduce((sum, project) => sum + project.fundedAmount, 0);
+  const totalGoal = projects.reduce((sum, project) => sum + (project.goalAmount ?? 0), 0);
+  const totalFunded = projects.reduce((sum, project) => sum + (project.fundedAmount ?? 0), 0);
 
   useEffect(() => {
     async function loadProjects() {
@@ -36,7 +36,7 @@ export default function ProjectsScreen() {
       try {
         setProjects(
           isEntrepreneur && authUser
-            ? await projectService.listProjectsByDeveloper(authUser.uid)
+            ? await projectService.listProjectsForFounder(authUser.uid)
             : await projectService.listProjects(),
         );
       } catch (loadError) {
