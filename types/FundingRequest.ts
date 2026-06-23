@@ -24,6 +24,9 @@ export type Investment = {
   amount: number;
   fundedAt: string;
   note: string;
+  allocation?: number;
+  paidAt?: string;
+  createdAt?: string;
 };
 
 export type Funding = Investment;

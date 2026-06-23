@@ -42,7 +42,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="deck/index"
         options={{
-          title: 'My Cards',
+          title: 'Portfolio',
           tabBarIcon: ({ color }) => <TabGlyph color={color} label="K" />,
         }}
       />
@@ -55,6 +55,9 @@ export default function AppLayout() {
       />
       <Tabs.Screen name="dashboard" options={{ href: null }} />
       <Tabs.Screen name="deals/index" options={{ href: null }} />
+      <Tabs.Screen name="discussion-room/[id]" options={{ href: null }} />
+      <Tabs.Screen name="agreement/[id]" options={{ href: null }} />
+      <Tabs.Screen name="payment/[id]" options={{ href: null }} />
       <Tabs.Screen name="messages/index" options={{ href: null }} />
       <Tabs.Screen name="projects/index" options={{ href: null }} />
       <Tabs.Screen name="projects/create" options={{ href: null }} />

@@ -1,29 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { IdentityCard } from '@/components/cards/IdentityCard';
-import { StartupPlayingCard, mapProjectToStartupCard, sampleStartupCards } from '@/components/cards/StartupPlayingCard';
 import { Card, EmptyState, LoadingState, PrimaryLink, Screen, StatCard, ui } from '@/components/ui/Primitives';
-import { colors, radii, spacing } from '@/constants/theme';
+import { colors, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
-import { fundingService } from '@/services/fundingService';
-import { projectService } from '@/services/projectService';
-import type { Investment } from '@/types/FundingRequest';
-import type { Project } from '@/types/Project';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
+import { investmentFlowService } from '@/services/investmentFlowService';
+import type { V5Investment } from '@/types/InvestmentFlow';
 import { getActiveRole } from '@/utils/roles';
+import { safeCurrency, safeDate, safePercent } from '@/utils/safeFormat';
 
-export default function DeckScreen() {
+export default function PortfolioScreen() {
   const { authUser, profile } = useAuth();
   const activeRole = getActiveRole(profile);
   const isFounderMode = activeRole === 'founder';
-  const [investments, setInvestments] = useState<Investment[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [investments, setInvestments] = useState<V5Investment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const totalFunding = useMemo(
+    () => investments.reduce((sum, investment) => sum + (investment.amount ?? 0), 0),
+    [investments],
+  );
+
   useEffect(() => {
-    async function loadDeck() {
+    async function loadPortfolio() {
       if (!authUser) {
         setIsLoading(false);
         return;
@@ -32,17 +34,10 @@ export default function DeckScreen() {
       setIsLoading(true);
       setError(null);
       try {
-        const nextInvestments = isFounderMode ? [] : await fundingService.listInvestmentsByInvestor(authUser.uid);
-        const nextProjects = isFounderMode
-          ? await projectService.listProjectsForFounder(authUser.uid)
-          : (await Promise.all(
-              Array.from(new Set(nextInvestments.map((investment) => investment.projectId))).map((projectId) =>
-                projectService.getProjectById(projectId),
-              ),
-            )).filter((project): project is Project => Boolean(project));
-
+        const nextInvestments = isFounderMode
+          ? await investmentFlowService.listInvestmentsByFounder(authUser.uid)
+          : await investmentFlowService.listInvestmentsByInvestor(authUser.uid);
         setInvestments(nextInvestments);
-        setProjects(nextProjects);
       } catch (loadError) {
         setError(getFriendlyErrorMessage(loadError));
       } finally {
@@ -50,12 +45,20 @@ export default function DeckScreen() {
       }
     }
 
-    loadDeck();
+    loadPortfolio();
   }, [authUser, isFounderMode]);
 
   return (
-    <Screen eyebrow="My Cards" title="Everything is a card." subtitle="Your funding identity, saved opportunities, deals, agreements, and verification live here.">
-      {isLoading ? <LoadingState label="Loading your deck" /> : null}
+    <Screen
+      eyebrow={isFounderMode ? 'Funding Received' : 'My Investments'}
+      title={isFounderMode ? 'Funding Received' : 'My Investments'}
+      subtitle={
+        isFounderMode
+          ? 'Track completed Angel Investor funding and allocation records.'
+          : 'Monitor active startup investments created through PromptFund agreements.'
+      }
+    >
+      {isLoading ? <LoadingState label="Loading portfolio" /> : null}
       {error ? (
         <Card>
           <Text style={styles.errorText}>{error}</Text>
@@ -70,122 +73,147 @@ export default function DeckScreen() {
           avatar={profile.avatar}
           photoURL={profile.photoURL}
           location={profile.location}
-          bio={isFounderMode ? 'Founder card for raising capital through PromptFund.' : 'Investor profile card for backing exceptional founders.'}
+          bio={
+            isFounderMode
+              ? 'Founder profile for receiving angel investment funding.'
+              : 'Angel Investor profile for backing startup opportunities.'
+          }
           memberSince={profile.memberSince}
           compact
         />
       ) : null}
 
       <View style={ui.row}>
-        <StatCard label="Deal Cards" value="0" tone={colors.luxuryGold} />
-        <StatCard label="Agreement Cards" value="0" tone={colors.accent} />
+        <StatCard label={isFounderMode ? 'Funding Received' : 'Invested'} value={`${safeCurrency(totalFunding)} USD`} tone={colors.luxuryGold} />
+        <StatCard label="Active Investments" value={String(investments.length)} tone={colors.accent} />
       </View>
 
-      {!isLoading && projects.length === 0 && !isFounderMode ? (
+      {!isLoading && investments.length === 0 ? (
         <EmptyState
-          title="No startup cards collected yet."
-          message="Swipe right to save startups. Invest later from your collection."
-          action={<PrimaryLink href="/investor-feed" label="Browse Startups" />}
+          title={isFounderMode ? 'No funding received yet.' : 'No investments yet.'}
+          message={
+            isFounderMode
+              ? 'Funding appears here after both parties agree and the Angel Investor completes payment.'
+              : 'Start from an Investment Opportunity, open a discussion, accept the agreement, and complete payment.'
+          }
+          action={
+            isFounderMode ? (
+              <PrimaryLink href="/projects/create" label="Publish Opportunity" />
+            ) : (
+              <PrimaryLink href="/investor-feed" label="Browse Opportunities" />
+            )
+          }
         />
       ) : null}
 
-      {!isLoading && projects.length === 0 && isFounderMode ? (
-        <EmptyState
-          title="No startup card yet."
-          message="Create your founder card so investors can discover and save your company."
-          action={<PrimaryLink href="/projects/create" label="Create Startup Card" />}
-        />
-      ) : null}
-
-      {!isLoading && projects.length > 0 ? (
-        <>
-          <Text style={styles.sectionTitle}>{isFounderMode ? 'Startup Card' : 'Saved Startup Cards'}</Text>
-          <View style={styles.grid}>
-            {projects.map((project) => (
-              <View key={project.id} style={styles.gridItem}>
-                <StartupPlayingCard card={mapProjectToStartupCard(project)} compact />
-              </View>
-            ))}
-          </View>
-          <Card>
-            <Text style={styles.collectionTitle}>{isFounderMode ? 'Funding Card' : 'Collection Card'}</Text>
-            <Text style={styles.collectionCopy}>
-              {isFounderMode
-                ? 'Track funding progress from investor interest to agreement.'
-                : `${investments.length} saved startup card${investments.length === 1 ? '' : 's'} in your PromptFund collection.`}
-            </Text>
-          </Card>
-        </>
-      ) : null}
-
-      {!isLoading && projects.length === 0 ? (
-        <View style={styles.grid}>
-          {sampleStartupCards.map((card) => (
-            <View key={card.id} style={styles.gridItem}>
-              <StartupPlayingCard card={card} compact />
-            </View>
+      {!isLoading && investments.length > 0 ? (
+        <View style={styles.list}>
+          {isFounderMode ? <Text style={styles.sectionTitle}>Funding Received</Text> : <Text style={styles.sectionTitle}>My Investments</Text>}
+          {investments.map((investment) => (
+            <InvestmentRow key={investment.id} investment={investment} founderMode={isFounderMode} />
           ))}
         </View>
       ) : null}
-
-      <View style={styles.cardGrid}>
-        <SystemCard title="Pitch Card" copy={isFounderMode ? 'Your simple startup pitch for investors.' : 'Saved founder pitches appear here.'} />
-        <SystemCard title="Deal Card" copy="Generated automatically when mutual interest exists." />
-        <SystemCard title="Agreement Card" copy="Generated when both parties agree to proceed." />
-        <SystemCard title="Verification Card" copy="Trust level and PromptFund verification status." />
-      </View>
     </Screen>
   );
 }
 
-function SystemCard({ title, copy }: { title: string; copy: string }) {
+function InvestmentRow({ investment, founderMode }: { investment: V5Investment; founderMode: boolean }) {
+  const displayName = founderMode
+    ? investment.investorName ?? 'Angel Investor'
+    : investment.startupName ?? investment.note ?? 'Startup Investment';
+  const meta = founderMode ? 'Angel Investor' : `Founder: ${investment.founderName ?? 'Unknown'}`;
+  const status = founderMode ? 'Completed' : 'Active';
+
   return (
-    <Card style={styles.systemCard}>
-      <Text style={styles.systemTitle}>{title}</Text>
-      <Text style={styles.collectionCopy}>{copy}</Text>
+    <Card style={styles.investmentRow}>
+      <View style={styles.rowHeader}>
+        <View>
+          <Text style={styles.startupName}>{displayName}</Text>
+          <Text style={styles.meta}>{meta}</Text>
+        </View>
+        <Text style={styles.status}>{status}</Text>
+      </View>
+      <View style={styles.detailGrid}>
+        <Detail label="Amount" value={`${safeCurrency(investment.amount)} USD`} />
+        <Detail label="Allocation" value={safePercent(investment.allocation)} />
+        <Detail label="Date" value={safeDate(investment.paidAt ?? investment.fundedAt ?? investment.createdAt)} />
+        <Detail label="Status" value={status} />
+      </View>
     </Card>
   );
 }
 
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.detail}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-  },
-  gridItem: {
-    width: '47%',
+  errorText: {
+    color: colors.danger,
+    lineHeight: 22,
   },
   sectionTitle: {
     color: colors.text,
     fontSize: 20,
     fontWeight: '900',
   },
-  cardGrid: {
+  list: {
     gap: spacing.md,
   },
-  systemCard: {
-    borderColor: 'rgba(200, 162, 74, 0.32)',
-    borderRadius: radii.lg,
-    backgroundColor: '#080808',
+  investmentRow: {
+    gap: spacing.md,
   },
-  systemTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '900',
+  rowHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.md,
+    justifyContent: 'space-between',
   },
-  collectionTitle: {
+  startupName: {
     color: colors.text,
     fontSize: 20,
     fontWeight: '900',
   },
-  collectionCopy: {
+  meta: {
     color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    fontWeight: '700',
   },
-  errorText: {
-    color: colors.danger,
-    lineHeight: 22,
+  status: {
+    color: colors.success,
+    fontSize: 13,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  detailGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  detail: {
+    minWidth: '47%',
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: 'rgba(216, 201, 163, 0.22)',
+    borderRadius: 16,
+    padding: spacing.md,
+    backgroundColor: colors.black,
+  },
+  detailLabel: {
+    color: colors.subtle,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  detailValue: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
   },
 });

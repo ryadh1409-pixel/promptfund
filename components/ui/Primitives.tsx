@@ -144,7 +144,7 @@ export function LoadingState({ label = 'Loading PromptFund workspace' }: { label
     <Card style={styles.stateCard}>
       <ActivityIndicator color={colors.accent} />
       <Text style={styles.stateTitle}>{label}</Text>
-      <Text style={styles.stateCopy}>Shuffling startup cards.</Text>
+      <Text style={styles.stateCopy}>Preparing investment opportunities.</Text>
     </Card>
   );
 }

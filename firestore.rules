@@ -49,6 +49,22 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId;
     }
 
+    function isV5Participant() {
+      return isSignedIn()
+        && (
+          resource.data.founderId == request.auth.uid
+          || resource.data.investorId == request.auth.uid
+        );
+    }
+
+    function createsV5ParticipantDocument() {
+      return isSignedIn()
+        && (
+          request.resource.data.founderId == request.auth.uid
+          || request.resource.data.investorId == request.auth.uid
+        );
+    }
+
     match /users/{userId} {
       allow create: if isUser(userId)
         && (
@@ -93,9 +109,46 @@ service cloud.firestore {
 
     match /investments/{investmentId} {
       allow create: if isSignedIn()
-        && exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId))
-        && !isBlockedBetween(request.auth.uid, projectOwner(request.resource.data.projectId));
-      allow read, update: if isAdmin() || (isSignedIn() && resource.data.investorId == request.auth.uid);
+        && (
+          (
+            request.resource.data.projectId != null
+            && exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId))
+            && !isBlockedBetween(request.auth.uid, projectOwner(request.resource.data.projectId))
+          )
+          || request.resource.data.investorId == request.auth.uid
+        );
+      allow read, update: if isAdmin()
+        || (isSignedIn() && (
+          resource.data.investorId == request.auth.uid
+          || resource.data.founderId == request.auth.uid
+        ));
+      allow delete: if false;
+    }
+
+    match /investmentOpportunities/{opportunityId} {
+      allow read: if isSignedIn() || isAdmin();
+      allow create: if isSignedIn() && request.resource.data.founderId == request.auth.uid;
+      allow update: if isAdmin()
+        || (
+          isSignedIn()
+          && (
+            resource.data.founderId == request.auth.uid
+            || request.resource.data.status in [
+              'discussion_started',
+              'ready_for_agreement',
+              'agreement_pending',
+              'awaiting_payment',
+              'funded',
+              'completed'
+            ]
+          )
+        );
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.founderId == request.auth.uid);
+    }
+
+    match /discussionRooms/{roomId} {
+      allow create: if createsV5ParticipantDocument();
+      allow read, update: if isAdmin() || isV5Participant();
       allow delete: if false;
     }
 
@@ -157,8 +210,8 @@ service cloud.firestore {
     }
 
     match /agreements/{agreementId} {
-      allow create: if createsOwnAgreementRoom();
-      allow read, update: if isAdmin() || hasAgreementAccess(agreementId);
+      allow create: if createsOwnAgreementRoom() || createsV5ParticipantDocument();
+      allow read, update: if isAdmin() || hasAgreementAccess(agreementId) || isV5Participant();
       allow delete: if false;
     }
 

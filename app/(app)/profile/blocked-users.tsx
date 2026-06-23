@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { userService } from '@/services/userService';
 import type { BlockedUser } from '@/types/User';
+import { safeDate } from '@/utils/safeFormat';
 
 export default function BlockedUsersScreen() {
   const { authUser } = useAuth();
@@ -65,7 +66,7 @@ export default function BlockedUsersScreen() {
       {blockedUsers.map((blocked) => (
         <Card key={blocked.id}>
           <Text style={styles.title}>{blocked.blockedUid}</Text>
-          <Text style={styles.copy}>Blocked on {new Date(blocked.createdAt).toLocaleDateString()}</Text>
+          <Text style={styles.copy}>Blocked on {safeDate(blocked.createdAt)}</Text>
         </Card>
       ))}
     </Screen>
