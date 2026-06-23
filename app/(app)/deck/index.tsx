@@ -238,12 +238,22 @@ export default function MyCardsScreen() {
     }
 
     try {
+      console.log('FOUNDER ACCEPT INTEREST START', {
+        founderId: profile.id,
+        investorId: interest.investorId,
+        startupOpportunityId: interest.startupId,
+      });
       const investor = await userService.getUserById(interest.investorId);
       const { room } = await investmentFlowService.acceptInterestAndCreateDiscussion({
         interest,
         opportunity,
         founderName: profile.displayName ?? profile.name,
         investorName: investor?.displayName ?? investor?.name ?? 'Angel Investor',
+      });
+      console.log('FOUNDER ACCEPT DISCUSSION ROOM READY', {
+        founderId: profile.id,
+        investorId: interest.investorId,
+        roomId: room.id,
       });
       router.push(`/discussion-room/${room.id}`);
     } catch (acceptError) {

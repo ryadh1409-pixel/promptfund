@@ -1,3 +1,6 @@
+import { getAuth } from 'firebase/auth';
+
+import { getFirebaseApp } from '@/firebase/config';
 import { firestoreAdapter } from '@/firebase/firestore';
 import type {
   CreateInvestmentOpportunityInput,
@@ -40,6 +43,10 @@ function sortByCreatedAt<T extends { createdAt?: string }>(items: T[]) {
 
 function flowId(prefix: string, ...parts: string[]) {
   return `${prefix}-${parts.join('-')}`.replace(/[^A-Za-z0-9_-]/g, '-');
+}
+
+function currentUid() {
+  return getAuth(getFirebaseApp()).currentUser?.uid ?? null;
 }
 
 export function mapProjectToOpportunity(project: Project): InvestmentOpportunity {
@@ -92,6 +99,8 @@ export const investmentFlowService = {
   },
 
   async getDiscussionRoom(roomId: string): Promise<DiscussionRoom | null> {
+    console.log('ROOM READ PATH', roomId);
+    console.log('ROOM READ USER', currentUid());
     return firestoreAdapter.getById<DiscussionRoom>('discussionRooms', roomId);
   },
 
@@ -113,7 +122,7 @@ export const investmentFlowService = {
     console.log(`discussionRooms/${roomId}`);
     console.log('ROOM CREATE START');
     console.log('CREATE ROOM START');
-    const room = await firestoreAdapter.setWithId<DiscussionRoom>('discussionRooms', roomId, {
+    const payload: DiscussionRoom = {
       id: roomId,
       roomId,
       startupOpportunityId: opportunity.id,
@@ -129,7 +138,20 @@ export const investmentFlowService = {
       investorReady: false,
       messages: [],
       status: 'active',
+    };
+    console.log('ROOM CREATE PAYLOAD', payload);
+    console.log('ROOM CREATE USER', currentUid());
+    console.log({
+      operation: 'setDoc',
+      path: `discussionRooms/${roomId}`,
+      isUsingMerge: false,
+      founderId: payload.founderId,
+      investorId: payload.investorId,
+      roomId,
+      currentUid: currentUid(),
+      payload,
     });
+    const room = await firestoreAdapter.setWithId<DiscussionRoom>('discussionRooms', roomId, payload);
     console.log('ROOM CREATE SUCCESS', roomId);
     console.log('CREATE ROOM SUCCESS', roomId);
     console.log('READ ROOM START', roomId);
@@ -162,6 +184,9 @@ export const investmentFlowService = {
       createdAt: message.createdAt,
     });
 
+    console.log('ROOM UPDATE PATH', room.id);
+    console.log('ROOM UPDATE USER', currentUid());
+    console.log('ROOM UPDATE PAYLOAD', { messages: [...(room.messages ?? []), message] });
     return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
       messages: [...(room.messages ?? []), message],
     });
@@ -172,35 +197,51 @@ export const investmentFlowService = {
     const investorReady = role === 'investor' ? true : room.investorReady;
     const status = founderReady && investorReady ? 'ready' : room.status;
 
-    const updatedRoom = await firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
+    const readyPayload = {
       founderReady,
       investorReady,
       status,
-    });
+    };
+    console.log('ROOM UPDATE PATH', room.id);
+    console.log('ROOM UPDATE USER', currentUid());
+    console.log('ROOM UPDATE PAYLOAD', readyPayload);
+    const updatedRoom = await firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, readyPayload);
 
     if (status === 'ready') {
       const agreement = await this.generateAgreement(updatedRoom);
-      return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
+      const agreementPayload = {
         agreementId: agreement.id,
         status: 'ready',
-      });
+      } as const;
+      console.log('ROOM UPDATE PATH', room.id);
+      console.log('ROOM UPDATE USER', currentUid());
+      console.log('ROOM UPDATE PAYLOAD', agreementPayload);
+      return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, agreementPayload);
     }
 
     return updatedRoom;
   },
 
   async getAgreement(agreementId: string): Promise<InvestmentAgreement | null> {
+    console.log('AGREEMENT READ START', agreementId);
+    console.log('AGREEMENT USER', currentUid());
     return firestoreAdapter.getById<InvestmentAgreement>('agreements', agreementId);
   },
 
   async generateAgreement(room: DiscussionRoom) {
     const agreementId = `agreement-${room.id}`;
-    const existing = await this.getAgreement(agreementId);
+    let existing: InvestmentAgreement | null = null;
+    try {
+      existing = await this.getAgreement(agreementId);
+    } catch (error) {
+      console.error('AGREEMENT READ FAILED BEFORE CREATE', { agreementId, error });
+    }
+
     if (existing) {
       return existing;
     }
 
-    const agreement = await firestoreAdapter.setWithId<Omit<InvestmentAgreement, 'id'>>('agreements', agreementId, {
+    const payload: Omit<InvestmentAgreement, 'id'> = {
       discussionRoomId: room.id,
       opportunityId: room.opportunityId,
       founderId: room.founderId,
@@ -214,12 +255,20 @@ export const investmentFlowService = {
       founderAccepted: false,
       investorAccepted: false,
       status: 'agreement_pending',
-    });
+    };
+    console.log('AGREEMENT CREATE START', agreementId);
+    console.log('AGREEMENT PAYLOAD', payload);
+    console.log('AGREEMENT USER', currentUid());
+    const agreement = await firestoreAdapter.setWithId<Omit<InvestmentAgreement, 'id'>>('agreements', agreementId, payload);
 
-    await firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
+    const roomAgreementPayload = {
       agreementId,
       status: 'agreement_pending',
-    });
+    } as const;
+    console.log('ROOM UPDATE PATH', room.id);
+    console.log('ROOM UPDATE USER', currentUid());
+    console.log('ROOM UPDATE PAYLOAD', roomAgreementPayload);
+    await firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, roomAgreementPayload);
 
     return agreement;
   },
@@ -229,16 +278,24 @@ export const investmentFlowService = {
     const investorAccepted = role === 'investor' ? true : agreement.investorAccepted;
     const status = founderAccepted && investorAccepted ? 'awaiting_funding' : agreement.status;
 
-    const updated = await firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, {
+    const acceptPayload = {
       founderAccepted,
       investorAccepted,
       status,
-    });
+    };
+    console.log('AGREEMENT UPDATE START', agreement.id);
+    console.log('AGREEMENT PAYLOAD', acceptPayload);
+    console.log('AGREEMENT USER', currentUid());
+    const updated = await firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, acceptPayload);
 
     if (status === 'awaiting_funding') {
-      await firestoreAdapter.update<DiscussionRoom>('discussionRooms', agreement.discussionRoomId, {
+      const fundingPayload = {
         status,
-      });
+      };
+      console.log('ROOM UPDATE PATH', agreement.discussionRoomId);
+      console.log('ROOM UPDATE USER', currentUid());
+      console.log('ROOM UPDATE PAYLOAD', fundingPayload);
+      await firestoreAdapter.update<DiscussionRoom>('discussionRooms', agreement.discussionRoomId, fundingPayload);
     }
 
     return updated;
@@ -322,10 +379,14 @@ export const investmentFlowService = {
   },
 
   async listDiscussionRoomsByFounder(founderId: string): Promise<DiscussionRoom[]> {
+    console.log('ROOM READ PATH', `discussionRooms/*?founderId==${founderId}`);
+    console.log('ROOM READ USER', currentUid());
     return firestoreAdapter.queryByField<DiscussionRoom>('discussionRooms', 'founderId', founderId);
   },
 
   async listDiscussionRoomsByInvestor(investorId: string): Promise<DiscussionRoom[]> {
+    console.log('ROOM READ PATH', `discussionRooms/*?investorId==${investorId}`);
+    console.log('ROOM READ USER', currentUid());
     return firestoreAdapter.queryByField<DiscussionRoom>('discussionRooms', 'investorId', investorId);
   },
 
@@ -461,13 +522,18 @@ export const investmentFlowService = {
       paidAt,
     });
 
+    const fundedRoomPayload = {
+      status: 'funded',
+    } as const;
+    console.log('ROOM UPDATE PATH', agreement.discussionRoomId);
+    console.log('ROOM UPDATE USER', currentUid());
+    console.log('ROOM UPDATE PAYLOAD', fundedRoomPayload);
+
     await Promise.all([
       firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, {
         status: 'funded',
       }),
-      firestoreAdapter.update<DiscussionRoom>('discussionRooms', agreement.discussionRoomId, {
-        status: 'funded',
-      }),
+      firestoreAdapter.update<DiscussionRoom>('discussionRooms', agreement.discussionRoomId, fundedRoomPayload),
       firestoreAdapter.update<InvestmentOpportunity>('startupOpportunities', agreement.opportunityId, {
         status: 'funded',
       }),

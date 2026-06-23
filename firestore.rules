@@ -69,6 +69,7 @@ service cloud.firestore {
 
     function isV5Participant() {
       return isSignedIn()
+        && resource != null
         && (
           resource.data.founderId == request.auth.uid
           || resource.data.investorId == request.auth.uid
