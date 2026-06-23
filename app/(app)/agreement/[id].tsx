@@ -52,6 +52,12 @@ export default function InvestmentAgreementScreen() {
     return unsubscribe;
   }, [id]);
 
+  useEffect(() => {
+    if (agreement?.status === 'awaiting_funding') {
+      router.replace(`/payment/${agreement.id}`);
+    }
+  }, [agreement]);
+
   async function handleAccept(role: 'founder' | 'investor') {
     if (!agreement) {
       return;
@@ -59,8 +65,8 @@ export default function InvestmentAgreementScreen() {
 
     try {
       const updated = await investmentFlowService.acceptAgreement(agreement, role);
-      if (updated.status === 'awaiting_payment') {
-        setNotice('Both parties accepted. Investment is awaiting payment.');
+      if (updated.status === 'awaiting_funding') {
+        setNotice('Both parties accepted. Investment is awaiting funding.');
       }
     } catch (acceptError) {
       setNotice(getFriendlyErrorMessage(acceptError));
@@ -119,20 +125,20 @@ export default function InvestmentAgreementScreen() {
             </View>
             <View style={styles.actions}>
               <PrimaryButton
-                label="I Agree as Founder"
+                label="Accept As Founder"
                 variant="secondary"
                 onPress={() => handleAccept('founder')}
                 disabled={participantRole !== 'founder' || agreement.founderAccepted}
               />
               <PrimaryButton
-                label="I Agree as Investor"
+                label="Accept As Investor"
                 variant="secondary"
                 onPress={() => handleAccept('investor')}
                 disabled={participantRole !== 'investor' || agreement.investorAccepted}
               />
             </View>
-            {agreement.status === 'awaiting_payment' ? (
-              <PrimaryButton label="Continue to Payment" onPress={() => router.push(`/payment/${agreement.id}`)} />
+            {agreement.status === 'awaiting_funding' ? (
+              <PrimaryButton label="Continue To Funding" onPress={() => router.push(`/payment/${agreement.id}`)} />
             ) : null}
           </Card>
         </>

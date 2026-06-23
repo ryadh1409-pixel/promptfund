@@ -48,7 +48,7 @@ export default function ProjectDetailsScreen() {
   if (!project) {
     return (
       <Screen eyebrow="Card Details" title="Card not found" subtitle="This startup card is not available.">
-        <PrimaryLink href="/investor-feed" label="Back to Discover" />
+        <PrimaryLink href="/investor-feed" label="Back to Fundraising" />
       </Screen>
     );
   }

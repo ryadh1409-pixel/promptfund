@@ -25,7 +25,7 @@ export default function MessagesScreen() {
         <Text style={styles.copy}>
           Ask one simple question, confirm fit, and generate a Deal Card when both sides agree.
         </Text>
-        <PrimaryLink href="/investor-feed" label="Discover more cards" variant="secondary" />
+        <PrimaryLink href="/investor-feed" label="Open Fundraising" variant="secondary" />
       </Card>
     </Screen>
   );

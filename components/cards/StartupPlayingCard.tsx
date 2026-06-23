@@ -2,6 +2,7 @@ import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'r
 
 import { colors, radii, spacing } from '@/constants/theme';
 import type { Project, StartupCardRank } from '@/types/Project';
+import { safeCurrency, safePercent } from '@/utils/safeFormat';
 
 export type StartupCard = Pick<
   Project,
@@ -180,6 +181,12 @@ export function StartupPlayingCard({
                   </Text>
                 </View>
               </View>
+              <View style={styles.statGrid}>
+                <StatBox label="Stage" value={card.stage ?? 'MVP'} />
+                <StatBox label="Funding" value={safeCurrency(card.goalAmount)} highlight />
+                <StatBox label="Allocation" value={safePercent(card.equityOffered)} />
+                <StatBox label="Signal" value={card.metric ?? card.traction ?? 'Early'} />
+              </View>
             </View>
           </>
         )}
@@ -196,6 +203,15 @@ function Corner({ rank, suit, color }: { rank: string; suit: string; color: stri
     <View style={styles.corner}>
       <Text style={[styles.cornerRank, { color }]}>{rank}</Text>
       <Text style={[styles.cornerSuit, { color }]}>{suit}</Text>
+    </View>
+  );
+}
+
+function StatBox({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <View style={styles.statBox}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={highlight ? styles.goal : styles.statValue}>{value}</Text>
     </View>
   );
 }

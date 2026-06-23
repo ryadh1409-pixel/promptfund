@@ -5,8 +5,10 @@ import type {
   DiscussionRoom,
   InvestmentAgreement,
   InvestmentOpportunity,
+  StartupInterest,
   V5Investment,
 } from '@/types/InvestmentFlow';
+import type { InvestmentInterest, Match } from '@/types/FundingRequest';
 import type { Project } from '@/types/Project';
 import type { User } from '@/types/User';
 
@@ -14,6 +16,7 @@ export const defaultInvestmentAmount = 22;
 export const defaultInvestorAllocation = 1;
 export const defaultStartupStage = 'MVP';
 export const defaultInvestmentPurpose = 'Fund one month of AI development tools and product growth.';
+export const startupOpportunitiesCollection = 'startupOpportunities';
 
 function now() {
   return new Date().toISOString();
@@ -31,6 +34,14 @@ function normalizeInvestment(investment: V5Investment): V5Investment {
   };
 }
 
+function sortByCreatedAt<T extends { createdAt?: string }>(items: T[]) {
+  return [...items].sort((left, right) => String(left.createdAt ?? '').localeCompare(String(right.createdAt ?? '')));
+}
+
+function flowId(prefix: string, ...parts: string[]) {
+  return `${prefix}-${parts.join('-')}`.replace(/[^A-Za-z0-9_-]/g, '-');
+}
+
 export function mapProjectToOpportunity(project: Project): InvestmentOpportunity {
   return {
     id: project.id,
@@ -43,23 +54,27 @@ export function mapProjectToOpportunity(project: Project): InvestmentOpportunity
     purpose: project.description || defaultInvestmentPurpose,
     shortDescription: project.description || defaultInvestmentPurpose,
     imageUrl: project.imageUrl ?? project.coverImage,
-    status: 'open',
+    status: 'active',
   };
 }
 
 export const investmentFlowService = {
   async listOpportunities(): Promise<InvestmentOpportunity[]> {
-    return firestoreAdapter.list<InvestmentOpportunity>('investmentOpportunities');
+    return firestoreAdapter.list<InvestmentOpportunity>('startupOpportunities');
   },
 
   async getOpportunity(opportunityId: string): Promise<InvestmentOpportunity | null> {
-    return firestoreAdapter.getById<InvestmentOpportunity>('investmentOpportunities', opportunityId);
+    return firestoreAdapter.getById<InvestmentOpportunity>('startupOpportunities', opportunityId);
+  },
+
+  async listOpportunitiesByFounder(founderId: string): Promise<InvestmentOpportunity[]> {
+    return firestoreAdapter.queryByField<InvestmentOpportunity>('startupOpportunities', 'founderId', founderId);
   },
 
   async createOpportunity(input: CreateInvestmentOpportunityInput): Promise<InvestmentOpportunity> {
-    return firestoreAdapter.create<Omit<InvestmentOpportunity, 'id'>>('investmentOpportunities', {
+    return firestoreAdapter.create<Omit<InvestmentOpportunity, 'id'>>('startupOpportunities', {
       ...input,
-      status: input.status ?? 'open',
+      status: input.status ?? 'active',
     });
   },
 
@@ -70,9 +85,9 @@ export const investmentFlowService = {
     }
 
     const opportunity = mapProjectToOpportunity(project);
-    return firestoreAdapter.setWithId<Omit<InvestmentOpportunity, 'id'>>('investmentOpportunities', project.id, {
+    return firestoreAdapter.setWithId<Omit<InvestmentOpportunity, 'id'>>('startupOpportunities', project.id, {
       ...opportunity,
-      status: 'open',
+      status: 'active',
     });
   },
 
@@ -89,7 +104,19 @@ export const investmentFlowService = {
     investorId: string;
     investorName: string;
   }) {
-    const room = await firestoreAdapter.create<Omit<DiscussionRoom, 'id'>>('discussionRooms', {
+    await firestoreAdapter.setWithId<Omit<InvestmentOpportunity, 'id'>>('startupOpportunities', opportunity.id, {
+      ...opportunity,
+      status: 'discussion_started',
+    });
+
+    const roomId = flowId('room', opportunity.id, investorId);
+    console.log(`discussionRooms/${roomId}`);
+    console.log('ROOM CREATE START');
+    console.log('CREATE ROOM START');
+    const room = await firestoreAdapter.setWithId<DiscussionRoom>('discussionRooms', roomId, {
+      id: roomId,
+      roomId,
+      startupOpportunityId: opportunity.id,
       opportunityId: opportunity.id,
       founderId: opportunity.founderId,
       founderName: opportunity.founderName,
@@ -101,24 +128,39 @@ export const investmentFlowService = {
       founderReady: false,
       investorReady: false,
       messages: [],
-      status: 'discussion_started',
+      status: 'active',
     });
+    console.log('ROOM CREATE SUCCESS', roomId);
+    console.log('CREATE ROOM SUCCESS', roomId);
+    console.log('READ ROOM START', roomId);
+    let createdRoom: DiscussionRoom | null = null;
+    try {
+      createdRoom = await this.getDiscussionRoom(roomId);
+      console.log('READ ROOM SUCCESS');
+    } catch (error) {
+      console.error('READ ROOM FAILURE AFTER CREATE', { roomId, error });
+    }
 
-    await firestoreAdapter.update<InvestmentOpportunity>('investmentOpportunities', opportunity.id, {
-      status: 'discussion_started',
-    });
-
-    return room;
+    return createdRoom ?? room;
   },
 
   async addDiscussionMessage(room: DiscussionRoom, sender: Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle'>, body: string) {
     const message: DiscussionMessage = {
       id: `message-${Date.now()}`,
+      discussionRoomId: room.id,
       senderId: sender.id,
       senderName: displayName(sender),
       body,
       createdAt: now(),
     };
+
+    await firestoreAdapter.create<Omit<DiscussionMessage, 'id'>>('discussionMessages', {
+      discussionRoomId: room.id,
+      senderId: message.senderId,
+      senderName: message.senderName,
+      body: message.body,
+      createdAt: message.createdAt,
+    });
 
     return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
       messages: [...(room.messages ?? []), message],
@@ -128,13 +170,23 @@ export const investmentFlowService = {
   async setReady(room: DiscussionRoom, role: 'founder' | 'investor') {
     const founderReady = role === 'founder' ? true : room.founderReady;
     const investorReady = role === 'investor' ? true : room.investorReady;
-    const status = founderReady && investorReady ? 'ready_for_agreement' : room.status;
+    const status = founderReady && investorReady ? 'ready' : room.status;
 
-    return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
+    const updatedRoom = await firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
       founderReady,
       investorReady,
       status,
     });
+
+    if (status === 'ready') {
+      const agreement = await this.generateAgreement(updatedRoom);
+      return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
+        agreementId: agreement.id,
+        status: 'ready',
+      });
+    }
+
+    return updatedRoom;
   },
 
   async getAgreement(agreementId: string): Promise<InvestmentAgreement | null> {
@@ -175,7 +227,7 @@ export const investmentFlowService = {
   async acceptAgreement(agreement: InvestmentAgreement, role: 'founder' | 'investor') {
     const founderAccepted = role === 'founder' ? true : agreement.founderAccepted;
     const investorAccepted = role === 'investor' ? true : agreement.investorAccepted;
-    const status = founderAccepted && investorAccepted ? 'awaiting_payment' : agreement.status;
+    const status = founderAccepted && investorAccepted ? 'awaiting_funding' : agreement.status;
 
     const updated = await firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, {
       founderAccepted,
@@ -183,13 +235,210 @@ export const investmentFlowService = {
       status,
     });
 
-    if (status === 'awaiting_payment') {
+    if (status === 'awaiting_funding') {
       await firestoreAdapter.update<DiscussionRoom>('discussionRooms', agreement.discussionRoomId, {
         status,
       });
     }
 
     return updated;
+  },
+
+  async createInterest({
+    opportunity,
+    investorId,
+  }: {
+    opportunity: InvestmentOpportunity;
+    investorId: string;
+  }) {
+    const interestId = flowId('interest', opportunity.id, investorId);
+
+    return firestoreAdapter.setWithId<Omit<StartupInterest, 'id'>>('interests', interestId, {
+      interestId,
+      startupOpportunityId: opportunity.id,
+      founderId: opportunity.founderId,
+      investorId,
+      createdAt: now(),
+      status: 'interested',
+    });
+  },
+
+  async createDiscussionRoomForInterest({
+    interest,
+    opportunity,
+    investorName,
+  }: {
+    interest: StartupInterest;
+    opportunity: InvestmentOpportunity;
+    investorName: string;
+  }) {
+    const matchId = flowId('match', opportunity.id, interest.investorId);
+    const match = await firestoreAdapter.setWithId<Omit<Match, 'id'>>('matches', matchId, {
+      founderUid: opportunity.founderId,
+      investorUid: interest.investorId,
+      startupId: opportunity.id,
+      matchedAt: now(),
+      status: 'agreementStarted',
+      agreementId: flowId('room', opportunity.id, interest.investorId),
+    });
+    console.log('STEP 3A: Match created', match.id);
+
+    console.log('STEP 3B: Creating discussion room');
+    const room = await this.startDiscussion({
+      opportunity,
+      investorId: interest.investorId,
+      investorName,
+    });
+    console.log('STEP 4: Discussion room created', room.id);
+
+    await firestoreAdapter.update<StartupInterest>('interests', interest.id, {
+      status: 'discussion',
+    });
+
+    return room;
+  },
+
+  async createInterestMatchAndDiscussion({
+    opportunity,
+    investorId,
+    investorName,
+  }: {
+    opportunity: InvestmentOpportunity;
+    investorId: string;
+    investorName: string;
+  }) {
+    const interest = await this.createInterest({
+      opportunity,
+      investorId,
+    });
+
+    const room = await this.createDiscussionRoomForInterest({
+      interest,
+      opportunity,
+      investorName,
+    });
+
+    return { interest, room };
+  },
+
+  async listDiscussionRoomsByFounder(founderId: string): Promise<DiscussionRoom[]> {
+    return firestoreAdapter.queryByField<DiscussionRoom>('discussionRooms', 'founderId', founderId);
+  },
+
+  async listDiscussionRoomsByInvestor(investorId: string): Promise<DiscussionRoom[]> {
+    return firestoreAdapter.queryByField<DiscussionRoom>('discussionRooms', 'investorId', investorId);
+  },
+
+  async listMessagesByDiscussionRoom(discussionRoomId: string): Promise<DiscussionMessage[]> {
+    const messages = await firestoreAdapter.queryByField<DiscussionMessage>('discussionMessages', 'discussionRoomId', discussionRoomId);
+    return sortByCreatedAt(messages);
+  },
+
+  async listInterestsByFounder(founderUid: string): Promise<InvestmentInterest[]> {
+    const interests = await firestoreAdapter.queryByField<StartupInterest>('interests', 'founderId', founderUid);
+    return interests.map((interest) => ({
+      id: interest.id,
+      startupId: interest.startupOpportunityId,
+      investorId: interest.investorId,
+      founderUid: interest.founderId,
+      createdAt: interest.createdAt,
+      status: interest.status === 'discussion' ? 'accepted' : interest.status,
+    }));
+  },
+
+  async listInterestsByInvestor(investorId: string): Promise<InvestmentInterest[]> {
+    const interests = await firestoreAdapter.queryByField<StartupInterest>('interests', 'investorId', investorId);
+    return interests.map((interest) => ({
+      id: interest.id,
+      startupId: interest.startupOpportunityId,
+      investorId: interest.investorId,
+      founderUid: interest.founderId,
+      createdAt: interest.createdAt,
+      status: interest.status === 'discussion' ? 'accepted' : interest.status,
+    }));
+  },
+
+  async listMatchesByFounder(founderUid: string): Promise<Match[]> {
+    return firestoreAdapter.queryByField<Match>('matches', 'founderUid', founderUid);
+  },
+
+  async listMatchesByInvestor(investorUid: string): Promise<Match[]> {
+    return firestoreAdapter.queryByField<Match>('matches', 'investorUid', investorUid);
+  },
+
+  async acceptInterestAndCreateDiscussion({
+    interest,
+    opportunity,
+    founderName,
+    investorName,
+  }: {
+    interest: InvestmentInterest;
+    opportunity: InvestmentOpportunity;
+    founderName: string;
+    investorName: string;
+  }) {
+    await firestoreAdapter.update<InvestmentInterest>('investmentInterests', interest.id, {
+      status: 'accepted',
+    });
+
+    const match = await firestoreAdapter.create<Omit<Match, 'id'>>('matches', {
+      founderUid: interest.founderUid,
+      investorUid: interest.investorId,
+      startupId: interest.startupId,
+      matchedAt: now(),
+      status: 'matched',
+    });
+
+    const room = await this.startDiscussion({
+      opportunity: {
+        ...opportunity,
+        founderName,
+      },
+      investorId: interest.investorId,
+      investorName,
+    });
+
+    await firestoreAdapter.update<Match>('matches', match.id, {
+      agreementId: room.id,
+      status: 'agreementStarted',
+    });
+
+    return { match, room };
+  },
+
+  async ensureDiscussionForMatch({
+    match,
+    opportunity,
+    founderName,
+    investorName,
+  }: {
+    match: Match;
+    opportunity: InvestmentOpportunity;
+    founderName: string;
+    investorName: string;
+  }) {
+    if (match.agreementId) {
+      const existingRoom = await this.getDiscussionRoom(match.agreementId);
+      if (existingRoom) {
+        return existingRoom;
+      }
+    }
+
+    const room = await this.startDiscussion({
+      opportunity: {
+        ...opportunity,
+        founderName,
+      },
+      investorId: match.investorUid,
+      investorName,
+    });
+
+    await firestoreAdapter.update<Match>('matches', match.id, {
+      agreementId: room.id,
+      status: 'agreementStarted',
+    });
+
+    return room;
   },
 
   async completePayment(agreement: InvestmentAgreement) {
@@ -219,7 +468,7 @@ export const investmentFlowService = {
       firestoreAdapter.update<DiscussionRoom>('discussionRooms', agreement.discussionRoomId, {
         status: 'funded',
       }),
-      firestoreAdapter.update<InvestmentOpportunity>('investmentOpportunities', agreement.opportunityId, {
+      firestoreAdapter.update<InvestmentOpportunity>('startupOpportunities', agreement.opportunityId, {
         status: 'funded',
       }),
     ]);

@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Linking, StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
 import { Card, FieldPreview, LoadingState, PrimaryButton, Screen } from '@/components/ui/Primitives';
 import { colors, spacing } from '@/constants/theme';
@@ -10,8 +10,6 @@ import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { investmentFlowService } from '@/services/investmentFlowService';
 import type { InvestmentAgreement } from '@/types/InvestmentFlow';
 import { safeCurrency, safePercent } from '@/utils/safeFormat';
-
-const stripeCheckoutUrl = process.env.EXPO_PUBLIC_STRIPE_CHECKOUT_URL;
 
 export default function PaymentScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -49,10 +47,6 @@ export default function PaymentScreen() {
     setNotice(null);
 
     try {
-      if (stripeCheckoutUrl) {
-        await Linking.openURL(stripeCheckoutUrl);
-      }
-
       await investmentFlowService.completePayment(agreement);
       router.replace('/deck');
     } catch (paymentError) {
@@ -66,7 +60,7 @@ export default function PaymentScreen() {
     <Screen
       eyebrow="Investment Funding"
       title="Complete Investment"
-      subtitle="Complete the angel investment and record the funded position in both dashboards."
+      subtitle="Mock funding is enabled for V6. Stripe integration comes later."
     >
       {isLoading ? <LoadingState label="Loading payment details" /> : null}
       {notice ? (
@@ -92,13 +86,12 @@ export default function PaymentScreen() {
           <Card>
             <Text style={styles.amount}>$22 USD</Text>
             <Text style={styles.copy}>
-              Stripe Checkout opens when `EXPO_PUBLIC_STRIPE_CHECKOUT_URL` is configured. PromptFund records the
-              completed investment after checkout returns to the app flow.
+              Send the mock investment to activate funding for the Founder and the Angel Investor.
             </Text>
             <PrimaryButton
-              label={isPaying ? 'Processing Investment...' : 'Invest $22'}
+              label={isPaying ? 'Sending Investment...' : 'Send Investment'}
               onPress={handleInvest}
-              disabled={isPaying || agreement.status !== 'awaiting_payment'}
+              disabled={isPaying || agreement.status !== 'awaiting_funding'}
             />
           </Card>
         </>

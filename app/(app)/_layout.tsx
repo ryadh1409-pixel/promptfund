@@ -35,14 +35,14 @@ export default function AppLayout() {
       <Tabs.Screen
         name="investor-feed"
         options={{
-          title: 'Discover',
+          title: 'Fundraising',
           tabBarIcon: ({ color }) => <TabGlyph color={color} label="A" />,
         }}
       />
       <Tabs.Screen
         name="deck/index"
         options={{
-          title: 'Portfolio',
+          title: 'My Cards',
           tabBarIcon: ({ color }) => <TabGlyph color={color} label="K" />,
         }}
       />

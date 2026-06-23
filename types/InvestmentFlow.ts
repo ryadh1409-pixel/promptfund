@@ -1,14 +1,17 @@
 export type InvestmentFlowStatus =
+  | 'active'
   | 'open'
+  | 'discussion'
   | 'discussion_started'
-  | 'ready_for_agreement'
+  | 'ready'
   | 'agreement_pending'
-  | 'awaiting_payment'
+  | 'awaiting_funding'
   | 'funded'
   | 'completed';
 
 export type DiscussionMessage = {
   id: string;
+  discussionRoomId: string;
   senderId: string;
   senderName: string;
   body: string;
@@ -32,6 +35,8 @@ export type InvestmentOpportunity = {
 
 export type DiscussionRoom = {
   id: string;
+  roomId: string;
+  startupOpportunityId: string;
   opportunityId: string;
   founderId: string;
   founderName: string;
@@ -47,6 +52,16 @@ export type DiscussionRoom = {
   agreementId?: string;
   createdAt?: string;
   updatedAt?: string;
+};
+
+export type StartupInterest = {
+  id: string;
+  interestId: string;
+  startupOpportunityId: string;
+  founderId: string;
+  investorId: string;
+  status: 'interested' | 'discussion' | 'accepted' | 'expired';
+  createdAt: string;
 };
 
 export type InvestmentAgreement = {

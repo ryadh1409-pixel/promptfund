@@ -28,7 +28,7 @@ export default function LoginScreen() {
   return (
     <Screen
       eyebrow="PromptFund"
-      title="Discover. Swipe. Invest."
+      title="Swipe. Match. Fund."
       subtitle="Investors swipe startup cards. Founders create one card and meet investors."
     >
       <Card>

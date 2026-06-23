@@ -19,14 +19,14 @@ const pathOptions: Array<{
     role: 'founder',
     icon: 'R',
     title: 'Founder',
-    copy: 'Build the future. Discover investors, showcase your startup, and raise capital.',
+    copy: 'Build the future. Showcase your startup, receive Interest, and raise capital.',
     cta: 'Continue as Founder',
   },
   {
     role: 'investor',
     icon: '$',
     title: 'Angel Investor',
-    copy: 'Back exceptional founders. Discover startups and invest in the next generation of companies.',
+    copy: 'Back exceptional founders. Swipe Startup opportunities and fund the next generation of companies.',
     cta: 'Continue as Investor',
   },
 ];

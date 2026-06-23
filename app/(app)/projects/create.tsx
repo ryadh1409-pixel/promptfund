@@ -115,18 +115,21 @@ export default function CreateProjectScreen() {
     try {
       const payload = {
         startupName,
-        description: shortDescription,
-        ownerId: uid,
+        founderId: uid,
+        founderName: profile?.displayName ?? profile?.name ?? 'Founder',
+        fundingNeeded: 22,
+        investorAllocation: 1,
+        stage: 'MVP',
+        purpose: shortDescription,
+        shortDescription,
         imageUrl: downloadUrl,
+        status: 'active',
         createdAt: serverTimestamp(),
       };
-      console.log('[Publish] Firestore payload', payload);
+      console.log('Creating startup opportunity', payload);
 
-      const reference = await addDoc(collection(getPromptFundFirestore(), 'projects'), payload);
-      console.log('[Publish] Firestore write result', {
-        id: reference.id,
-        path: reference.path,
-      });
+      const reference = await addDoc(collection(getPromptFundFirestore(), 'startupOpportunities'), payload);
+      console.log('Startup opportunity created', reference.id);
 
       const createdDocument = await getDoc(reference);
       console.log('[Publish] Firestore document exists', {
@@ -186,7 +189,9 @@ export default function CreateProjectScreen() {
             title: title || 'Startup Name',
             tagline: description || 'Short description',
             description: description || 'Short description',
-            goalAmount: 0,
+            goalAmount: 22,
+            equityOffered: 1,
+            stage: 'MVP',
             coverImage: imageUri ?? undefined,
             founderName: profile?.name ?? 'Entrepreneur',
             founderAvatar: profile?.avatar ?? 'PF',

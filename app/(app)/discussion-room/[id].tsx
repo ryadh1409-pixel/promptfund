@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -9,12 +9,13 @@ import { useAuth } from '@/context/AuthContext';
 import { firestoreCollections, getPromptFundFirestore } from '@/firebase/firestore';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { investmentFlowService } from '@/services/investmentFlowService';
-import type { DiscussionRoom } from '@/types/InvestmentFlow';
+import type { DiscussionMessage, DiscussionRoom } from '@/types/InvestmentFlow';
 
 export default function DiscussionRoomScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { authUser, profile } = useAuth();
   const [room, setRoom] = useState<DiscussionRoom | null>(null);
+  const [messages, setMessages] = useState<DiscussionMessage[]>([]);
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
@@ -37,15 +38,57 @@ export default function DiscussionRoomScreen() {
       return;
     }
 
+    const path = `${firestoreCollections.discussionRooms}/${id}`;
+    console.info('[PromptFund Firestore] read start', { path, operation: 'onSnapshot' });
     const unsubscribe = onSnapshot(
       doc(getPromptFundFirestore(), firestoreCollections.discussionRooms, id),
       (snapshot) => {
+        console.info('[PromptFund Firestore] read success', {
+          path,
+          operation: 'onSnapshot',
+          exists: snapshot.exists(),
+        });
         setRoom(snapshot.exists() ? ({ ...snapshot.data(), id: snapshot.id } as DiscussionRoom) : null);
         setIsLoading(false);
       },
       (error) => {
+        console.error('[PromptFund Firestore] read failure', { path, operation: 'onSnapshot', error });
         setNotice(getFriendlyErrorMessage(error));
         setIsLoading(false);
+      },
+    );
+
+    return unsubscribe;
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) {
+      return;
+    }
+
+    const path = `${firestoreCollections.discussionMessages}/*?discussionRoomId==${id}`;
+    const messagesQuery = query(
+      collection(getPromptFundFirestore(), firestoreCollections.discussionMessages),
+      where('discussionRoomId', '==', id),
+    );
+
+    console.info('[PromptFund Firestore] read start', { path, operation: 'onSnapshot' });
+    const unsubscribe = onSnapshot(
+      messagesQuery,
+      (snapshot) => {
+        console.info('[PromptFund Firestore] read success', {
+          path,
+          operation: 'onSnapshot',
+          count: snapshot.docs.length,
+        });
+        const nextMessages = snapshot.docs
+          .map((item) => ({ ...item.data(), id: item.id }) as DiscussionMessage)
+          .sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)));
+        setMessages(nextMessages);
+      },
+      (error) => {
+        console.error('[PromptFund Firestore] read failure', { path, operation: 'onSnapshot', error });
+        setNotice(getFriendlyErrorMessage(error));
       },
     );
 
@@ -87,13 +130,20 @@ export default function DiscussionRoomScreen() {
     }
   }
 
-  async function handleGenerateAgreement() {
+  async function handleContinueAgreement() {
     if (!room) {
       return;
     }
 
     try {
-      const agreement = await investmentFlowService.generateAgreement(room);
+      const agreement = room.agreementId
+        ? await investmentFlowService.getAgreement(room.agreementId)
+        : await investmentFlowService.generateAgreement(room);
+
+      if (!agreement) {
+        throw new Error('Unable to load Investment Agreement.');
+      }
+
       router.push(`/agreement/${agreement.id}`);
     } catch (agreementError) {
       setNotice(getFriendlyErrorMessage(agreementError));
@@ -131,10 +181,10 @@ export default function DiscussionRoomScreen() {
 
           <Card>
             <Text style={styles.sectionTitle}>Discussion</Text>
-            {room.messages.length === 0 ? (
+            {messages.length === 0 ? (
               <Text style={styles.empty}>No discussion messages yet. Start with the investment purpose and next milestone.</Text>
             ) : null}
-            {room.messages.map((item) => (
+            {messages.map((item) => (
               <View key={item.id} style={styles.messageBubble}>
                 <Text style={styles.messageAuthor}>{item.senderName}</Text>
                 <Text style={styles.messageBody}>{item.body}</Text>
@@ -171,10 +221,13 @@ export default function DiscussionRoomScreen() {
                 disabled={participantRole !== 'investor' || room.investorReady}
               />
             </View>
-            {room.status === 'ready_for_agreement' ? (
+            {(room.founderReady || room.investorReady) && room.status !== 'ready' ? (
+              <Text style={styles.waitingCopy}>Waiting for the other party.</Text>
+            ) : null}
+            {room.status === 'ready' ? (
               <View style={styles.readyPanel}>
-                <Text style={styles.readyCopy}>Both parties are ready to proceed.</Text>
-                <PrimaryButton label="Generate Agreement" onPress={handleGenerateAgreement} />
+                <Text style={styles.readyCopy}>Both parties are ready.</Text>
+                <PrimaryButton label="Continue To Agreement" onPress={handleContinueAgreement} />
               </View>
             ) : null}
           </Card>
@@ -280,6 +333,12 @@ const styles = StyleSheet.create({
   },
   readyCopy: {
     color: colors.text,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  waitingCopy: {
+    color: colors.warning,
+    fontSize: 15,
     fontWeight: '800',
     textAlign: 'center',
   },

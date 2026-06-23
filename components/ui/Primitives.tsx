@@ -41,7 +41,7 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
       {!compact ? (
         <View>
           <Text style={styles.brandName}>PromptFund</Text>
-          <Text style={styles.brandTagline}>Discover. Swipe. Invest.</Text>
+          <Text style={styles.brandTagline}>Swipe. Match. Fund.</Text>
         </View>
       ) : null}
     </View>

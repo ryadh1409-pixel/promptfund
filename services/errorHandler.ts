@@ -77,6 +77,10 @@ export function toAppError(error: unknown) {
     return error;
   }
 
+  console.error('RAW ERROR', error);
+  console.error('RAW ERROR MESSAGE', error && typeof error === 'object' && 'message' in error ? (error as { message?: unknown }).message : undefined);
+  console.error('RAW ERROR CODE', error && typeof error === 'object' && 'code' in error ? (error as { code?: unknown }).code : undefined);
+
   return new AppError(getFriendlyErrorMessage(error), getErrorCode(error));
 }
 

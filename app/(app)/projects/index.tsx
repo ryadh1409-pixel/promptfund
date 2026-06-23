@@ -52,7 +52,7 @@ export default function ProjectsScreen() {
   return (
     <Screen
       eyebrow="PromptFund Projects"
-      title={isEntrepreneur ? 'Funding Progress' : 'Portfolio of funded builds'}
+      title={isEntrepreneur ? 'Funding Progress' : 'Funded startup builds'}
       subtitle={
         isEntrepreneur
           ? 'Track your startup card, investor matches, and capital progress.'
@@ -65,7 +65,7 @@ export default function ProjectsScreen() {
       </View>
 
       <SectionTitle
-        title={isEntrepreneur ? 'My Startup' : 'Active portfolio'}
+        title={isEntrepreneur ? 'My Startup' : 'Active investments'}
         action={<PrimaryLink href="/projects/create" label={isEntrepreneur ? 'Edit card' : 'New project'} variant="secondary" />}
       />
 

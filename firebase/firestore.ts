@@ -23,10 +23,13 @@ export const firestoreCollections = {
   projects: 'projects',
   fundingRequests: 'fundingRequests',
   investments: 'investments',
+  startupOpportunities: 'startupOpportunities',
+  interests: 'interests',
   investmentOpportunities: 'investmentOpportunities',
   investmentInterests: 'investmentInterests',
   matches: 'matches',
   discussionRooms: 'discussionRooms',
+  discussionMessages: 'discussionMessages',
   agreements: 'agreements',
   expenses: 'expenses',
   agreementRooms: 'agreementRooms',
@@ -106,9 +109,21 @@ async function listWithConstraints<T>(
   collectionName: FirestoreCollectionName,
   constraints: QueryConstraint[] = [],
 ): Promise<Array<FirestoreDocument<T>>> {
+  const path = `${firestoreCollections[collectionName]}/*`;
+  console.info('[PromptFund Firestore] read start', { path, operation: 'getDocs' });
   return withFriendlyErrors(async () => {
-    const snapshot = await getDocs(query(collectionRef(collectionName), ...constraints));
-    return snapshot.docs.map((item) => mapDocument<T>(item.id, item.data()));
+    try {
+      const snapshot = await getDocs(query(collectionRef(collectionName), ...constraints));
+      console.info('[PromptFund Firestore] read success', {
+        path,
+        operation: 'getDocs',
+        count: snapshot.docs.length,
+      });
+      return snapshot.docs.map((item) => mapDocument<T>(item.id, item.data()));
+    } catch (error) {
+      console.error('[PromptFund Firestore] read failure', { path, operation: 'getDocs', error });
+      throw error;
+    }
   });
 }
 
@@ -120,7 +135,22 @@ export const firestoreAdapter: FirestoreAdapter = {
     return listWithConstraints(collectionName, [where(field, '==', value)]);
   },
   async getById(collectionName, id) {
-    const snapshot = await withFriendlyErrors(async () => getDoc(doc(getPromptFundFirestore(), firestoreCollections[collectionName], id)));
+    const path = `${firestoreCollections[collectionName]}/${id}`;
+    console.info('[PromptFund Firestore] read start', { path, operation: 'getDoc' });
+    const snapshot = await withFriendlyErrors(async () => {
+      try {
+        const result = await getDoc(doc(getPromptFundFirestore(), firestoreCollections[collectionName], id));
+        console.info('[PromptFund Firestore] read success', {
+          path,
+          operation: 'getDoc',
+          exists: result.exists(),
+        });
+        return result;
+      } catch (error) {
+        console.error('[PromptFund Firestore] read failure', { path, operation: 'getDoc', error });
+        throw error;
+      }
+    });
 
     if (!snapshot.exists()) {
       return null;
