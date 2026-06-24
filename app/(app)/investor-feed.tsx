@@ -315,16 +315,23 @@ function SwipeDeck({
 }
 
 function mapOpportunityToStartupCard(opportunity: InvestmentOpportunity): StartupCard {
-  return {
+  const title = opportunity.title ?? opportunity.startupName;
+  const description = opportunity.description ?? opportunity.shortDescription ?? opportunity.purpose;
+  const askAmount = opportunity.askAmount ?? opportunity.fundingGoal ?? opportunity.fundingNeeded;
+  const equity = opportunity.equity ?? opportunity.investorAllocation;
+
+  const card: StartupCard = {
     id: opportunity.id,
     developerId: opportunity.founderId,
     ownerId: opportunity.founderId,
-    title: opportunity.startupName,
-    startupName: opportunity.startupName,
-    tagline: opportunity.shortDescription,
-    description: opportunity.purpose,
-    goalAmount: opportunity.fundingNeeded,
-    equityOffered: opportunity.investorAllocation,
+    title,
+    startupName: title,
+    shortDescription: opportunity.shortDescription ?? description,
+    tagline: description,
+    description,
+    fundingNeeded: opportunity.fundingNeeded ?? askAmount,
+    goalAmount: askAmount,
+    equityOffered: equity,
     metric: '$22 angel check',
     founderName: opportunity.founderName,
     founderAvatar: opportunity.founderName
@@ -337,9 +344,22 @@ function mapOpportunityToStartupCard(opportunity: InvestmentOpportunity): Startu
     rank: 'A',
     coverImage: opportunity.imageUrl,
     stage: opportunity.stage,
-    traction: opportunity.shortDescription,
-    shortPitch: opportunity.purpose,
+    traction: description,
+    shortPitch: description,
   };
+
+  console.log('[Fundraising Deck] mapped startup card before render', {
+    source: {
+      startupName: opportunity.startupName,
+      founderName: opportunity.founderName,
+      shortDescription: opportunity.shortDescription,
+      fundingNeeded: opportunity.fundingNeeded,
+      imageUrl: opportunity.imageUrl,
+    },
+    card,
+  });
+
+  return card;
 }
 
 const styles = StyleSheet.create({

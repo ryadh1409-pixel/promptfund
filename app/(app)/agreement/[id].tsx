@@ -53,7 +53,7 @@ export default function InvestmentAgreementScreen() {
   }, [id]);
 
   useEffect(() => {
-    if (agreement?.status === 'awaiting_funding') {
+    if (agreement?.status === 'awaiting_funding' || agreement?.status === 'investor_sent' || agreement?.status === 'funded') {
       router.replace(`/payment/${agreement.id}`);
     }
   }, [agreement]);

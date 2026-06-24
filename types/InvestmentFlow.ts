@@ -6,6 +6,7 @@ export type InvestmentFlowStatus =
   | 'ready'
   | 'agreement_pending'
   | 'awaiting_funding'
+  | 'investor_sent'
   | 'funded'
   | 'completed';
 
@@ -20,9 +21,14 @@ export type DiscussionMessage = {
 
 export type InvestmentOpportunity = {
   id: string;
+  title?: string;
   startupName: string;
   founderId: string;
   founderName: string;
+  description?: string;
+  fundingGoal?: number;
+  askAmount?: number;
+  equity?: number;
   fundingNeeded: number;
   investorAllocation: number;
   stage: string;
@@ -79,6 +85,8 @@ export type InvestmentAgreement = {
   founderAccepted: boolean;
   investorAccepted: boolean;
   status: InvestmentFlowStatus;
+  investorSentAt?: string;
+  fundedAt?: string;
   createdAt?: string;
   updatedAt?: string;
 };

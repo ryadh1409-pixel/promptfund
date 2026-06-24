@@ -3,7 +3,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { StartupPlayingCard } from '@/components/cards/StartupPlayingCard';
+import { StartupPlayingCard, type StartupCard } from '@/components/cards/StartupPlayingCard';
 import { Card, EmptyState, LoadingState, PrimaryButton, PrimaryLink, Screen, StatCard, ui } from '@/components/ui/Primitives';
 import { colors, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -38,7 +38,7 @@ export default function MyCardsScreen() {
   );
   const shownInterests = interests;
   const readyAgreements = agreements.filter((agreement) =>
-    ['agreement_pending', 'awaiting_funding', 'funded'].includes(agreement.status),
+    ['agreement_pending', 'awaiting_funding', 'investor_sent', 'funded'].includes(agreement.status),
   );
 
   const loadMyCards = useCallback(async () => {
@@ -243,6 +243,12 @@ export default function MyCardsScreen() {
         investorId: interest.investorId,
         startupOpportunityId: interest.startupId,
       });
+      console.log('[ACCEPT FLOW]', {
+        collection: 'users',
+        path: `users/${interest.investorId}`,
+        operation: 'getDoc',
+        currentUid: authUser?.uid ?? null,
+      });
       const investor = await userService.getUserById(interest.investorId);
       const { room } = await investmentFlowService.acceptInterestAndCreateDiscussion({
         interest,
@@ -394,7 +400,7 @@ export default function MyCardsScreen() {
 function FounderCard({ opportunity }: { opportunity: InvestmentOpportunity }) {
   return (
     <Card style={styles.compactCard}>
-      <Text style={styles.cardTitle}>{opportunity.startupName}</Text>
+      <Text style={styles.cardTitle}>{opportunity.title ?? opportunity.startupName}</Text>
       <Text style={styles.meta}>Status: {opportunity.status}</Text>
       <View style={styles.playingCardWrap}>
         <StartupPlayingCard card={mapOpportunityToStartupCard(opportunity)} compact />
@@ -459,7 +465,7 @@ function DiscussionRoomCard({ room, onOpen }: { room: DiscussionRoom; onOpen: ()
 }
 
 function AgreementCard({ agreement }: { agreement: InvestmentAgreement }) {
-  const isAwaitingFunding = agreement.status === 'awaiting_funding';
+  const isFundingStage = ['awaiting_funding', 'investor_sent', 'funded'].includes(agreement.status);
 
   return (
     <Card>
@@ -468,8 +474,8 @@ function AgreementCard({ agreement }: { agreement: InvestmentAgreement }) {
       <Text style={styles.meta}>Investor accepted: {agreement.investorAccepted ? 'Yes' : 'No'}</Text>
       <Text style={styles.meta}>Status: {agreement.status}</Text>
       <PrimaryButton
-        label={isAwaitingFunding ? 'Open Funding Screen' : 'Open Agreement'}
-        onPress={() => router.push(isAwaitingFunding ? `/payment/${agreement.id}` : `/agreement/${agreement.id}`)}
+        label={isFundingStage ? 'Open Funding Instructions' : 'Open Agreement'}
+        onPress={() => router.push(isFundingStage ? `/payment/${agreement.id}` : `/agreement/${agreement.id}`)}
       />
     </Card>
   );
@@ -520,17 +526,24 @@ function mapStartupInterestToLegacy(interest: StartupInterest): InvestmentIntere
   };
 }
 
-function mapOpportunityToStartupCard(opportunity: InvestmentOpportunity) {
-  return {
+function mapOpportunityToStartupCard(opportunity: InvestmentOpportunity): StartupCard {
+  const title = opportunity.title ?? opportunity.startupName;
+  const description = opportunity.description ?? opportunity.shortDescription ?? opportunity.purpose;
+  const askAmount = opportunity.askAmount ?? opportunity.fundingGoal ?? opportunity.fundingNeeded;
+  const equity = opportunity.equity ?? opportunity.investorAllocation;
+
+  const card: StartupCard = {
     id: opportunity.id,
     developerId: opportunity.founderId,
     ownerId: opportunity.founderId,
-    title: opportunity.startupName,
-    startupName: opportunity.startupName,
-    tagline: opportunity.shortDescription,
-    description: opportunity.purpose,
-    goalAmount: opportunity.fundingNeeded,
-    equityOffered: opportunity.investorAllocation,
+    title,
+    startupName: title,
+    shortDescription: opportunity.shortDescription ?? description,
+    tagline: description,
+    description,
+    fundingNeeded: opportunity.fundingNeeded ?? askAmount,
+    goalAmount: askAmount,
+    equityOffered: equity,
     metric: '$22 angel check',
     founderName: opportunity.founderName,
     founderAvatar: opportunity.founderName
@@ -543,8 +556,21 @@ function mapOpportunityToStartupCard(opportunity: InvestmentOpportunity) {
     rank: 'A' as const,
     coverImage: opportunity.imageUrl,
     stage: opportunity.stage,
-    shortPitch: opportunity.purpose,
+    shortPitch: description,
   };
+
+  console.log('[My Cards] mapped startup card before render', {
+    source: {
+      startupName: opportunity.startupName,
+      founderName: opportunity.founderName,
+      shortDescription: opportunity.shortDescription,
+      fundingNeeded: opportunity.fundingNeeded,
+      imageUrl: opportunity.imageUrl,
+    },
+    card,
+  });
+
+  return card;
 }
 
 const styles = StyleSheet.create({

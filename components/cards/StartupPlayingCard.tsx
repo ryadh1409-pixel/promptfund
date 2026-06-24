@@ -2,7 +2,7 @@ import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'r
 
 import { colors, radii, spacing } from '@/constants/theme';
 import type { Project, StartupCardRank } from '@/types/Project';
-import { safeCurrency, safePercent } from '@/utils/safeFormat';
+import { safeCurrency } from '@/utils/safeFormat';
 
 export type StartupCard = Pick<
   Project,
@@ -33,6 +33,8 @@ export type StartupCard = Pick<
   | 'riskRating'
   | 'shortPitch'
 > & {
+  shortDescription?: string;
+  fundingNeeded?: number;
   developerId?: string;
   ownerId?: string;
   isSample?: boolean;
@@ -133,10 +135,22 @@ export function StartupPlayingCard({
   const rank = card.rank ?? 'J';
   const suit = rank === 'A' || rank === 'Q' ? '♥' : '♠';
   const suitColor = suit === '♥' ? colors.pokerRed : colors.pokerBlack;
+  const startupName = card.startupName ?? card.title;
+  const founderName = card.founderName ?? 'Founder';
+  const shortDescription = card.shortDescription ?? card.description ?? card.shortPitch ?? card.tagline ?? 'Startup opportunity';
+  const fundingGoal = card.fundingNeeded ?? card.goalAmount;
+
+  console.log('[StartupPlayingCard] final card before render', {
+    startupName,
+    founderName,
+    shortDescription,
+    fundingNeeded: fundingGoal,
+    imageUrl: card.imageUrl,
+    coverImage: card.coverImage,
+  });
 
   return (
     <View style={[styles.card, compact ? styles.compactCard : null, style]}>
-      <Corner rank={rank} suit={suit} color={suitColor} />
       <View style={styles.innerBorder}>
         {showBack ? (
           <View style={styles.backContent}>
@@ -146,6 +160,14 @@ export function StartupPlayingCard({
           </View>
         ) : (
           <>
+            <View style={styles.cardHeader}>
+              <Text style={styles.title} numberOfLines={1}>
+                {startupName}
+              </Text>
+              <Text style={styles.byline} numberOfLines={1}>
+                by {founderName}
+              </Text>
+            </View>
             <View style={styles.imagePanel}>
               {card.coverImage ? (
                 <Image source={{ uri: card.coverImage }} style={styles.coverImage} />
@@ -155,43 +177,20 @@ export function StartupPlayingCard({
                   <Text style={styles.imageText}>{rankLabels[rank]}</Text>
                 </View>
               )}
-              <View style={styles.logoBadge}>
-                {card.logoUrl ? (
-                  <Image source={{ uri: card.logoUrl }} style={styles.logoImage} />
-                ) : (
-                  <Text style={styles.logoText}>{card.title.slice(0, 2).toUpperCase()}</Text>
-                )}
-              </View>
             </View>
-            <View style={styles.content}>
-              <Text style={styles.title}>{card.title}</Text>
-              <Text style={styles.pitch}>{card.shortPitch ?? card.tagline}</Text>
-              <View style={styles.founderRow}>
-                <View style={styles.avatar}>
-                  {card.founderPhotoURL ? (
-                    <Image source={{ uri: card.founderPhotoURL }} style={styles.avatarImage} />
-                  ) : (
-                    <Text style={styles.avatarText}>{card.founderAvatar ?? 'PF'}</Text>
-                  )}
-                </View>
-                <View style={styles.founderText}>
-                  <Text style={styles.founderName}>{card.founderName ?? 'Founder'}</Text>
-                  <Text style={styles.verified}>
-                    {card.founderVerified === false ? 'Founder' : 'Founder Verified'}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.statGrid}>
-                <StatBox label="Stage" value={card.stage ?? 'MVP'} />
-                <StatBox label="Funding" value={safeCurrency(card.goalAmount)} highlight />
-                <StatBox label="Allocation" value={safePercent(card.equityOffered)} />
-                <StatBox label="Signal" value={card.metric ?? card.traction ?? 'Early'} />
+            <View style={styles.lowerSection}>
+              <Text style={styles.pitch} numberOfLines={compact ? 2 : 3}>
+                {shortDescription}
+              </Text>
+              <View style={styles.goalLine}>
+                <Text style={styles.goalLabel}>Goal</Text>
+                <Text style={styles.goalValue}>{safeCurrency(fundingGoal)}</Text>
               </View>
             </View>
           </>
         )}
       </View>
-      <View style={styles.mirroredCorner}>
+      <View style={styles.cornerAccent}>
         <Corner rank={rank} suit={suit} color={suitColor} />
       </View>
     </View>
@@ -203,15 +202,6 @@ function Corner({ rank, suit, color }: { rank: string; suit: string; color: stri
     <View style={styles.corner}>
       <Text style={[styles.cornerRank, { color }]}>{rank}</Text>
       <Text style={[styles.cornerSuit, { color }]}>{suit}</Text>
-    </View>
-  );
-}
-
-function StatBox({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <View style={styles.statBox}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={highlight ? styles.goal : styles.statValue}>{value}</Text>
     </View>
   );
 }
@@ -242,7 +232,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(200, 162, 74, 0.48)',
     borderRadius: radii.lg,
-    padding: spacing.lg,
+    padding: spacing.md,
   },
   corner: {
     position: 'absolute',
@@ -261,16 +251,24 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     lineHeight: 18,
   },
-  mirroredCorner: {
+  cornerAccent: {
     position: 'absolute',
     right: 0,
     bottom: 0,
     transform: [{ rotate: '180deg' }],
   },
+  cardHeader: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderColor: 'rgba(20, 20, 20, 0.12)',
+    paddingBottom: spacing.sm,
+  },
   imagePanel: {
     alignItems: 'center',
+    flex: 1,
     justifyContent: 'center',
-    minHeight: '44%',
+    minHeight: 0,
+    marginVertical: spacing.sm,
     borderRadius: radii.lg,
     backgroundColor: '#F3E8D0',
     overflow: 'hidden',
@@ -325,6 +323,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingTop: spacing.lg,
   },
+  lowerSection: {
+    borderTopWidth: 1,
+    borderColor: 'rgba(20, 20, 20, 0.12)',
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
+  },
   metaRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -344,15 +348,41 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.pokerBlack,
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '900',
     letterSpacing: -1,
+    textAlign: 'center',
+  },
+  byline: {
+    color: 'rgba(20, 20, 20, 0.72)',
+    fontSize: 14,
+    fontWeight: '900',
+    marginTop: 2,
+    textAlign: 'center',
   },
   pitch: {
     color: 'rgba(20, 20, 20, 0.76)',
     fontSize: 14,
     fontWeight: '800',
     lineHeight: 19,
+  },
+  goalLine: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  goalLabel: {
+    color: 'rgba(20, 20, 20, 0.55)',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  goalValue: {
+    color: colors.pokerRed,
+    fontSize: 20,
+    fontWeight: '900',
   },
   statGrid: {
     flexDirection: 'row',

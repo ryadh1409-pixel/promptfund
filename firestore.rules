@@ -125,6 +125,7 @@ service cloud.firestore {
             && !isBlockedBetween(request.auth.uid, projectOwner(request.resource.data.projectId))
           )
           || request.resource.data.investorId == request.auth.uid
+          || request.resource.data.founderId == request.auth.uid
         );
       allow read, update: if isAdmin()
         || (isSignedIn() && (
@@ -178,7 +179,10 @@ service cloud.firestore {
 
     match /discussionRooms/{roomId} {
       allow create: if request.auth != null
-        && request.resource.data.investorId == request.auth.uid;
+        && (
+          request.resource.data.investorId == request.auth.uid
+          || request.resource.data.founderId == request.auth.uid
+        );
       allow read, update: if request.auth != null
         && (
           resource.data.founderId == request.auth.uid
@@ -299,7 +303,16 @@ service cloud.firestore {
 
     match /agreements/{agreementId} {
       allow create: if createsOwnAgreementRoom() || createsV5ParticipantDocument();
-      allow read, update: if isAdmin() || hasAgreementAccess(agreementId) || isV5Participant();
+      allow read, update: if isAdmin()
+        || hasAgreementAccess(agreementId)
+        || (
+          isSignedIn()
+          && resource != null
+          && (
+            resource.data.founderId == request.auth.uid
+            || resource.data.investorId == request.auth.uid
+          )
+        );
       allow delete: if false;
     }
 

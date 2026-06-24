@@ -1,7 +1,8 @@
 import { getAuth } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 import { getFirebaseApp } from '@/firebase/config';
-import { firestoreAdapter } from '@/firebase/firestore';
+import { firestoreAdapter, getPromptFundFirestore } from '@/firebase/firestore';
 import type {
   CreateInvestmentOpportunityInput,
   DiscussionMessage,
@@ -49,17 +50,44 @@ function currentUid() {
   return getAuth(getFirebaseApp()).currentUser?.uid ?? null;
 }
 
+function isPermissionDenied(error: unknown) {
+  return typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && (error as { code?: unknown }).code === 'permission-denied';
+}
+
+function logAcceptFlow(operation: string, path: string, extra?: Record<string, unknown>) {
+  console.log('[ACCEPT FLOW]', {
+    collection: path.split('/')[0],
+    path,
+    operation,
+    currentUid: currentUid(),
+    ...extra,
+  });
+}
+
 export function mapProjectToOpportunity(project: Project): InvestmentOpportunity {
+  const title = project.startupName ?? project.title ?? 'Startup';
+  const description = project.description || defaultInvestmentPurpose;
+  const fundingGoal = project.goalAmount && project.goalAmount > 0 ? project.goalAmount : defaultInvestmentAmount;
+  const equity = project.equityOffered ?? defaultInvestorAllocation;
+
   return {
     id: project.id,
-    startupName: project.startupName ?? project.title ?? 'Startup',
+    title,
+    startupName: title,
     founderId: project.ownerId ?? project.founderId ?? project.developerId,
     founderName: project.founderName ?? 'Founder',
-    fundingNeeded: project.goalAmount && project.goalAmount > 0 ? project.goalAmount : defaultInvestmentAmount,
-    investorAllocation: project.equityOffered ?? defaultInvestorAllocation,
+    description,
+    fundingGoal,
+    askAmount: fundingGoal,
+    equity,
+    fundingNeeded: fundingGoal,
+    investorAllocation: equity,
     stage: project.stage ?? defaultStartupStage,
-    purpose: project.description || defaultInvestmentPurpose,
-    shortDescription: project.description || defaultInvestmentPurpose,
+    purpose: description,
+    shortDescription: description,
     imageUrl: project.imageUrl ?? project.coverImage,
     status: 'active',
   };
@@ -113,8 +141,24 @@ export const investmentFlowService = {
     investorId: string;
     investorName: string;
   }) {
+    const startupName = opportunity.title ?? opportunity.startupName;
+    const investmentAmount = opportunity.askAmount ?? opportunity.fundingGoal ?? opportunity.fundingNeeded;
+    const investorAllocation = opportunity.equity ?? opportunity.investorAllocation;
+
+    logAcceptFlow('setDoc', `startupOpportunities/${opportunity.id}`, {
+      founderId: opportunity.founderId,
+      investorId,
+      status: 'discussion_started',
+    });
     await firestoreAdapter.setWithId<Omit<InvestmentOpportunity, 'id'>>('startupOpportunities', opportunity.id, {
       ...opportunity,
+      title: startupName,
+      startupName,
+      fundingGoal: investmentAmount,
+      askAmount: investmentAmount,
+      equity: investorAllocation,
+      fundingNeeded: investmentAmount,
+      investorAllocation,
       status: 'discussion_started',
     });
 
@@ -131,9 +175,9 @@ export const investmentFlowService = {
       founderName: opportunity.founderName,
       investorId,
       investorName,
-      startupName: opportunity.startupName,
-      investmentAmount: opportunity.fundingNeeded,
-      investorAllocation: opportunity.investorAllocation,
+      startupName,
+      investmentAmount,
+      investorAllocation,
       founderReady: false,
       investorReady: false,
       messages: [],
@@ -141,6 +185,11 @@ export const investmentFlowService = {
     };
     console.log('ROOM CREATE PAYLOAD', payload);
     console.log('ROOM CREATE USER', currentUid());
+    logAcceptFlow('setDoc', `discussionRooms/${roomId}`, {
+      founderId: payload.founderId,
+      investorId: payload.investorId,
+      status: payload.status,
+    });
     console.log({
       operation: 'setDoc',
       path: `discussionRooms/${roomId}`,
@@ -157,6 +206,10 @@ export const investmentFlowService = {
     console.log('READ ROOM START', roomId);
     let createdRoom: DiscussionRoom | null = null;
     try {
+      logAcceptFlow('getDoc', `discussionRooms/${roomId}`, {
+        founderId: payload.founderId,
+        investorId: payload.investorId,
+      });
       createdRoom = await this.getDiscussionRoom(roomId);
       console.log('READ ROOM SUCCESS');
     } catch (error) {
@@ -232,9 +285,22 @@ export const investmentFlowService = {
     const agreementId = `agreement-${room.id}`;
     let existing: InvestmentAgreement | null = null;
     try {
-      existing = await this.getAgreement(agreementId);
+      console.log('AGREEMENT PRECHECK READ START', agreementId);
+      console.log('AGREEMENT PRECHECK USER', currentUid());
+      const snapshot = await getDoc(doc(getPromptFundFirestore(), 'agreements', agreementId));
+      console.log('AGREEMENT PRECHECK READ SUCCESS', {
+        agreementId,
+        exists: snapshot.exists(),
+      });
+      existing = snapshot.exists()
+        ? ({ ...snapshot.data(), id: snapshot.id } as InvestmentAgreement)
+        : null;
     } catch (error) {
-      console.error('AGREEMENT READ FAILED BEFORE CREATE', { agreementId, error });
+      console.log('AGREEMENT PRECHECK READ SKIPPED BEFORE CREATE', {
+        agreementId,
+        currentUid: currentUid(),
+        reason: isPermissionDenied(error) ? 'permission-denied' : 'read-failed',
+      });
     }
 
     if (existing) {
@@ -438,10 +504,21 @@ export const investmentFlowService = {
     founderName: string;
     investorName: string;
   }) {
-    await firestoreAdapter.update<InvestmentInterest>('investmentInterests', interest.id, {
+    logAcceptFlow('updateDoc', `interests/${interest.id}`, {
+      founderId: interest.founderUid,
+      investorId: interest.investorId,
+      startupOpportunityId: interest.startupId,
+      status: 'accepted',
+    });
+    await firestoreAdapter.update<StartupInterest>('interests', interest.id, {
       status: 'accepted',
     });
 
+    logAcceptFlow('addDoc', 'matches/*', {
+      founderId: interest.founderUid,
+      investorId: interest.investorId,
+      startupOpportunityId: interest.startupId,
+    });
     const match = await firestoreAdapter.create<Omit<Match, 'id'>>('matches', {
       founderUid: interest.founderUid,
       investorUid: interest.investorId,
@@ -450,6 +527,11 @@ export const investmentFlowService = {
       status: 'matched',
     });
 
+    logAcceptFlow('addDoc success', `matches/${match.id}`, {
+      founderId: interest.founderUid,
+      investorId: interest.investorId,
+      startupOpportunityId: interest.startupId,
+    });
     const room = await this.startDiscussion({
       opportunity: {
         ...opportunity,
@@ -459,6 +541,12 @@ export const investmentFlowService = {
       investorName,
     });
 
+    logAcceptFlow('updateDoc', `matches/${match.id}`, {
+      founderId: interest.founderUid,
+      investorId: interest.investorId,
+      agreementId: room.id,
+      status: 'agreementStarted',
+    });
     await firestoreAdapter.update<Match>('matches', match.id, {
       agreementId: room.id,
       status: 'agreementStarted',
@@ -502,6 +590,24 @@ export const investmentFlowService = {
     return room;
   },
 
+  async markInvestorSentFunding(agreement: InvestmentAgreement) {
+    const investorSentPayload = {
+      status: 'investor_sent',
+      investorSentAt: now(),
+    } as const;
+
+    await Promise.all([
+      firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, investorSentPayload),
+      firestoreAdapter.update<DiscussionRoom>('discussionRooms', agreement.discussionRoomId, {
+        status: 'investor_sent',
+      }),
+    ]);
+  },
+
+  async confirmFundingReceived(agreement: InvestmentAgreement) {
+    return this.completePayment(agreement);
+  },
+
   async completePayment(agreement: InvestmentAgreement) {
     const paidAt = now();
     const transactionId = `pf_${Date.now()}`;
@@ -532,6 +638,7 @@ export const investmentFlowService = {
     await Promise.all([
       firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, {
         status: 'funded',
+        fundedAt: paidAt,
       }),
       firestoreAdapter.update<DiscussionRoom>('discussionRooms', agreement.discussionRoomId, fundedRoomPayload),
       firestoreAdapter.update<InvestmentOpportunity>('startupOpportunities', agreement.opportunityId, {

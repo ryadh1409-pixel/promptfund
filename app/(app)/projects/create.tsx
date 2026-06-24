@@ -113,12 +113,20 @@ export default function CreateProjectScreen() {
     }
 
     try {
+      const founderName = profile?.displayName ?? profile?.name ?? 'Founder';
+      const askAmount = 22;
+      const equity = 1;
       const payload = {
+        title: startupName,
         startupName,
         founderId: uid,
-        founderName: profile?.displayName ?? profile?.name ?? 'Founder',
-        fundingNeeded: 22,
-        investorAllocation: 1,
+        founderName,
+        description: shortDescription,
+        fundingGoal: askAmount,
+        askAmount,
+        equity,
+        fundingNeeded: askAmount,
+        investorAllocation: equity,
         stage: 'MVP',
         purpose: shortDescription,
         shortDescription,
@@ -187,13 +195,16 @@ export default function CreateProjectScreen() {
           card={{
             id: 'preview',
             title: title || 'Startup Name',
+            startupName: title || 'Startup Name',
+            shortDescription: description || 'Short description',
             tagline: description || 'Short description',
             description: description || 'Short description',
+            fundingNeeded: 22,
             goalAmount: 22,
             equityOffered: 1,
             stage: 'MVP',
             coverImage: imageUri ?? undefined,
-            founderName: profile?.name ?? 'Entrepreneur',
+            founderName: profile?.displayName ?? profile?.name ?? 'Entrepreneur',
             founderAvatar: profile?.avatar ?? 'PF',
             founderVerified: true,
             rank: 'J',
