@@ -590,27 +590,27 @@ export const investmentFlowService = {
     return room;
   },
 
-  async markInvestorSentFunding(agreement: InvestmentAgreement) {
-    const investorSentPayload = {
-      status: 'investor_sent',
-      investorSentAt: now(),
+  async markFundingArrangedOutsidePromptFund(agreement: InvestmentAgreement) {
+    const arrangedAt = now();
+    const fundingArrangedPayload = {
+      status: 'funding_arranged',
+      fundingArrangedAt: arrangedAt,
     } as const;
 
     await Promise.all([
-      firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, investorSentPayload),
+      firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, fundingArrangedPayload),
       firestoreAdapter.update<DiscussionRoom>('discussionRooms', agreement.discussionRoomId, {
-        status: 'investor_sent',
+        status: 'funding_arranged',
       }),
     ]);
   },
 
-  async confirmFundingReceived(agreement: InvestmentAgreement) {
-    return this.completePayment(agreement);
+  async confirmFundingArrangement(agreement: InvestmentAgreement) {
+    return this.completeFundingAgreement(agreement);
   },
 
-  async completePayment(agreement: InvestmentAgreement) {
-    const paidAt = now();
-    const transactionId = `pf_${Date.now()}`;
+  async completeFundingAgreement(agreement: InvestmentAgreement) {
+    const completedAt = now();
     const investment = await firestoreAdapter.setWithId<Omit<V5Investment, 'id'>>('investments', agreement.id, {
       agreementId: agreement.id,
       discussionRoomId: agreement.discussionRoomId,
@@ -622,27 +622,25 @@ export const investmentFlowService = {
       startupName: agreement.startupName,
       amount: agreement.investmentAmount,
       allocation: agreement.investorAllocation,
-      status: 'active',
-      paymentStatus: 'completed',
-      transactionId,
-      paidAt,
+      status: 'completed',
+      fundedAt: completedAt,
     });
 
-    const fundedRoomPayload = {
-      status: 'funded',
+    const completedRoomPayload = {
+      status: 'completed',
     } as const;
     console.log('ROOM UPDATE PATH', agreement.discussionRoomId);
     console.log('ROOM UPDATE USER', currentUid());
-    console.log('ROOM UPDATE PAYLOAD', fundedRoomPayload);
+    console.log('ROOM UPDATE PAYLOAD', completedRoomPayload);
 
     await Promise.all([
       firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, {
-        status: 'funded',
-        fundedAt: paidAt,
+        status: 'completed',
+        completedAt,
       }),
-      firestoreAdapter.update<DiscussionRoom>('discussionRooms', agreement.discussionRoomId, fundedRoomPayload),
+      firestoreAdapter.update<DiscussionRoom>('discussionRooms', agreement.discussionRoomId, completedRoomPayload),
       firestoreAdapter.update<InvestmentOpportunity>('startupOpportunities', agreement.opportunityId, {
-        status: 'funded',
+        status: 'completed',
       }),
     ]);
 

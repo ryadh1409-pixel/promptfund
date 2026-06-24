@@ -18,6 +18,7 @@ import { isAdminEmail } from '@/services/adminService';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { userService } from '@/services/userService';
 import type { CreateUserInput, User } from '@/types/User';
+import { getActiveRole } from '@/utils/roles';
 
 type RegisterInput = AuthCredentials &
   CreateUserInput & {
@@ -60,10 +61,12 @@ function buildRecoveredProfile(user: AuthUser): CreateUserInput {
     handle: username,
     displayName,
     username,
+    email: user.email ?? undefined,
     role: isAdminEmail(user.email) ? 'admin' : 'angel_investor',
     roles: ['investor'],
     activeRole: 'investor',
     intent: 'investor',
+    hasChosenPath: false,
     avatar: getInitials(displayName),
     bio: 'PromptFund profile restored automatically after Firebase Auth sign-in.',
     location: '',
@@ -79,6 +82,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const normalizeProfileOnLoad = useCallback(async (user: AuthUser, nextProfile: User): Promise<User> => {
+    if (nextProfile.hasChosenPath === false || nextProfile.hasChosenPath === true) {
+      return nextProfile;
+    }
+
+    const activeRole = getActiveRole(nextProfile);
+    if (!activeRole) {
+      return nextProfile;
+    }
+    const persistedRole = nextProfile.role === 'admin' ? 'admin' : activeRole;
+
+    const normalizedProfile = await userService.updateUser(user.uid, {
+      role: persistedRole,
+      roles: Array.from(new Set([...(nextProfile.roles ?? []), activeRole])),
+      activeRole,
+      intent: activeRole,
+      hasChosenPath: true,
+    });
+
+    return normalizedProfile ?? {
+      ...nextProfile,
+      role: persistedRole,
+      activeRole,
+      intent: activeRole,
+      hasChosenPath: true,
+    };
+  }, []);
+
   const loadUserProfile = useCallback(async (user: AuthUser | null): Promise<User | null> => {
     if (!user) {
       setProfile(null);
@@ -90,9 +121,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       path: `users/${user.uid}`,
     });
     const nextProfile = await userService.getUserById(user.uid);
-    setProfile(nextProfile);
-    return nextProfile;
-  }, []);
+    const normalizedProfile = nextProfile ? await normalizeProfileOnLoad(user, nextProfile) : null;
+    setProfile(normalizedProfile);
+    return normalizedProfile;
+  }, [normalizeProfileOnLoad]);
 
   const createMissingProfile = useCallback(async (user: AuthUser): Promise<User> => {
     const path = `users/${user.uid}`;
@@ -195,6 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: isAdminEmail(user.email) ? 'admin' : profileInput.role,
           roles: profileInput.roles ?? [profileInput.activeRole ?? 'investor'],
           activeRole: profileInput.activeRole ?? profileInput.roles?.[0] ?? 'investor',
+          hasChosenPath: profileInput.hasChosenPath ?? false,
           displayName: displayName || profileInput.name,
           username: profileInput.username ?? profileInput.handle,
         };

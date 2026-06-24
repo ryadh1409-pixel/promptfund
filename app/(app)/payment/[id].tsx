@@ -68,7 +68,7 @@ export default function PaymentScreen() {
     };
   }, [agreement?.founderId]);
 
-  async function handleInvestorSentFunding() {
+  async function handleFundingArranged() {
     if (!agreement) {
       return;
     }
@@ -77,8 +77,8 @@ export default function PaymentScreen() {
     setNotice(null);
 
     try {
-      await investmentFlowService.markInvestorSentFunding(agreement);
-      setNotice('Funding marked as sent. Waiting for Founder confirmation.');
+      await investmentFlowService.markFundingArrangedOutsidePromptFund(agreement);
+      setNotice('Funding arrangements marked as completed outside PromptFund. Waiting for Founder confirmation.');
     } catch (fundingError) {
       setNotice(getFriendlyErrorMessage(fundingError));
     } finally {
@@ -86,7 +86,7 @@ export default function PaymentScreen() {
     }
   }
 
-  async function handleConfirmFundingReceived() {
+  async function handleConfirmArrangement() {
     if (!agreement) {
       return;
     }
@@ -95,8 +95,8 @@ export default function PaymentScreen() {
     setNotice(null);
 
     try {
-      await investmentFlowService.confirmFundingReceived(agreement);
-      setNotice('Funding received and recorded.');
+      await investmentFlowService.confirmFundingArrangement(agreement);
+      setNotice('Funding agreement completed.');
     } catch (fundingError) {
       setNotice(getFriendlyErrorMessage(fundingError));
     } finally {
@@ -111,14 +111,14 @@ export default function PaymentScreen() {
       : null;
   const payoutDetails = formatPayoutDetails(founderProfile);
   const isAwaitingInvestor = agreement?.status === 'awaiting_funding';
-  const isInvestorSent = agreement?.status === 'investor_sent';
-  const isFunded = agreement?.status === 'funded';
+  const isFundingArranged = agreement?.status === 'funding_arranged';
+  const isCompleted = agreement?.status === 'completed';
 
   return (
     <Screen
       eyebrow="Investment Funding"
-      title={isFunded ? 'Funding Received' : 'Funding Instructions'}
-      subtitle="Funding is completed directly between the Founder and Angel Investor."
+      title={isCompleted ? 'Funding Agreement Completed' : 'Funding Instructions'}
+      subtitle="PromptFund is only a matching and agreement platform between founders and investors."
     >
       {isLoading ? <LoadingState label="Loading funding details" /> : null}
       {notice ? (
@@ -146,7 +146,7 @@ export default function PaymentScreen() {
           </Card>
 
           <Card>
-            <Text style={styles.sectionTitle}>Founder Payout Details</Text>
+            <Text style={styles.sectionTitle}>Founder Contact Details</Text>
             {payoutDetails.length > 0 ? (
               <View style={styles.grid}>
                 {payoutDetails.map((detail) => (
@@ -154,65 +154,68 @@ export default function PaymentScreen() {
                 ))}
               </View>
             ) : (
-              <Text style={styles.copy}>No founder payout details are available yet.</Text>
+              <Text style={styles.copy}>No founder contact details are available yet.</Text>
             )}
           </Card>
 
           <Card>
             <Text style={styles.disclaimer}>
-              PromptFund does not process, hold, or transfer funds. Funding is completed directly between the
-              founder and investor.
+              PromptFund is not involved in the transfer of funds. Founders and investors arrange funding directly
+              outside the app.
             </Text>
           </Card>
 
-          {!isFunded ? (
+          {!isCompleted ? (
             <Card>
-              <Text style={styles.sectionTitle}>Funding Status</Text>
+              <Text style={styles.sectionTitle}>Arrangement Status</Text>
               {participantRole === 'investor' ? (
                 <>
                   <Text style={styles.copy}>
-                    Send funding directly using the Founder payout details above, then mark it as sent.
+                    Arrange funding directly with the Founder outside PromptFund, then confirm the arrangement here.
                   </Text>
                   <PrimaryButton
-                    label={isSaving ? 'Saving...' : 'I Sent Funding'}
-                    onPress={handleInvestorSentFunding}
+                    label={isSaving ? 'Saving...' : 'I Have Arranged Funding Outside PromptFund'}
+                    onPress={handleFundingArranged}
                     disabled={isSaving || !isAwaitingInvestor}
                   />
-                  {isInvestorSent ? <Text style={styles.copy}>Waiting for Founder confirmation.</Text> : null}
+                  {isFundingArranged ? <Text style={styles.copy}>Waiting for Founder confirmation.</Text> : null}
                 </>
               ) : null}
 
               {participantRole === 'founder' ? (
                 <>
                   <Text style={styles.copy}>
-                    {isInvestorSent
-                      ? 'Investor marked funding as sent.'
-                      : 'Waiting for the Investor to mark funding as sent.'}
+                    {isFundingArranged
+                      ? 'Investor has indicated that funding arrangements were completed outside PromptFund.'
+                      : 'Waiting for the Investor to indicate that funding arrangements were completed outside PromptFund.'}
                   </Text>
                   <PrimaryButton
-                    label={isSaving ? 'Confirming...' : 'Confirm Funding Received'}
-                    onPress={handleConfirmFundingReceived}
-                    disabled={isSaving || !isInvestorSent}
+                    label={isSaving ? 'Confirming...' : 'Confirm Arrangement'}
+                    onPress={handleConfirmArrangement}
+                    disabled={isSaving || !isFundingArranged}
                   />
                   <PrimaryButton
                     label="Report Issue"
                     variant="secondary"
-                    onPress={() => setNotice('Issue reported. PromptFund support will review this funding status.')}
+                    onPress={() => setNotice('Issue reported. PromptFund support will review the agreement issue.')}
                   />
                 </>
               ) : null}
             </Card>
           ) : (
             <Card>
-              <Text style={styles.sectionTitle}>Funding Received</Text>
+              <Text style={styles.sectionTitle}>Funding Agreement Completed</Text>
               <View style={styles.grid}>
-                <FieldPreview label="Amount" value={`${safeCurrency(agreement.investmentAmount)} USD`} />
-                <FieldPreview label="Allocation" value={safePercent(agreement.investorAllocation)} />
-                <FieldPreview label="Date" value={safeDate(agreement.fundedAt ?? agreement.updatedAt)} />
+                <FieldPreview label="Startup" value={agreement.startupName} />
                 <FieldPreview label="Founder" value={agreement.founderName} />
                 <FieldPreview label="Investor" value={agreement.investorName} />
-                <FieldPreview label="Status" value="Funding Received" />
+                <FieldPreview label="Amount" value={`${safeCurrency(agreement.investmentAmount)} USD`} />
+                <FieldPreview label="Allocation" value={safePercent(agreement.investorAllocation)} />
+                <FieldPreview label="Completion Date" value={safeDate(agreement.completedAt ?? agreement.updatedAt)} />
               </View>
+              <Text style={styles.disclaimer}>
+                PromptFund did not process or handle any funds related to this agreement.
+              </Text>
               <PrimaryButton label="Back To My Cards" onPress={() => router.replace('/deck')} />
             </Card>
           )}
@@ -223,41 +226,17 @@ export default function PaymentScreen() {
 }
 
 function formatPayoutDetails(profile: User | null) {
-  if (!profile?.preferredPayoutMethod) {
+  if (!profile) {
     return [];
   }
 
-  if (profile.preferredPayoutMethod === 'interac' && profile.interacEmail) {
-    return [
-      { label: 'Payout Method', value: 'Interac e-Transfer' },
-      { label: 'Interac Email', value: profile.interacEmail },
-    ];
-  }
-
-  if (profile.preferredPayoutMethod === 'wise' && profile.wiseEmail) {
-    return [
-      { label: 'Payout Method', value: 'Wise' },
-      { label: 'Wise Email', value: profile.wiseEmail },
-    ];
-  }
-
-  if (profile.preferredPayoutMethod === 'paypal' && profile.paypalEmail) {
-    return [
-      { label: 'Payout Method', value: 'PayPal' },
-      { label: 'PayPal Email', value: profile.paypalEmail },
-    ];
-  }
-
-  if (profile.preferredPayoutMethod === 'bank') {
-    return [
-      { label: 'Payout Method', value: 'Bank Transfer' },
-      { label: 'Bank Name', value: profile.bankName ?? 'Not provided' },
-      { label: 'Account Holder', value: profile.accountHolderName ?? 'Not provided' },
-      { label: 'Account Last 4', value: profile.accountLast4 ? `•••• ${profile.accountLast4}` : 'Not provided' },
-    ];
-  }
-
-  return [];
+  return [
+    profile.email ? { label: 'Email', value: profile.email } : null,
+    profile.phone ? { label: 'Phone', value: profile.phone } : null,
+    profile.interacEmail ? { label: 'Interac Email', value: profile.interacEmail } : null,
+    profile.wiseEmail ? { label: 'Wise Email', value: profile.wiseEmail } : null,
+    profile.paypalEmail ? { label: 'PayPal Email', value: profile.paypalEmail } : null,
+  ].filter((detail): detail is { label: string; value: string } => detail !== null);
 }
 
 const styles = StyleSheet.create({

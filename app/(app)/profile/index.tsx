@@ -12,8 +12,6 @@ import { formatCurrency } from '@/utils/format';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { getRoleBadgeLabel, isEntrepreneurRole } from '@/utils/roles';
 import { getActiveRole } from '@/utils/roles';
-import { userService } from '@/services/userService';
-import type { ActiveRole } from '@/types/User';
 
 export default function UserProfileScreen() {
   const router = useRouter();
@@ -49,25 +47,6 @@ export default function UserProfileScreen() {
       await signOut();
     } finally {
       router.replace('/login');
-    }
-  }
-
-  async function handleSwitchRole(nextRole: ActiveRole) {
-    if (!authUser || !profile) {
-      return;
-    }
-
-    try {
-      setError(null);
-      await userService.updateUser(authUser.uid, {
-        roles: Array.from(new Set([...(profile.roles ?? []), nextRole])),
-        activeRole: nextRole,
-        role: nextRole === 'founder' ? 'entrepreneur' : 'angel_investor',
-        intent: nextRole,
-      });
-      router.replace('/choose-path');
-    } catch (switchError) {
-      setError(getFriendlyErrorMessage(switchError));
     }
   }
 
@@ -133,12 +112,9 @@ export default function UserProfileScreen() {
         <Text style={styles.settingsCopy}>Identity, role, and agreement verification are represented through PromptFund cards.</Text>
       </Card>
       <Card>
-        <Text style={styles.sectionTitle}>Switch Role</Text>
+        <Text style={styles.sectionTitle}>Change Role</Text>
         <Text style={styles.settingsCopy}>Current role: {activeRole === 'founder' ? 'Founder' : 'Angel Investor'}</Text>
-        <View style={ui.wrap}>
-          <PrimaryButton label="Founder" variant={activeRole === 'founder' ? 'primary' : 'secondary'} onPress={() => handleSwitchRole('founder')} />
-          <PrimaryButton label="Angel Investor" variant={activeRole === 'investor' ? 'primary' : 'secondary'} onPress={() => handleSwitchRole('investor')} />
-        </View>
+        <PrimaryButton label="Change Role" variant="secondary" onPress={() => router.push('/choose-path')} />
       </Card>
       <SettingsSection
         title="Settings"

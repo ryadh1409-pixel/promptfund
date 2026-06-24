@@ -1,5 +1,4 @@
 import { Link } from 'expo-router';
-import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -10,7 +9,6 @@ import { useAuth } from '@/context/AuthContext';
 type ImagePickerModule = typeof import('expo-image-picker');
 
 export default function RegisterScreen() {
-  const router = useRouter();
   const { error, loading, register } = useAuth();
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
@@ -105,6 +103,7 @@ export default function RegisterScreen() {
       roles: ['investor'],
       activeRole: 'investor',
       intent: 'investor',
+      hasChosenPath: false,
       avatar: avatar || 'PF',
       profilePhotoUri: profilePhotoUri ?? undefined,
       bio: bio.trim(),
@@ -114,7 +113,6 @@ export default function RegisterScreen() {
         .map((item) => item.trim())
         .filter(Boolean),
     });
-    router.replace('/choose-path');
   }
 
   return (

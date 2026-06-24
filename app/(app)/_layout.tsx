@@ -1,14 +1,25 @@
-import { Redirect, Tabs } from 'expo-router';
+import { Redirect, Tabs, useSegments } from 'expo-router';
 import { Text, type ColorValue } from 'react-native';
 
 import { colors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { appRouteForProfile, shouldShowChoosePath } from '@/utils/onboarding';
 
 export default function AppLayout() {
-  const { authUser, initializing } = useAuth();
+  const { authUser, initializing, profile } = useAuth();
+  const segments = useSegments();
+  const currentRoute = String(segments[segments.length - 1] ?? '');
 
   if (!initializing && !authUser) {
     return <Redirect href="/login" />;
+  }
+
+  if (!initializing && authUser && profile && shouldShowChoosePath(profile) && currentRoute !== 'choose-path') {
+    return <Redirect href="/choose-path" />;
+  }
+
+  if (!initializing && authUser && profile && profile.hasChosenPath === true && currentRoute === 'dashboard') {
+    return <Redirect href={appRouteForProfile(profile)} />;
   }
 
   return (

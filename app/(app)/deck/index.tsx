@@ -14,9 +14,30 @@ import { userService } from '@/services/userService';
 import type { InvestmentInterest, Match } from '@/types/FundingRequest';
 import type { DiscussionRoom, InvestmentAgreement, InvestmentOpportunity, StartupInterest, V5Investment } from '@/types/InvestmentFlow';
 import { getActiveRole } from '@/utils/roles';
-import { safeCurrency, safeDate, safePercent } from '@/utils/safeFormat';
+import { safeCurrency, safePercent } from '@/utils/safeFormat';
 
 type OpportunityMap = Record<string, InvestmentOpportunity>;
+type PipelineStepKey = 'interest' | 'match' | 'discussion' | 'agreement' | 'funding';
+type DealPipeline = {
+  id: string;
+  opportunity?: InvestmentOpportunity;
+  interest?: InvestmentInterest;
+  match?: Match;
+  room?: DiscussionRoom;
+  agreement?: InvestmentAgreement;
+  investment?: V5Investment;
+  currentStep: PipelineStepKey | 'completed';
+  completedSteps: Record<PipelineStepKey, boolean>;
+};
+type DealPipelineDraft = Partial<Omit<DealPipeline, 'completedSteps' | 'currentStep'>> & { id: string };
+
+const pipelineSteps: Array<{ key: PipelineStepKey; label: string }> = [
+  { key: 'interest', label: 'Interest Received' },
+  { key: 'match', label: 'Match Created' },
+  { key: 'discussion', label: 'Discussion Started' },
+  { key: 'agreement', label: 'Agreement Signed' },
+  { key: 'funding', label: 'Funding Received' },
+];
 
 export default function MyCardsScreen() {
   const { authUser, profile } = useAuth();
@@ -36,10 +57,21 @@ export default function MyCardsScreen() {
     () => investments.reduce((sum, investment) => sum + (investment.amount ?? 0), 0),
     [investments],
   );
-  const shownInterests = interests;
-  const readyAgreements = agreements.filter((agreement) =>
-    ['agreement_pending', 'awaiting_funding', 'investor_sent', 'funded'].includes(agreement.status),
+  const dealPipelines = useMemo(
+    () => buildDealPipelines({
+      founderCards,
+      interests,
+      matches,
+      discussionRooms,
+      agreements,
+      investments,
+      opportunities,
+      includeFounderCards: isFounderMode,
+    }),
+    [agreements, discussionRooms, founderCards, interests, investments, isFounderMode, matches, opportunities],
   );
+  const activePipelines = dealPipelines.filter((pipeline) => pipeline.currentStep !== 'completed');
+  const archivedCount = dealPipelines.length - activePipelines.length;
 
   const loadMyCards = useCallback(async () => {
     if (!authUser) {
@@ -75,6 +107,8 @@ export default function MyCardsScreen() {
         ...nextInterests.map((interest) => interest.startupId),
         ...nextMatches.map((match) => match.startupId),
         ...nextDiscussionRooms.map((room) => room.opportunityId),
+        ...nextAgreements.map((agreement) => agreement.opportunityId),
+        ...nextInvestments.map((investment) => investment.opportunityId).filter((opportunityId): opportunityId is string => Boolean(opportunityId)),
       ]));
       const opportunityEntries = await Promise.all(
         startupIds.map(async (startupId) => {
@@ -292,11 +326,11 @@ export default function MyCardsScreen() {
   return (
     <Screen
       eyebrow="My Cards"
-      title={isFounderMode ? 'Founder cards.' : 'Investor cards.'}
+      title="Deal Pipeline"
       subtitle={
         isFounderMode
-          ? 'Accept Interest, create Matches, and receive Funding.'
-          : 'Track Interests, Matches, Investment Discussion Rooms, and Active Investments.'
+          ? 'Track each startup once from Interest Received through Funding Received.'
+          : 'Track every startup deal once from Interest Shown through completion.'
       }
     >
       {isLoading ? <LoadingState label="Loading My Cards" /> : null}
@@ -307,13 +341,22 @@ export default function MyCardsScreen() {
       ) : null}
 
       <View style={ui.row}>
-        <StatCard label={isFounderMode ? 'Funding Received' : 'Invested'} value={`${safeCurrency(totalFunding)} USD`} tone={colors.luxuryGold} />
-        <StatCard label="Matches" value={String(matches.length)} tone={colors.accent} />
+        <StatCard label={isFounderMode ? 'Completed agreements' : 'Arranged capital'} value={`${safeCurrency(totalFunding)} USD`} tone={colors.luxuryGold} />
+        <StatCard label="Active deals" value={String(activePipelines.length)} tone={colors.accent} />
       </View>
 
-      {!isLoading && founderCards.length === 0 && shownInterests.length === 0 && matches.length === 0 && discussionRooms.length === 0 && readyAgreements.length === 0 && investments.length === 0 ? (
+      {archivedCount > 0 ? (
+        <Card>
+          <Text style={styles.sectionTitle}>Archive / Portfolio</Text>
+          <Text style={styles.meta}>
+            {archivedCount} completed {archivedCount === 1 ? 'startup has' : 'startups have'} moved out of active My Cards.
+          </Text>
+        </Card>
+      ) : null}
+
+      {!isLoading && activePipelines.length === 0 ? (
         <EmptyState
-          title={isFounderMode ? 'No investor Interest yet.' : 'No cards yet.'}
+          title={isFounderMode ? 'No active deal pipeline yet.' : 'No active cards yet.'}
           message={
             isFounderMode
               ? 'Incoming Angel Investor Interest appears here after they swipe right.'
@@ -329,67 +372,17 @@ export default function MyCardsScreen() {
         />
       ) : null}
 
-      {!isLoading && isFounderMode && founderCards.length > 0 ? (
+      {!isLoading && activePipelines.length > 0 ? (
         <View style={styles.list}>
-          <Text style={styles.sectionTitle}>Own Startup Cards</Text>
-          {founderCards.map((card) => (
-            <FounderCard key={card.id} opportunity={card} />
-          ))}
-        </View>
-      ) : null}
-
-      {!isLoading && shownInterests.length > 0 ? (
-        <View style={styles.list}>
-          <Text style={styles.sectionTitle}>Interests</Text>
-          {shownInterests.map((interest) => (
-            <InterestCard
-              key={interest.id}
-              interest={interest}
-              opportunity={opportunities[interest.startupId]}
+          <Text style={styles.sectionTitle}>Active Deal Pipeline</Text>
+          {activePipelines.map((pipeline) => (
+            <DealPipelineCard
+              key={pipeline.id}
+              pipeline={pipeline}
               founderMode={isFounderMode}
-              onAccept={() => handleAcceptInterest(interest)}
+              onAcceptInterest={pipeline.interest ? () => handleAcceptInterest(pipeline.interest as InvestmentInterest) : undefined}
+              onOpenMatch={pipeline.match ? () => handleOpenMatch(pipeline.match as Match) : undefined}
             />
-          ))}
-        </View>
-      ) : null}
-
-      {!isLoading && matches.length > 0 ? (
-        <View style={styles.list}>
-          <Text style={styles.sectionTitle}>Matches</Text>
-          {matches.map((match) => (
-            <MatchCard
-              key={match.id}
-              match={match}
-              opportunity={opportunities[match.startupId]}
-              onOpen={() => handleOpenMatch(match)}
-            />
-          ))}
-        </View>
-      ) : null}
-
-      {!isLoading && discussionRooms.length > 0 ? (
-        <View style={styles.list}>
-          <Text style={styles.sectionTitle}>Discussion Rooms</Text>
-          {discussionRooms.map((room) => (
-            <DiscussionRoomCard key={room.id} room={room} onOpen={() => router.push(`/discussion-room/${room.id}`)} />
-          ))}
-        </View>
-      ) : null}
-
-      {!isLoading && readyAgreements.length > 0 ? (
-        <View style={styles.list}>
-          <Text style={styles.sectionTitle}>Ready Agreements</Text>
-          {readyAgreements.map((agreement) => (
-            <AgreementCard key={agreement.id} agreement={agreement} />
-          ))}
-        </View>
-      ) : null}
-
-      {!isLoading && investments.length > 0 ? (
-        <View style={styles.list}>
-          <Text style={styles.sectionTitle}>{isFounderMode ? 'Funding Received' : 'Investment Active'}</Text>
-          {investments.map((investment) => (
-            <InvestmentRow key={investment.id} investment={investment} founderMode={isFounderMode} />
           ))}
         </View>
       ) : null}
@@ -397,113 +390,144 @@ export default function MyCardsScreen() {
   );
 }
 
-function FounderCard({ opportunity }: { opportunity: InvestmentOpportunity }) {
-  return (
-    <Card style={styles.compactCard}>
-      <Text style={styles.cardTitle}>{opportunity.title ?? opportunity.startupName}</Text>
-      <Text style={styles.meta}>Status: {opportunity.status}</Text>
-      <View style={styles.playingCardWrap}>
-        <StartupPlayingCard card={mapOpportunityToStartupCard(opportunity)} compact />
-      </View>
-    </Card>
-  );
-}
-
-function InterestCard({
-  interest,
-  opportunity,
+function DealPipelineCard({
+  pipeline,
   founderMode,
-  onAccept,
+  onAcceptInterest,
+  onOpenMatch,
 }: {
-  interest: InvestmentInterest;
-  opportunity?: InvestmentOpportunity;
+  pipeline: DealPipeline;
   founderMode: boolean;
-  onAccept: () => void;
+  onAcceptInterest?: () => void;
+  onOpenMatch?: () => void;
 }) {
+  const opportunity = pipeline.opportunity;
+  const title = opportunity?.startupName
+    ?? pipeline.agreement?.startupName
+    ?? pipeline.room?.startupName
+    ?? pipeline.investment?.startupName
+    ?? 'Startup Opportunity';
+  const founderName = opportunity?.founderName
+    ?? pipeline.agreement?.founderName
+    ?? pipeline.room?.founderName
+    ?? pipeline.investment?.founderName
+    ?? 'Founder';
+  const investorName = pipeline.agreement?.investorName
+    ?? pipeline.room?.investorName
+    ?? pipeline.investment?.investorName
+    ?? 'Angel Investor';
+  const amount = pipeline.agreement?.investmentAmount
+    ?? pipeline.room?.investmentAmount
+    ?? pipeline.investment?.amount
+    ?? opportunity?.fundingNeeded;
+  const allocation = pipeline.agreement?.investorAllocation
+    ?? pipeline.room?.investorAllocation
+    ?? pipeline.investment?.allocation
+    ?? opportunity?.investorAllocation;
+
   return (
-    <Card style={styles.compactCard}>
-      <Text style={styles.cardTitle}>{opportunity?.startupName ?? 'Startup Opportunity'}</Text>
-      <Text style={styles.meta}>Interest shown on {safeDate(interest.createdAt)}</Text>
+    <Card style={styles.pipelineCard}>
+      <View style={styles.rowHeader}>
+        <View style={styles.pipelineTitleBlock}>
+          <Text style={styles.cardTitle}>{title}</Text>
+          <Text style={styles.meta}>Founder: {founderName}</Text>
+          {!founderMode ? <Text style={styles.meta}>Investor: {investorName}</Text> : null}
+        </View>
+        <Text style={styles.status}>{pipeline.currentStep === 'completed' ? 'Archived' : 'Active'}</Text>
+      </View>
+
       {opportunity ? (
         <View style={styles.playingCardWrap}>
           <StartupPlayingCard card={mapOpportunityToStartupCard(opportunity)} compact />
         </View>
       ) : null}
-      {founderMode ? <PrimaryButton label="Accept Interest & Start Discussion" onPress={onAccept} /> : null}
-    </Card>
-  );
-}
 
-function MatchCard({
-  match,
-  opportunity,
-  onOpen,
-}: {
-  match: Match;
-  opportunity?: InvestmentOpportunity;
-  onOpen: () => void;
-}) {
-  return (
-    <Card>
-      <Text style={styles.cardTitle}>{opportunity?.startupName ?? 'Matched Startup'}</Text>
-      <Text style={styles.meta}>Match created on {safeDate(match.matchedAt)}</Text>
-      <PrimaryButton label="Start Discussion" onPress={onOpen} />
-    </Card>
-  );
-}
+      <View style={styles.detailGrid}>
+        <Detail label="Amount" value={safeCurrency(amount)} />
+        <Detail label="Allocation" value={safePercent(allocation)} />
+      </View>
 
-function DiscussionRoomCard({ room, onOpen }: { room: DiscussionRoom; onOpen: () => void }) {
-  return (
-    <Card>
-      <Text style={styles.cardTitle}>{room.startupName}</Text>
-      <Text style={styles.meta}>Founder: {room.founderName}</Text>
-      <Text style={styles.meta}>Investor: {room.investorName}</Text>
-      <Text style={styles.meta}>Status: {room.status}</Text>
-      <PrimaryButton label="Open Discussion Room" onPress={onOpen} />
-    </Card>
-  );
-}
+      <View style={styles.timeline}>
+        {pipelineSteps.map((step, index) => {
+          const isCompleted = pipeline.completedSteps[step.key];
+          const isCurrent = pipeline.currentStep === step.key;
 
-function AgreementCard({ agreement }: { agreement: InvestmentAgreement }) {
-  const isFundingStage = ['awaiting_funding', 'investor_sent', 'funded'].includes(agreement.status);
+          return (
+            <View key={step.key} style={styles.timelineRow}>
+              <View style={[
+                styles.timelineMarker,
+                isCompleted ? styles.timelineMarkerDone : null,
+                isCurrent ? styles.timelineMarkerCurrent : null,
+              ]}>
+                <Text style={styles.timelineMarkerText}>{isCompleted ? '✓' : index + 1}</Text>
+              </View>
+              <View style={styles.timelineTextBlock}>
+                <Text style={[
+                  styles.timelineLabel,
+                  isCompleted ? styles.timelineDone : null,
+                  isCurrent ? styles.timelineCurrent : null,
+                ]}>
+                  {step.label}
+                </Text>
+                <Text style={styles.timelineState}>
+                  {isCompleted ? 'Completed' : isCurrent ? 'Current step' : 'Not started'}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
 
-  return (
-    <Card>
-      <Text style={styles.cardTitle}>{agreement.startupName}</Text>
-      <Text style={styles.meta}>Founder accepted: {agreement.founderAccepted ? 'Yes' : 'No'}</Text>
-      <Text style={styles.meta}>Investor accepted: {agreement.investorAccepted ? 'Yes' : 'No'}</Text>
-      <Text style={styles.meta}>Status: {agreement.status}</Text>
-      <PrimaryButton
-        label={isFundingStage ? 'Open Funding Instructions' : 'Open Agreement'}
-        onPress={() => router.push(isFundingStage ? `/payment/${agreement.id}` : `/agreement/${agreement.id}`)}
+      <PipelineAction
+        pipeline={pipeline}
+        founderMode={founderMode}
+        onAcceptInterest={onAcceptInterest}
+        onOpenMatch={onOpenMatch}
       />
     </Card>
   );
 }
 
-function InvestmentRow({ investment, founderMode }: { investment: V5Investment; founderMode: boolean }) {
-  const displayName = founderMode
-    ? investment.investorName ?? 'Angel Investor'
-    : investment.startupName ?? investment.note ?? 'Startup Investment';
-  const meta = founderMode ? 'Funding Received' : `Founder: ${investment.founderName ?? 'Unknown'}`;
+function PipelineAction({
+  pipeline,
+  founderMode,
+  onAcceptInterest,
+  onOpenMatch,
+}: {
+  pipeline: DealPipeline;
+  founderMode: boolean;
+  onAcceptInterest?: () => void;
+  onOpenMatch?: () => void;
+}) {
+  if (founderMode && pipeline.interest && !pipeline.room) {
+    return (
+      <PrimaryButton
+        label="Accept Interest & Start Discussion"
+        onPress={onAcceptInterest ?? (() => undefined)}
+        disabled={!onAcceptInterest}
+      />
+    );
+  }
 
-  return (
-    <Card>
-      <View style={styles.rowHeader}>
-        <View>
-          <Text style={styles.cardTitle}>{displayName}</Text>
-          <Text style={styles.meta}>{meta}</Text>
-        </View>
-        <Text style={styles.status}>{founderMode ? 'Funding Received' : 'Investment Active'}</Text>
-      </View>
-      <View style={styles.detailGrid}>
-        <Detail label="Amount" value={`${safeCurrency(investment.amount)} USD`} />
-        <Detail label="Allocation" value={safePercent(investment.allocation)} />
-        <Detail label="Date" value={safeDate(investment.paidAt ?? investment.fundedAt ?? investment.createdAt)} />
-        <Detail label="Status" value={founderMode ? 'Funding Received' : 'Investment Active'} />
-      </View>
-    </Card>
-  );
+  if (pipeline.room && !pipeline.agreement) {
+    return <PrimaryButton label="Open Discussion Room" onPress={() => router.push(`/discussion-room/${pipeline.room?.id}`)} />;
+  }
+
+  if (pipeline.agreement) {
+    const isFundingStage = ['awaiting_funding', 'funding_arranged', 'completed'].includes(pipeline.agreement.status);
+    return (
+      <PrimaryButton
+        label={isFundingStage ? 'Open Funding Instructions' : 'Open Agreement'}
+        onPress={() => router.push(isFundingStage ? `/payment/${pipeline.agreement?.id}` : `/agreement/${pipeline.agreement?.id}`)}
+      />
+    );
+  }
+
+  if (pipeline.match) {
+    return <PrimaryButton label="Open Match" onPress={onOpenMatch ?? (() => undefined)} disabled={!onOpenMatch} />;
+  }
+
+  return <Text style={styles.meta}>Waiting for the next deal step.</Text>;
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
@@ -513,6 +537,111 @@ function Detail({ label, value }: { label: string; value: string }) {
       <Text style={styles.detailValue}>{value}</Text>
     </View>
   );
+}
+
+function buildDealPipelines({
+  founderCards,
+  interests,
+  matches,
+  discussionRooms,
+  agreements,
+  investments,
+  opportunities,
+  includeFounderCards,
+}: {
+  founderCards: InvestmentOpportunity[];
+  interests: InvestmentInterest[];
+  matches: Match[];
+  discussionRooms: DiscussionRoom[];
+  agreements: InvestmentAgreement[];
+  investments: V5Investment[];
+  opportunities: OpportunityMap;
+  includeFounderCards: boolean;
+}) {
+  const pipelines = new Map<string, DealPipelineDraft>();
+  const agreementById = new Map(agreements.map((agreement) => [agreement.id, agreement]));
+
+  function ensurePipeline(startupId: string) {
+    const existing = pipelines.get(startupId);
+    if (existing) {
+      return existing;
+    }
+
+    const next: DealPipelineDraft = {
+      id: startupId,
+      opportunity: opportunities[startupId],
+    };
+    pipelines.set(startupId, next);
+    return next;
+  }
+
+  if (includeFounderCards) {
+    founderCards.forEach((opportunity) => {
+      const pipeline = ensurePipeline(opportunity.id);
+      pipeline.opportunity = opportunity;
+    });
+  }
+
+  interests.forEach((interest) => {
+    const pipeline = ensurePipeline(interest.startupId);
+    pipeline.interest = pipeline.interest ?? interest;
+  });
+
+  matches.forEach((match) => {
+    const pipeline = ensurePipeline(match.startupId);
+    pipeline.match = pipeline.match ?? match;
+  });
+
+  discussionRooms.forEach((room) => {
+    const pipeline = ensurePipeline(room.opportunityId);
+    pipeline.room = pipeline.room ?? room;
+  });
+
+  agreements.forEach((agreement) => {
+    const pipeline = ensurePipeline(agreement.opportunityId);
+    pipeline.agreement = pipeline.agreement ?? agreement;
+  });
+
+  investments.forEach((investment) => {
+    const agreement = investment.agreementId ? agreementById.get(investment.agreementId) : undefined;
+    const startupId = investment.opportunityId ?? agreement?.opportunityId ?? investment.projectId ?? investment.id;
+    const pipeline = ensurePipeline(startupId);
+    pipeline.investment = pipeline.investment ?? investment;
+  });
+
+  return Array.from(pipelines.values()).map((pipeline) => {
+    const completedSteps = getCompletedPipelineSteps(pipeline);
+    const currentStep: DealPipeline['currentStep'] = pipelineSteps.find((step) => !completedSteps[step.key])?.key ?? 'completed';
+
+    return {
+      id: pipeline.id,
+      opportunity: pipeline.opportunity,
+      interest: pipeline.interest,
+      match: pipeline.match,
+      room: pipeline.room,
+      agreement: pipeline.agreement,
+      investment: pipeline.investment,
+      completedSteps,
+      currentStep,
+    };
+  });
+}
+
+function getCompletedPipelineSteps(pipeline: Partial<DealPipeline>) {
+  const hasInvestment = Boolean(pipeline.investment);
+  const agreementSigned = hasInvestment
+    || pipeline.agreement?.status === 'awaiting_funding'
+    || pipeline.agreement?.status === 'funding_arranged'
+    || pipeline.agreement?.status === 'completed'
+    || (pipeline.agreement?.founderAccepted === true && pipeline.agreement?.investorAccepted === true);
+
+  return {
+    interest: Boolean(pipeline.interest || pipeline.match || pipeline.room || pipeline.agreement || hasInvestment),
+    match: Boolean(pipeline.match || pipeline.room || pipeline.agreement || hasInvestment),
+    discussion: Boolean(pipeline.room || pipeline.agreement || hasInvestment),
+    agreement: agreementSigned,
+    funding: Boolean(hasInvestment || pipeline.agreement?.status === 'completed'),
+  };
 }
 
 function mapStartupInterestToLegacy(interest: StartupInterest): InvestmentInterest {
@@ -586,8 +715,12 @@ const styles = StyleSheet.create({
   list: {
     gap: spacing.md,
   },
-  compactCard: {
+  pipelineCard: {
     gap: spacing.md,
+  },
+  pipelineTitleBlock: {
+    flex: 1,
+    gap: spacing.xs,
   },
   playingCardWrap: {
     alignSelf: 'center',
@@ -640,5 +773,60 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     fontWeight: '900',
+  },
+  timeline: {
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(216, 201, 163, 0.18)',
+    borderRadius: 20,
+    padding: spacing.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  timelineRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  timelineMarker: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 30,
+    height: 30,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 15,
+    backgroundColor: colors.black,
+  },
+  timelineMarkerDone: {
+    borderColor: colors.success,
+    backgroundColor: 'rgba(46, 125, 50, 0.24)',
+  },
+  timelineMarkerCurrent: {
+    borderColor: colors.luxuryGold,
+    backgroundColor: 'rgba(200, 162, 74, 0.18)',
+  },
+  timelineMarkerText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  timelineTextBlock: {
+    flex: 1,
+  },
+  timelineLabel: {
+    color: colors.subtle,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  timelineDone: {
+    color: colors.success,
+  },
+  timelineCurrent: {
+    color: colors.luxuryGold,
+  },
+  timelineState: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

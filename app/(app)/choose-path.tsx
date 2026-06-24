@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { userService } from '@/services/userService';
 import type { ActiveRole } from '@/types/User';
+import { appRouteForRole } from '@/utils/onboarding';
 
 const pathOptions: Array<{
   role: ActiveRole;
@@ -46,11 +47,12 @@ export default function ChoosePathScreen() {
       await userService.updateUser(authUser.uid, {
         roles,
         activeRole: role,
-        role: role === 'founder' ? 'entrepreneur' : 'angel_investor',
+        role,
         intent: role,
+        hasChosenPath: true,
       });
       await refreshProfile();
-      router.replace('/investor-feed');
+      router.replace(appRouteForRole(role));
     } catch (error) {
       console.info('[PromptFund ChoosePath] role update failed', getFriendlyErrorMessage(error));
     }

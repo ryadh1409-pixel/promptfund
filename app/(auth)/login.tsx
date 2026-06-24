@@ -1,5 +1,4 @@
 import { Link } from 'expo-router';
-import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -9,7 +8,6 @@ import { useAuth } from '@/context/AuthContext';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 
 export default function LoginScreen() {
-  const router = useRouter();
   const { error, loading, signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,7 +17,6 @@ export default function LoginScreen() {
     setLocalError(null);
     try {
       await signIn({ email: email.trim(), password });
-      router.replace('/choose-path');
     } catch (loginError) {
       setLocalError(getFriendlyErrorMessage(loginError));
     }

@@ -6,7 +6,7 @@ export type InvestmentFlowStatus =
   | 'ready'
   | 'agreement_pending'
   | 'awaiting_funding'
-  | 'investor_sent'
+  | 'funding_arranged'
   | 'funded'
   | 'completed';
 
@@ -85,6 +85,8 @@ export type InvestmentAgreement = {
   founderAccepted: boolean;
   investorAccepted: boolean;
   status: InvestmentFlowStatus;
+  fundingArrangedAt?: string;
+  completedAt?: string;
   investorSentAt?: string;
   fundedAt?: string;
   createdAt?: string;

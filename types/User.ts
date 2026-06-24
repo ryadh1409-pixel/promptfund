@@ -10,11 +10,14 @@ export type User = {
   handle: string;
   displayName?: string;
   username?: string;
+  email?: string;
+  phone?: string;
   photoURL?: string;
   role: UserRole;
   roles?: ActiveRole[];
   activeRole?: ActiveRole;
   intent?: UserIntent;
+  hasChosenPath?: boolean;
   avatar: string;
   bio: string;
   location: string;
