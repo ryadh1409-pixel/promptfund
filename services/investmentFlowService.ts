@@ -5,6 +5,7 @@ import { getFirebaseApp } from '@/firebase/config';
 import { firestoreAdapter, getPromptFundFirestore } from '@/firebase/firestore';
 import { AppError } from '@/services/errorHandler';
 import { notificationService } from '@/services/notificationService';
+import { userService } from '@/services/userService';
 import type {
   CreateInvestmentOpportunityInput,
   DiscussionMessage,
@@ -16,7 +17,7 @@ import type {
 } from '@/types/InvestmentFlow';
 import type { InvestmentInterest, Match } from '@/types/FundingRequest';
 import type { Project } from '@/types/Project';
-import type { ModerationFlag, User } from '@/types/User';
+import type { ActivityTimelineEvent, ModerationFlag, User } from '@/types/User';
 import { moderateChatMessage } from '@/utils/chatModeration';
 
 export const defaultInvestmentAmount = 22;
@@ -70,6 +71,28 @@ function logAcceptFlow(operation: string, path: string, extra?: Record<string, u
   });
 }
 
+function recordTimeline(input: Omit<ActivityTimelineEvent, 'id' | 'createdAt'>) {
+  return firestoreAdapter.create<Omit<ActivityTimelineEvent, 'id'>>('activityTimeline', {
+    ...input,
+    createdAt: now(),
+  }).catch((error) => console.info('[PromptFund Timeline] write failed', error));
+}
+
+async function notifyAdmins(title: string, body: string, type: 'startup' | 'interest' | 'match' | 'discussion' | 'agreement_signed' | 'funding_confirmed' | 'report' | 'block' | 'startup_archived', data?: Record<string, string>) {
+  try {
+    const admins = (await userService.listUsers()).filter((user) => user.role === 'admin');
+    await Promise.all(admins.map((admin) => notificationService.createNotification({
+      userId: admin.id,
+      title,
+      body,
+      type,
+      data,
+    })));
+  } catch (error) {
+    console.info('[PromptFund Notifications] admin notification failed', error);
+  }
+}
+
 export function mapProjectToOpportunity(project: Project): InvestmentOpportunity {
   const title = project.startupName ?? project.title ?? 'Startup';
   const description = project.description || defaultInvestmentPurpose;
@@ -110,10 +133,14 @@ export const investmentFlowService = {
   },
 
   async createOpportunity(input: CreateInvestmentOpportunityInput): Promise<InvestmentOpportunity> {
-    return firestoreAdapter.create<Omit<InvestmentOpportunity, 'id'>>('startupOpportunities', {
+    const opportunity = await firestoreAdapter.create<Omit<InvestmentOpportunity, 'id'>>('startupOpportunities', {
       ...input,
       status: input.status ?? 'active',
     });
+    await notifyAdmins('New startup', `${opportunity.startupName} was published by ${opportunity.founderName}.`, 'startup', {
+      startupId: opportunity.id,
+    });
+    return opportunity;
   },
 
   async ensureOpportunityFromProject(project: Project): Promise<InvestmentOpportunity> {
@@ -222,7 +249,12 @@ export const investmentFlowService = {
     return createdRoom ?? room;
   },
 
-  async addDiscussionMessage(room: DiscussionRoom, sender: Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle'>, body: string) {
+  async addDiscussionMessage(
+    room: DiscussionRoom,
+    sender: Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle'>,
+    body: string,
+    options: { imageUrl?: string; type?: 'user' | 'system' } = {},
+  ) {
     const moderation = moderateChatMessage(body);
     if (!moderation.allowed) {
       await firestoreAdapter.create<Omit<ModerationFlag, 'id'>>('moderationFlags', {
@@ -237,6 +269,9 @@ export const investmentFlowService = {
     }
 
     const recipientId = sender.id === room.founderId ? room.investorId : room.founderId;
+    if (await userService.isBlockedBetween(sender.id, recipientId)) {
+      throw new AppError('You cannot message this user because one of you has blocked the other.', 'chat/blocked-user');
+    }
     const createdAt = now();
     const message: DiscussionMessage = {
       id: `message-${Date.now()}`,
@@ -245,6 +280,8 @@ export const investmentFlowService = {
       senderName: displayName(sender),
       body,
       createdAt,
+      type: options.type ?? 'user',
+      imageUrl: options.imageUrl,
       deliveredTo: [recipientId],
       readBy: [sender.id],
     };
@@ -255,6 +292,8 @@ export const investmentFlowService = {
       senderName: message.senderName,
       body: message.body,
       createdAt: message.createdAt,
+      type: message.type,
+      imageUrl: message.imageUrl,
       deliveredTo: message.deliveredTo,
       readBy: message.readBy,
     });
@@ -402,6 +441,14 @@ export const investmentFlowService = {
     console.log('AGREEMENT PAYLOAD', payload);
     console.log('AGREEMENT USER', currentUid());
     const agreement = await firestoreAdapter.setWithId<Omit<InvestmentAgreement, 'id'>>('agreements', agreementId, payload);
+    await recordTimeline({
+      startupId: room.opportunityId,
+      discussionRoomId: room.id,
+      agreementId,
+      actorId: currentUid() ?? room.founderId,
+      eventType: 'agreement_signed',
+      label: 'Agreement Created',
+    });
 
     const roomAgreementPayload = {
       agreementId,
@@ -442,6 +489,14 @@ export const investmentFlowService = {
     }).catch((error) => console.info('[PromptFund Notifications] agreement notification failed', error));
 
     if (status === 'awaiting_funding') {
+      await recordTimeline({
+        startupId: agreement.opportunityId,
+        discussionRoomId: agreement.discussionRoomId,
+        agreementId: agreement.id,
+        actorId: currentUid() ?? agreement.founderId,
+        eventType: 'agreement_signed',
+        label: 'Agreement Signed',
+      });
       const fundingPayload = {
         status,
       };
@@ -463,7 +518,7 @@ export const investmentFlowService = {
   }) {
     const interestId = flowId('interest', opportunity.id, investorId);
 
-    return firestoreAdapter.setWithId<Omit<StartupInterest, 'id'>>('interests', interestId, {
+    const interest = await firestoreAdapter.setWithId<Omit<StartupInterest, 'id'>>('interests', interestId, {
       interestId,
       startupOpportunityId: opportunity.id,
       founderId: opportunity.founderId,
@@ -471,6 +526,23 @@ export const investmentFlowService = {
       createdAt: now(),
       status: 'interested',
     });
+    await recordTimeline({
+      startupId: opportunity.id,
+      actorId: investorId,
+      eventType: 'interest_received',
+      label: 'Interest Received',
+    });
+    notificationService.createNotification({
+      userId: opportunity.founderId,
+      title: 'New investor interest',
+      body: `An Angel Investor showed interest in ${opportunity.startupName}.`,
+      type: 'interest',
+      data: { startupId: opportunity.id },
+    }).catch((error) => console.info('[PromptFund Notifications] interest notification failed', error));
+    await notifyAdmins('New interest', `${opportunity.startupName} received investor interest.`, 'interest', {
+      startupId: opportunity.id,
+    });
+    return interest;
   },
 
   async createDiscussionRoomForInterest({
@@ -492,6 +564,24 @@ export const investmentFlowService = {
       agreementId: flowId('room', opportunity.id, interest.investorId),
     });
     console.log('STEP 3A: Match created', match.id);
+    await recordTimeline({
+      startupId: opportunity.id,
+      actorId: interest.investorId,
+      eventType: 'match_created',
+      label: 'Match Created',
+      metadata: { matchId: match.id },
+    });
+    notificationService.createNotification({
+      userId: interest.investorId,
+      title: 'Founder accepted',
+      body: `${opportunity.founderName} accepted your interest in ${opportunity.startupName}.`,
+      type: 'match',
+      data: { startupId: opportunity.id, matchId: match.id },
+    }).catch((error) => console.info('[PromptFund Notifications] match notification failed', error));
+    await notifyAdmins('Match created', `${opportunity.startupName} created a founder-investor match.`, 'match', {
+      startupId: opportunity.id,
+      matchId: match.id,
+    });
 
     console.log('STEP 3B: Creating discussion room');
     const room = await this.startDiscussion({
@@ -500,6 +590,17 @@ export const investmentFlowService = {
       investorName,
     });
     console.log('STEP 4: Discussion room created', room.id);
+    await recordTimeline({
+      startupId: opportunity.id,
+      discussionRoomId: room.id,
+      actorId: interest.investorId,
+      eventType: 'discussion_started',
+      label: 'Discussion Started',
+    });
+    await notifyAdmins('Discussion started', `${opportunity.startupName} opened an Investment Discussion Room.`, 'discussion', {
+      startupId: opportunity.id,
+      discussionRoomId: room.id,
+    });
 
     await firestoreAdapter.update<StartupInterest>('interests', interest.id, {
       status: 'discussion',
@@ -690,6 +791,25 @@ export const investmentFlowService = {
         status: 'funding_arranged',
       }),
     ]);
+    await recordTimeline({
+      startupId: agreement.opportunityId,
+      discussionRoomId: agreement.discussionRoomId,
+      agreementId: agreement.id,
+      actorId: currentUid() ?? agreement.investorId,
+      eventType: 'funding_confirmed',
+      label: 'Funding Confirmed',
+    });
+  },
+
+  async recordFundingInstructionsOpened(agreement: InvestmentAgreement, actorId: string) {
+    await recordTimeline({
+      startupId: agreement.opportunityId,
+      discussionRoomId: agreement.discussionRoomId,
+      agreementId: agreement.id,
+      actorId,
+      eventType: 'funding_instructions_opened',
+      label: 'Funding Instructions Opened',
+    });
   },
 
   async confirmFundingArrangement(agreement: InvestmentAgreement) {
@@ -730,6 +850,14 @@ export const investmentFlowService = {
         status: 'completed',
       }),
     ]);
+    await recordTimeline({
+      startupId: agreement.opportunityId,
+      discussionRoomId: agreement.discussionRoomId,
+      agreementId: agreement.id,
+      actorId: currentUid() ?? agreement.founderId,
+      eventType: 'completed',
+      label: 'Deal Completed',
+    });
 
     await Promise.all([
       notificationService.createNotification({

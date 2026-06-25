@@ -12,6 +12,9 @@ export type User = {
   username?: string;
   email?: string;
   phone?: string;
+  linkedIn?: string;
+  website?: string;
+  shareFundingContactInfo?: boolean;
   photoURL?: string;
   role: UserRole;
   roles?: ActiveRole[];
@@ -93,6 +96,7 @@ export type ActivityTimelineEvent = {
     | 'match_created'
     | 'discussion_started'
     | 'agreement_signed'
+    | 'funding_instructions_opened'
     | 'funding_confirmed'
     | 'completed'
     | 'cancelled'
@@ -113,6 +117,7 @@ export type AppNotification = {
     | 'agreement_accepted'
     | 'funding_confirmed'
     | 'admin_announcement'
+    | 'startup'
     | 'interest'
     | 'match'
     | 'discussion'

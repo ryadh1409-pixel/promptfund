@@ -21,6 +21,8 @@ export type DiscussionMessage = {
   senderName: string;
   body: string;
   createdAt: string;
+  type?: 'user' | 'system';
+  imageUrl?: string;
   deliveredTo?: string[];
   readBy?: string[];
   moderationFlags?: string[];

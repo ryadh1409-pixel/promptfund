@@ -68,6 +68,16 @@ export default function PaymentScreen() {
     };
   }, [agreement?.founderId]);
 
+  useEffect(() => {
+    if (!agreement || !authUser?.uid || agreement.status !== 'awaiting_funding') {
+      return;
+    }
+
+    investmentFlowService.recordFundingInstructionsOpened(agreement, authUser.uid).catch((error) => {
+      console.info('[PromptFund Timeline] funding instructions event failed', error);
+    });
+  }, [agreement, authUser?.uid]);
+
   async function handleFundingArranged() {
     if (!agreement) {
       return;
@@ -110,6 +120,9 @@ export default function PaymentScreen() {
       ? 'investor'
       : null;
   const payoutDetails = formatPayoutDetails(founderProfile);
+  const canViewContact = agreement?.founderAccepted === true
+    && agreement?.investorAccepted === true
+    && founderProfile?.shareFundingContactInfo === true;
   const isAwaitingInvestor = agreement?.status === 'awaiting_funding';
   const isFundingArranged = agreement?.status === 'funding_arranged';
   const isCompleted = agreement?.status === 'completed';
@@ -146,16 +159,19 @@ export default function PaymentScreen() {
           </Card>
 
           <Card>
-            <Text style={styles.sectionTitle}>Founder Contact Details</Text>
-            {payoutDetails.length > 0 ? (
+            <Text style={styles.sectionTitle}>Founder Contact</Text>
+            {canViewContact && payoutDetails.length > 0 ? (
               <View style={styles.grid}>
                 {payoutDetails.map((detail) => (
                   <FieldPreview key={detail.label} label={detail.label} value={detail.value} />
                 ))}
               </View>
             ) : (
-              <Text style={styles.copy}>No founder contact details are available yet.</Text>
+              <Text style={styles.copy}>No contact information has been shared yet.</Text>
             )}
+            {agreement.discussionRoomId ? (
+              <PrimaryButton label="Continue Discussion" variant="secondary" onPress={() => router.push(`/discussion-room/${agreement.discussionRoomId}`)} />
+            ) : null}
           </Card>
 
           <Card>
@@ -233,9 +249,8 @@ function formatPayoutDetails(profile: User | null) {
   return [
     profile.email ? { label: 'Email', value: profile.email } : null,
     profile.phone ? { label: 'Phone', value: profile.phone } : null,
-    profile.interacEmail ? { label: 'Interac Email', value: profile.interacEmail } : null,
-    profile.wiseEmail ? { label: 'Wise Email', value: profile.wiseEmail } : null,
-    profile.paypalEmail ? { label: 'PayPal Email', value: profile.paypalEmail } : null,
+    profile.linkedIn ? { label: 'LinkedIn', value: profile.linkedIn } : null,
+    profile.website ? { label: 'Website', value: profile.website } : null,
   ].filter((detail): detail is { label: string; value: string } => detail !== null);
 }
 

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Card, EmptyState, LoadingState, PrimaryButton, Screen } from '@/components/ui/Primitives';
-import { colors, spacing } from '@/constants/theme';
+import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { investmentFlowService } from '@/services/investmentFlowService';
@@ -17,6 +17,8 @@ export default function ArchivePortfolioScreen() {
   const [investments, setInvestments] = useState<V5Investment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<'all' | 'completed'>('all');
 
   useEffect(() => {
     async function loadArchive() {
@@ -42,6 +44,19 @@ export default function ArchivePortfolioScreen() {
   }, [authUser, isFounderMode]);
 
   const totalCapital = investments.reduce((sum, investment) => sum + (investment.amount ?? 0), 0);
+  const averageInvestment = investments.length > 0 ? totalCapital / investments.length : 0;
+  const visibleInvestments = investments.filter((investment) => {
+    if (filter === 'completed' && investment.status !== 'completed' && investment.status !== 'active') {
+      return false;
+    }
+
+    const haystack = [
+      investment.startupName,
+      investment.founderName,
+      investment.investorName,
+    ].join(' ').toLowerCase();
+    return haystack.includes(search.trim().toLowerCase());
+  });
 
   return (
     <Screen
@@ -66,8 +81,25 @@ export default function ArchivePortfolioScreen() {
           <Text style={styles.metricValue}>{safeCurrency(totalCapital)}</Text>
         </Card>
       </View>
+      <Card style={styles.filterCard}>
+        <TextInput
+          placeholder="Search completed investments"
+          placeholderTextColor={colors.subtle}
+          value={search}
+          onChangeText={setSearch}
+          style={styles.input}
+        />
+        <View style={styles.filterRow}>
+          {(['all', 'completed'] as const).map((item) => (
+            <Pressable key={item} onPress={() => setFilter(item)} style={[styles.filterChip, filter === item ? styles.filterChipActive : null]}>
+              <Text style={styles.filterText}>{item}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={styles.meta}>Average Investment: {safeCurrency(averageInvestment)}</Text>
+      </Card>
 
-      {!isLoading && investments.length === 0 ? (
+      {!isLoading && visibleInvestments.length === 0 ? (
         <EmptyState
           title="No completed investments yet."
           message="Completed Stage 5 startup agreements will appear in Archive / Portfolio."
@@ -75,7 +107,7 @@ export default function ArchivePortfolioScreen() {
         />
       ) : null}
 
-      {investments.map((investment) => (
+      {visibleInvestments.map((investment) => (
         <Card key={investment.id} style={styles.archiveCard}>
           <Text style={styles.title}>{investment.startupName ?? 'Startup Investment'}</Text>
           <Text style={styles.meta}>Founder: {investment.founderName ?? 'Unknown'}</Text>
@@ -126,6 +158,42 @@ const styles = StyleSheet.create({
   },
   archiveCard: {
     gap: spacing.sm,
+  },
+  filterCard: {
+    gap: spacing.md,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  filterChip: {
+    borderWidth: 1,
+    borderColor: 'rgba(216, 201, 163, 0.22)',
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.black,
+  },
+  filterChipActive: {
+    borderColor: colors.luxuryGold,
+    backgroundColor: 'rgba(200, 162, 74, 0.16)',
+  },
+  filterText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'capitalize',
+  },
+  input: {
+    minHeight: 52,
+    borderWidth: 1,
+    borderColor: 'rgba(200, 162, 74, 0.36)',
+    borderRadius: radii.md,
+    backgroundColor: colors.panelMuted,
+    color: colors.text,
+    paddingHorizontal: spacing.md,
+    fontSize: 15,
   },
   title: {
     color: colors.text,

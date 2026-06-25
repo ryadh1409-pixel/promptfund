@@ -82,6 +82,15 @@ export const userService = {
     return firestoreAdapter.queryByField<BlockedUser>('blockedUsers', 'blockerUid', blockerUid);
   },
 
+  async isBlockedBetween(firstUid: string, secondUid: string): Promise<boolean> {
+    const [firstBlocks, secondBlocks] = await Promise.all([
+      firestoreAdapter.getById<BlockedUser>('blockedUsers', `${firstUid}_${secondUid}`),
+      firestoreAdapter.getById<BlockedUser>('blockedUsers', `${secondUid}_${firstUid}`),
+    ]);
+
+    return Boolean(firstBlocks || secondBlocks);
+  },
+
   async reportUser(input: Omit<UserReport, 'id' | 'status' | 'createdAt'>): Promise<UserReport> {
     return firestoreAdapter.create<Omit<UserReport, 'id'>>('userReports', {
       ...input,

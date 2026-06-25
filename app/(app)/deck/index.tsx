@@ -318,7 +318,7 @@ export default function MyCardsScreen() {
       title="Deal Pipeline"
       subtitle={
         isFounderMode
-          ? 'Track each startup once from Interest Received through Funding Received.'
+          ? 'Track each startup once from Interest Received through Deal Completed.'
           : 'Track every startup deal once from Interest Shown through completion.'
       }
     >

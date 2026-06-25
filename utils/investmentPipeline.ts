@@ -2,7 +2,14 @@ import type { InvestmentInterest, Match } from '@/types/FundingRequest';
 import type { DiscussionRoom, InvestmentAgreement, InvestmentOpportunity, V5Investment } from '@/types/InvestmentFlow';
 
 export type OpportunityMap = Record<string, InvestmentOpportunity>;
-export type PipelineStepKey = 'interest' | 'match' | 'discussion' | 'agreement' | 'funding';
+export type PipelineStepKey =
+  | 'interest'
+  | 'match'
+  | 'discussion'
+  | 'agreement'
+  | 'funding_instructions'
+  | 'funding_confirmed'
+  | 'completed';
 
 export type DealPipeline = {
   id: string;
@@ -23,7 +30,9 @@ export const pipelineSteps: Array<{ key: PipelineStepKey; label: string; badgeCo
   { key: 'match', label: 'Match Created', badgeColor: '#409CFF', badgeIcon: '●' },
   { key: 'discussion', label: 'Discussion Started', badgeColor: '#8D5CF6', badgeIcon: '●' },
   { key: 'agreement', label: 'Agreement Signed', badgeColor: '#D77A22', badgeIcon: '●' },
-  { key: 'funding', label: 'Funding Received', badgeColor: '#2E7D32', badgeIcon: '●' },
+  { key: 'funding_instructions', label: 'Funding Instructions', badgeColor: '#C8A24A', badgeIcon: '●' },
+  { key: 'funding_confirmed', label: 'Funding Confirmed', badgeColor: '#409CFF', badgeIcon: '●' },
+  { key: 'completed', label: 'Deal Completed', badgeColor: '#2E7D32', badgeIcon: '●' },
 ];
 
 export function getPipelineStageMeta(pipeline: DealPipeline) {
@@ -33,7 +42,7 @@ export function getPipelineStageMeta(pipeline: DealPipeline) {
       ...finalStep,
       stageNumber: pipelineSteps.length,
       label: finalStep.label,
-      badge: `${finalStep.badgeIcon} Stage ${pipelineSteps.length} of ${pipelineSteps.length} • ${finalStep.label}`,
+      badge: `Stage ${pipelineSteps.length} of ${pipelineSteps.length} • ${finalStep.label}`,
     };
   }
 
@@ -44,7 +53,7 @@ export function getPipelineStageMeta(pipeline: DealPipeline) {
   return {
     ...step,
     stageNumber: safeIndex + 1,
-    badge: `${step.badgeIcon} Stage ${safeIndex + 1} of ${pipelineSteps.length} • ${step.label}`,
+    badge: `Stage ${safeIndex + 1} of ${pipelineSteps.length} • ${step.label}`,
   };
 }
 
@@ -156,6 +165,13 @@ function getCompletedPipelineSteps(pipeline: Partial<DealPipeline>) {
     match: Boolean(pipeline.match || pipeline.room || pipeline.agreement || hasInvestment),
     discussion: Boolean(pipeline.room || pipeline.agreement || hasInvestment),
     agreement: agreementSigned,
-    funding: Boolean(hasInvestment || pipeline.agreement?.status === 'completed'),
+    funding_instructions: Boolean(
+      hasInvestment
+      || pipeline.agreement?.status === 'awaiting_funding'
+      || pipeline.agreement?.status === 'funding_arranged'
+      || pipeline.agreement?.status === 'completed',
+    ),
+    funding_confirmed: Boolean(hasInvestment || pipeline.agreement?.status === 'funding_arranged' || pipeline.agreement?.status === 'completed'),
+    completed: Boolean(hasInvestment || pipeline.agreement?.status === 'completed'),
   };
 }

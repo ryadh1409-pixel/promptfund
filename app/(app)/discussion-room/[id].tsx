@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Card, FieldPreview, LoadingState, PrimaryButton, Screen } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
@@ -18,6 +18,8 @@ export default function DiscussionRoomScreen() {
   const [room, setRoom] = useState<DiscussionRoom | null>(null);
   const [messages, setMessages] = useState<DiscussionMessage[]>([]);
   const [message, setMessage] = useState('');
+  const [messageSearch, setMessageSearch] = useState('');
+  const [imageAttachmentUrl, setImageAttachmentUrl] = useState('');
   const [moderationWarning, setModerationWarning] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
@@ -148,8 +150,12 @@ export default function DiscussionRoomScreen() {
           handle: profile.handle,
         },
         message.trim(),
+        {
+          imageUrl: imageAttachmentUrl.trim() || undefined,
+        },
       );
       setMessage('');
+      setImageAttachmentUrl('');
     } catch (messageError) {
       const friendlyMessage = getFriendlyErrorMessage(messageError);
       if (friendlyMessage.includes('Community Guidelines')) {
@@ -159,6 +165,14 @@ export default function DiscussionRoomScreen() {
       setNotice(friendlyMessage);
     }
   }
+
+  const visibleMessages = messages.filter((item) => {
+    const search = messageSearch.trim().toLowerCase();
+    if (!search) {
+      return true;
+    }
+    return `${item.senderName} ${item.body}`.toLowerCase().includes(search);
+  });
 
   async function handleReady(role: 'founder' | 'investor') {
     if (!room) {
@@ -284,26 +298,43 @@ export default function DiscussionRoomScreen() {
             {messages.length === 0 ? (
               <Text style={styles.empty}>No discussion messages yet. Start with the investment purpose and next milestone.</Text>
             ) : null}
+            <TextInput
+              placeholder="Search messages"
+              placeholderTextColor={colors.subtle}
+              value={messageSearch}
+              onChangeText={setMessageSearch}
+              style={styles.searchInput}
+            />
             <ScrollView
               ref={messageScrollRef}
               style={styles.messageList}
               onContentSizeChange={() => messageScrollRef.current?.scrollToEnd({ animated: true })}
             >
-              {messages.map((item) => (
-                <View key={item.id} style={[
-                  styles.messageBubble,
-                  authUser?.uid === item.senderId ? styles.ownMessageBubble : null,
-                ]}>
-                  <Text style={styles.messageAuthor}>{item.senderName}</Text>
-                  <Text style={styles.messageBody}>{item.body}</Text>
-                  <View style={styles.messageMetaRow}>
-                    <Text style={styles.messageMeta}>{formatMessageTime(item.createdAt)}</Text>
-                    {authUser?.uid === item.senderId && room ? (
-                      <Text style={styles.messageMeta}>{getDeliveryStatus(item, room, authUser.uid)}</Text>
-                    ) : null}
+              {visibleMessages.map((item, index) => {
+                const previous = visibleMessages[index - 1];
+                const showDateSeparator = getMessageDateLabel(previous?.createdAt) !== getMessageDateLabel(item.createdAt);
+
+                return (
+                  <View key={item.id}>
+                    {showDateSeparator ? <Text style={styles.dateSeparator}>{getMessageDateLabel(item.createdAt)}</Text> : null}
+                    <View style={[
+                      styles.messageBubble,
+                      item.type === 'system' ? styles.systemMessageBubble : null,
+                      authUser?.uid === item.senderId ? styles.ownMessageBubble : null,
+                    ]}>
+                      <Text style={styles.messageAuthor}>{item.type === 'system' ? 'PromptFund System' : item.senderName}</Text>
+                      <Text style={styles.messageBody}>{item.body}</Text>
+                      {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.messageImage} /> : null}
+                      <View style={styles.messageMetaRow}>
+                        <Text style={styles.messageMeta}>{formatMessageTime(item.createdAt)}</Text>
+                        {authUser?.uid === item.senderId && room ? (
+                          <Text style={styles.messageMeta}>{getDeliveryStatus(item, room, authUser.uid)}</Text>
+                        ) : null}
+                      </View>
+                    </View>
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </ScrollView>
             {room && authUser && isCounterpartyTyping(room, authUser.uid) ? (
               <Text style={styles.typingText}>The other party is typing...</Text>
@@ -319,6 +350,14 @@ export default function DiscussionRoomScreen() {
                 setMessage(value);
               }}
               style={styles.input}
+            />
+            <TextInput
+              placeholder="Optional image attachment URL"
+              placeholderTextColor={colors.subtle}
+              value={imageAttachmentUrl}
+              onChangeText={setImageAttachmentUrl}
+              autoCapitalize="none"
+              style={styles.searchInput}
             />
             <PrimaryButton label="Send Message" onPress={handleSendMessage} disabled={!message.trim()} />
           </Card>
@@ -391,6 +430,21 @@ function formatMessageTime(value: unknown) {
   }
 }
 
+function getMessageDateLabel(value: unknown) {
+  if (!value) {
+    return '';
+  }
+
+  try {
+    const date = typeof value === 'object' && value !== null && 'toDate' in value
+      ? (value as { toDate: () => Date }).toDate()
+      : new Date(String(value));
+    return date.toLocaleDateString();
+  } catch {
+    return '';
+  }
+}
+
 function isCounterpartyTyping(room: DiscussionRoom, currentUid: string) {
   return Object.entries(room.typingBy ?? {}).some(([uid, isTyping]) => uid !== currentUid && isTyping);
 }
@@ -446,6 +500,27 @@ const styles = StyleSheet.create({
   messageList: {
     maxHeight: 340,
   },
+  searchInput: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: 'rgba(216, 201, 163, 0.24)',
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    color: colors.text,
+    backgroundColor: colors.black,
+  },
+  dateSeparator: {
+    alignSelf: 'center',
+    overflow: 'hidden',
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(216, 201, 163, 0.12)',
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '900',
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
   messageBubble: {
     gap: spacing.xs,
     borderWidth: 1,
@@ -458,6 +533,10 @@ const styles = StyleSheet.create({
   ownMessageBubble: {
     borderColor: 'rgba(200, 162, 74, 0.42)',
     backgroundColor: 'rgba(200, 162, 74, 0.08)',
+  },
+  systemMessageBubble: {
+    borderColor: 'rgba(64, 156, 255, 0.32)',
+    backgroundColor: 'rgba(64, 156, 255, 0.08)',
   },
   messageAuthor: {
     color: colors.accent,
@@ -478,6 +557,12 @@ const styles = StyleSheet.create({
     color: colors.subtle,
     fontSize: 11,
     fontWeight: '800',
+  },
+  messageImage: {
+    width: '100%',
+    height: 180,
+    borderRadius: radii.md,
+    backgroundColor: colors.panelMuted,
   },
   typingText: {
     color: colors.luxuryGold,

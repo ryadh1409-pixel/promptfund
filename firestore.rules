@@ -149,9 +149,14 @@ service cloud.firestore {
               'ready_for_agreement',
               'agreement_pending',
               'awaiting_funding',
+              'funding_arranged',
               'awaiting_payment',
               'funded',
-              'completed'
+              'completed',
+              'archived',
+              'frozen',
+              'suspended',
+              'deleted'
             ]
           )
         );
@@ -171,6 +176,7 @@ service cloud.firestore {
             'ready_for_agreement',
             'agreement_pending',
             'awaiting_funding',
+            'funding_arranged',
             'funded',
             'completed',
             'archived',
@@ -203,6 +209,10 @@ service cloud.firestore {
         && (
           get(/databases/$(database)/documents/discussionRooms/$(request.resource.data.discussionRoomId)).data.founderId == request.auth.uid
           || get(/databases/$(database)/documents/discussionRooms/$(request.resource.data.discussionRoomId)).data.investorId == request.auth.uid
+        )
+        && !isBlockedBetween(
+          get(/databases/$(database)/documents/discussionRooms/$(request.resource.data.discussionRoomId)).data.founderId,
+          get(/databases/$(database)/documents/discussionRooms/$(request.resource.data.discussionRoomId)).data.investorId
         );
       allow read: if isAdmin()
         || (
@@ -284,7 +294,14 @@ service cloud.firestore {
 
     match /blockedUsers/{blockId} {
       allow create: if isSignedIn() && request.resource.data.blockerUid == request.auth.uid;
-      allow read: if isAdmin() || (isSignedIn() && resource.data.blockerUid == request.auth.uid);
+      allow read: if isAdmin()
+        || (
+          isSignedIn()
+          && (
+            resource.data.blockerUid == request.auth.uid
+            || resource.data.blockedUid == request.auth.uid
+          )
+        );
       allow update, delete: if isAdmin();
     }
 

@@ -35,7 +35,7 @@ type AdminData = {
   portfolioVolume: number;
 };
 
-type AdminFilter = 'active' | 'completed' | 'reported' | 'blocked';
+type AdminFilter = 'all' | 'active' | 'completed' | 'reported' | 'blocked' | 'archived';
 
 export default function AdminDashboardScreen() {
   const { authUser, initializing, profile } = useAuth();
@@ -182,7 +182,7 @@ export default function AdminDashboardScreen() {
 
           <AdminSection title="Startup Pipeline">
             <View style={ui.wrap}>
-              {(['active', 'completed', 'reported', 'blocked'] as AdminFilter[]).map((item) => (
+              {(['all', 'active', 'completed', 'reported', 'blocked', 'archived'] as AdminFilter[]).map((item) => (
                 <Pressable key={item} onPress={() => setFilter(item)} style={[styles.filterChip, filter === item ? styles.filterChipActive : null]}>
                   <Text style={styles.filterText}>{item}</Text>
                 </Pressable>
@@ -202,6 +202,10 @@ export default function AdminDashboardScreen() {
                 onArchive={() => handleStartupStatus(item.pipeline.id, 'archived')}
                 onFreeze={() => handleStartupStatus(item.pipeline.id, 'frozen')}
                 onSuspend={() => handleStartupStatus(item.pipeline.id, 'suspended')}
+                onRestore={() => handleStartupStatus(item.pipeline.id, 'active')}
+                onOpenDiscussion={() => item.pipeline.room ? router.push(`/discussion-room/${item.pipeline.room.id}`) : undefined}
+                onBlockFounder={() => item.pipeline.opportunity?.founderId ? handleUserStatus(item.pipeline.opportunity.founderId, 'banned') : undefined}
+                onBlockInvestor={() => item.pipeline.room?.investorId ? handleUserStatus(item.pipeline.room.investorId, 'banned') : undefined}
                 onDelete={() => handleDeleteStartup(item.pipeline.id)}
                 onViewTimeline={() => router.push(`/admin`)}
               />
@@ -304,9 +308,13 @@ function buildAdminPipelines(data: AdminData, search: string, filter: AdminFilte
       reportCount: reportCounts.get(pipeline.id) ?? 0,
       lastActivity: pipeline.agreement?.updatedAt ?? pipeline.room?.updatedAt ?? pipeline.opportunity?.createdAt,
       isBlocked: blockedUids.has(pipeline.opportunity?.founderId ?? '') || blockedUids.has(pipeline.room?.investorId ?? ''),
+      timeline: data.activityTimeline
+        .filter((event) => event.startupId === pipeline.id || event.discussionRoomId === pipeline.room?.id || event.agreementId === pipeline.agreement?.id)
+        .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt))),
     }))
     .filter((item) => {
       if (filter === 'completed' && item.pipeline.currentStep !== 'completed') return false;
+      if (filter === 'archived' && item.pipeline.opportunity?.status !== 'archived') return false;
       if (filter === 'reported' && item.reportCount === 0) return false;
       if (filter === 'blocked' && !item.isBlocked) return false;
       if (filter === 'active' && item.pipeline.currentStep === 'completed') return false;
@@ -327,6 +335,10 @@ function AdminStartupCard({
   onArchive,
   onFreeze,
   onSuspend,
+  onRestore,
+  onOpenDiscussion,
+  onBlockFounder,
+  onBlockInvestor,
   onDelete,
   onViewTimeline,
 }: {
@@ -334,6 +346,10 @@ function AdminStartupCard({
   onArchive: () => void;
   onFreeze: () => void;
   onSuspend: () => void;
+  onRestore: () => void;
+  onOpenDiscussion: () => void;
+  onBlockFounder: () => void;
+  onBlockInvestor: () => void;
   onDelete: () => void;
   onViewTimeline: () => void;
 }) {
@@ -353,10 +369,24 @@ function AdminStartupCard({
       <Text style={styles.itemMeta}>Funding: {formatCurrency(amount)} · Equity: {safePercent(equity)}</Text>
       <Text style={styles.itemMeta}>Created: {safeDate(startup?.createdAt)} · Last activity: {safeDate(item.lastActivity)}</Text>
       <Text style={styles.itemMeta}>Reports: {item.reportCount}</Text>
+      <Text style={styles.itemMeta}>Current Status: {startup?.status ?? pipeline.agreement?.status ?? 'active'}</Text>
+      {item.timeline.length > 0 ? (
+        <View style={styles.timelineBox}>
+          <Text style={styles.timelineTitle}>Timeline History</Text>
+          {item.timeline.slice(0, 5).map((event) => (
+            <Text key={event.id} style={styles.itemMeta}>• {event.label} · {safeDate(event.createdAt)}</Text>
+          ))}
+        </View>
+      ) : null}
       <View style={ui.wrap}>
+        <PrimaryButton label="View Deal" variant="secondary" onPress={onOpenDiscussion} />
+        <PrimaryButton label="Open Discussion Room" variant="secondary" onPress={onOpenDiscussion} />
         <PrimaryButton label="Archive Startup" variant="secondary" onPress={onArchive} />
         <PrimaryButton label="Freeze Startup" variant="secondary" onPress={onFreeze} />
         <PrimaryButton label="Suspend Startup" variant="secondary" onPress={onSuspend} />
+        <PrimaryButton label="Restore Startup" variant="secondary" onPress={onRestore} />
+        <PrimaryButton label="Block Founder" variant="secondary" onPress={onBlockFounder} />
+        <PrimaryButton label="Block Investor" variant="secondary" onPress={onBlockInvestor} />
         <PrimaryButton label="Delete Startup" variant="secondary" onPress={onDelete} />
         <PrimaryButton label="View Timeline History" variant="secondary" onPress={onViewTimeline} />
       </View>
@@ -393,6 +423,19 @@ const styles = StyleSheet.create({
   },
   stageText: {
     fontSize: 13,
+    fontWeight: '900',
+  },
+  timelineBox: {
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: 'rgba(216, 201, 163, 0.18)',
+    borderRadius: radii.md,
+    padding: spacing.md,
+    backgroundColor: colors.black,
+  },
+  timelineTitle: {
+    color: colors.text,
+    fontSize: 14,
     fontWeight: '900',
   },
   filterChip: {
