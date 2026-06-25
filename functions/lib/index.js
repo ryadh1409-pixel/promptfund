@@ -33,8 +33,9 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.uploadStartupImage = void 0;
+exports.onNotificationCreated = exports.uploadStartupImage = void 0;
 const admin = __importStar(require("firebase-admin"));
+const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 admin.initializeApp();
 const maxStartupImageBytes = 5 * 1024 * 1024;
@@ -86,6 +87,41 @@ exports.uploadStartupImage = (0, https_1.onCall)(async (request) => {
     catch (error) {
         console.error('[Storage Upload Error]', error);
         throw new https_1.HttpsError('internal', 'Unable to upload startup image.');
+    }
+});
+exports.onNotificationCreated = (0, firestore_1.onDocumentCreated)('notifications/{notificationId}', async (event) => {
+    const notification = event.data?.data();
+    if (!notification?.userId || !notification?.title || !notification?.body) {
+        return;
+    }
+    const tokenSnapshot = await admin
+        .firestore()
+        .collection('pushTokens')
+        .where('userId', '==', notification.userId)
+        .get();
+    if (tokenSnapshot.empty) {
+        return;
+    }
+    const messages = tokenSnapshot.docs.map((tokenDoc) => ({
+        to: tokenDoc.data().token,
+        sound: 'default',
+        title: notification.title,
+        body: notification.body,
+        data: notification.data ?? {},
+    }));
+    try {
+        await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'Accept-Encoding': 'gzip, deflate',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(messages),
+        });
+    }
+    catch (error) {
+        console.error('[Push Notification Error]', error);
     }
 });
 //# sourceMappingURL=index.js.map

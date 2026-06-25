@@ -1,14 +1,28 @@
 import { Redirect, Tabs, useSegments } from 'expo-router';
 import { Text, type ColorValue } from 'react-native';
+import { useEffect } from 'react';
 
 import { colors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
+import { notificationService } from '@/services/notificationService';
 import { appRouteForProfile, shouldShowChoosePath } from '@/utils/onboarding';
 
 export default function AppLayout() {
   const { authUser, initializing, profile } = useAuth();
   const segments = useSegments();
   const currentRoute = String(segments[segments.length - 1] ?? '');
+  const unreadNotifications = useUnreadNotifications(authUser?.uid);
+
+  useEffect(() => {
+    if (!authUser?.uid) {
+      return;
+    }
+
+    notificationService.registerPushToken(authUser.uid).catch((error) => {
+      console.info('[PromptFund Notifications] push registration skipped', error);
+    });
+  }, [authUser?.uid]);
 
   if (!initializing && !authUser) {
     return <Redirect href="/login" />;
@@ -54,6 +68,7 @@ export default function AppLayout() {
         name="deck/index"
         options={{
           title: 'My Cards',
+          tabBarBadge: unreadNotifications > 0 ? unreadNotifications : undefined,
           tabBarIcon: ({ color }) => <TabGlyph color={color} label="K" />,
         }}
       />
@@ -69,6 +84,7 @@ export default function AppLayout() {
       <Tabs.Screen name="discussion-room/[id]" options={{ href: null }} />
       <Tabs.Screen name="agreement/[id]" options={{ href: null }} />
       <Tabs.Screen name="payment/[id]" options={{ href: null }} />
+      <Tabs.Screen name="archive/index" options={{ href: null }} />
       <Tabs.Screen name="messages/index" options={{ href: null }} />
       <Tabs.Screen name="projects/index" options={{ href: null }} />
       <Tabs.Screen name="projects/create" options={{ href: null }} />

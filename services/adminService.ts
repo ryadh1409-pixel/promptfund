@@ -1,10 +1,12 @@
 import { firestoreAdapter, firestoreCollections, type FirestoreCollectionName } from '@/firebase/firestore';
 import { projectService } from '@/services/projectService';
 import { userService } from '@/services/userService';
+import { notificationService } from '@/services/notificationService';
 import type { AgreementRoom } from '@/types/Agreement';
 import type { Investment, Match } from '@/types/FundingRequest';
+import type { ActivityTimelineEvent, AdminAnnouncement, BlockedUser, ModerationFlag, User, UserReport, UserStatus } from '@/types/User';
+import type { DiscussionMessage, DiscussionRoom, InvestmentAgreement, InvestmentOpportunity, StartupInterest, V5Investment } from '@/types/InvestmentFlow';
 import type { Project } from '@/types/Project';
-import type { BlockedUser, User, UserReport, UserStatus } from '@/types/User';
 
 export const adminEmail = 'ryadh1409@gmail.com';
 
@@ -31,11 +33,17 @@ export const adminService = {
   async getDashboardData() {
     const users = await adminList<User>('users');
     const projects = await adminList<Project>('projects');
-    const investments = await adminList<Investment>('investments');
+    const investments = await adminList<V5Investment>('investments');
     const matches = await adminList<Match>('matches');
     const agreements = await adminList<AgreementRoom>('agreementRooms');
+    const investmentAgreements = await adminList<InvestmentAgreement>('agreements');
+    const startupOpportunities = await adminList<InvestmentOpportunity>('startupOpportunities');
+    const interests = await adminList<StartupInterest>('interests');
+    const discussionRooms = await adminList<DiscussionRoom>('discussionRooms');
     const reports = await adminList<UserReport>('userReports');
     const blockedUsers = await adminList<BlockedUser>('blockedUsers');
+    const moderationFlags = await adminList<ModerationFlag>('moderationFlags');
+    const activityTimeline = await adminList<ActivityTimelineEvent>('activityTimeline');
 
     return {
       users,
@@ -43,10 +51,16 @@ export const adminService = {
       investments,
       matches,
       agreements,
+      investmentAgreements,
+      startupOpportunities,
+      interests,
+      discussionRooms,
       reports,
       blockedUsers,
-      revenue: investments.reduce((sum: number, investment: Investment) => sum + investment.amount * 0.025, 0),
-      portfolioVolume: investments.reduce((sum: number, investment: Investment) => sum + investment.amount, 0),
+      moderationFlags,
+      activityTimeline,
+      revenue: investments.reduce((sum: number, investment: V5Investment) => sum + (investment.amount ?? 0) * 0.025, 0),
+      portfolioVolume: investments.reduce((sum: number, investment: V5Investment) => sum + (investment.amount ?? 0), 0),
     };
   },
 
@@ -60,6 +74,78 @@ export const adminService = {
 
   async updateProjectStatus(projectId: string, status: Project['status']): Promise<Project | null> {
     return projectService.updateProject(projectId, { status });
+  },
+
+  async updateStartupStatus(startupId: string, status: InvestmentOpportunity['status']) {
+    await this.recordTimeline({
+      startupId,
+      actorId: 'admin',
+      eventType: 'admin_action',
+      label: `Admin set startup status to ${status}`,
+      metadata: { status },
+    });
+    return firestoreAdapter.update<InvestmentOpportunity>('startupOpportunities', startupId, { status });
+  },
+
+  async deleteStartup(startupId: string) {
+    await this.recordTimeline({
+      startupId,
+      actorId: 'admin',
+      eventType: 'admin_action',
+      label: 'Admin deleted startup',
+    });
+    return firestoreAdapter.deleteById('startupOpportunities', startupId);
+  },
+
+  async blockUser(blockerUid: string, blockedUid: string) {
+    return userService.blockUser(blockerUid, blockedUid);
+  },
+
+  async unblockUser(blockId: string) {
+    return firestoreAdapter.deleteById('blockedUsers', blockId);
+  },
+
+  async deleteDiscussionRoom(roomId: string) {
+    return firestoreAdapter.deleteById('discussionRooms', roomId);
+  },
+
+  async deleteMessage(messageId: string) {
+    return firestoreAdapter.deleteById('discussionMessages', messageId);
+  },
+
+  async listDiscussionMessages(): Promise<DiscussionMessage[]> {
+    return adminList<DiscussionMessage>('discussionMessages');
+  },
+
+  async sendAnnouncement(input: Omit<AdminAnnouncement, 'id' | 'createdAt'>) {
+    const announcement = await firestoreAdapter.create<Omit<AdminAnnouncement, 'id'>>('adminAnnouncements', {
+      ...input,
+      createdAt: new Date().toISOString(),
+    });
+    const users = await adminList<User>('users');
+    const targets = users.filter((user) => {
+      if (input.target === 'everyone') return true;
+      if (input.target === 'founders') return user.activeRole === 'founder' || user.role === 'founder' || user.role === 'entrepreneur';
+      if (input.target === 'investors') return user.activeRole === 'investor' || user.role === 'investor' || user.role === 'angel_investor';
+      return user.id === input.targetUserId;
+    });
+
+    await Promise.all(targets.map((user) => notificationService.createNotification({
+      userId: user.id,
+      title: input.title,
+      body: input.body,
+      type: 'admin_announcement',
+      data: { announcementId: announcement.id },
+    })));
+
+    return announcement;
+  },
+
+  async recordTimeline(input: Omit<ActivityTimelineEvent, 'id' | 'createdAt'>) {
+    return firestoreAdapter.create<Omit<ActivityTimelineEvent, 'id'>>('activityTimeline', {
+      ...input,
+      createdAt: new Date().toISOString(),
+    });
   },
 
   async resolveReport(reportId: string): Promise<UserReport | null> {

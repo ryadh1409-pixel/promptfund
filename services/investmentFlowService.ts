@@ -3,6 +3,8 @@ import { doc, getDoc } from 'firebase/firestore';
 
 import { getFirebaseApp } from '@/firebase/config';
 import { firestoreAdapter, getPromptFundFirestore } from '@/firebase/firestore';
+import { AppError } from '@/services/errorHandler';
+import { notificationService } from '@/services/notificationService';
 import type {
   CreateInvestmentOpportunityInput,
   DiscussionMessage,
@@ -14,7 +16,8 @@ import type {
 } from '@/types/InvestmentFlow';
 import type { InvestmentInterest, Match } from '@/types/FundingRequest';
 import type { Project } from '@/types/Project';
-import type { User } from '@/types/User';
+import type { ModerationFlag, User } from '@/types/User';
+import { moderateChatMessage } from '@/utils/chatModeration';
 
 export const defaultInvestmentAmount = 22;
 export const defaultInvestorAllocation = 1;
@@ -220,13 +223,30 @@ export const investmentFlowService = {
   },
 
   async addDiscussionMessage(room: DiscussionRoom, sender: Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle'>, body: string) {
+    const moderation = moderateChatMessage(body);
+    if (!moderation.allowed) {
+      await firestoreAdapter.create<Omit<ModerationFlag, 'id'>>('moderationFlags', {
+        userId: sender.id,
+        discussionRoomId: room.id,
+        messagePreview: body.slice(0, 180),
+        categories: moderation.flags,
+        status: 'open',
+        createdAt: now(),
+      });
+      throw new AppError('This message violates PromptFund Community Guidelines.', 'moderation/blocked-message');
+    }
+
+    const recipientId = sender.id === room.founderId ? room.investorId : room.founderId;
+    const createdAt = now();
     const message: DiscussionMessage = {
       id: `message-${Date.now()}`,
       discussionRoomId: room.id,
       senderId: sender.id,
       senderName: displayName(sender),
       body,
-      createdAt: now(),
+      createdAt,
+      deliveredTo: [recipientId],
+      readBy: [sender.id],
     };
 
     await firestoreAdapter.create<Omit<DiscussionMessage, 'id'>>('discussionMessages', {
@@ -235,13 +255,69 @@ export const investmentFlowService = {
       senderName: message.senderName,
       body: message.body,
       createdAt: message.createdAt,
+      deliveredTo: message.deliveredTo,
+      readBy: message.readBy,
     });
 
+    notificationService.createNotification({
+      userId: recipientId,
+      title: 'New message',
+      body: `${message.senderName}: ${body.slice(0, 120)}`,
+      type: 'message',
+      data: {
+        discussionRoomId: room.id,
+      },
+    }).catch((error) => console.info('[PromptFund Notifications] message notification failed', error));
+
+    const unreadCounts = {
+      ...(room.unreadCounts ?? {}),
+      [recipientId]: (room.unreadCounts?.[recipientId] ?? 0) + 1,
+      [sender.id]: 0,
+    };
     console.log('ROOM UPDATE PATH', room.id);
     console.log('ROOM UPDATE USER', currentUid());
     console.log('ROOM UPDATE PAYLOAD', { messages: [...(room.messages ?? []), message] });
     return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
       messages: [...(room.messages ?? []), message],
+      lastMessage: body,
+      lastMessageAt: createdAt,
+      lastMessageSenderId: sender.id,
+      unreadCounts,
+      readReceipts: {
+        ...(room.readReceipts ?? {}),
+        [sender.id]: createdAt,
+      },
+    });
+  },
+
+  async markDiscussionRead(room: DiscussionRoom, userId: string) {
+    return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
+      readReceipts: {
+        ...(room.readReceipts ?? {}),
+        [userId]: now(),
+      },
+      unreadCounts: {
+        ...(room.unreadCounts ?? {}),
+        [userId]: 0,
+      },
+    });
+  },
+
+  async setTyping(room: DiscussionRoom, userId: string, isTyping: boolean) {
+    return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
+      typingBy: {
+        ...(room.typingBy ?? {}),
+        [userId]: isTyping,
+      },
+    });
+  },
+
+  async updateConversationSafety(room: DiscussionRoom, userId: string, field: 'mutedBy' | 'leftBy') {
+    return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
+      [field]: {
+        ...(room[field] ?? {}),
+        [userId]: true,
+      },
     });
   },
 
@@ -353,6 +429,17 @@ export const investmentFlowService = {
     console.log('AGREEMENT PAYLOAD', acceptPayload);
     console.log('AGREEMENT USER', currentUid());
     const updated = await firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, acceptPayload);
+
+    const recipientId = role === 'founder' ? agreement.investorId : agreement.founderId;
+    notificationService.createNotification({
+      userId: recipientId,
+      title: 'Agreement accepted',
+      body: `${role === 'founder' ? agreement.founderName : agreement.investorName} accepted the agreement for ${agreement.startupName}.`,
+      type: 'agreement_accepted',
+      data: {
+        agreementId: agreement.id,
+      },
+    }).catch((error) => console.info('[PromptFund Notifications] agreement notification failed', error));
 
     if (status === 'awaiting_funding') {
       const fundingPayload = {
@@ -641,6 +728,23 @@ export const investmentFlowService = {
       firestoreAdapter.update<DiscussionRoom>('discussionRooms', agreement.discussionRoomId, completedRoomPayload),
       firestoreAdapter.update<InvestmentOpportunity>('startupOpportunities', agreement.opportunityId, {
         status: 'completed',
+      }),
+    ]);
+
+    await Promise.all([
+      notificationService.createNotification({
+        userId: agreement.investorId,
+        title: 'Funding arrangement confirmed',
+        body: `${agreement.founderName} confirmed completion for ${agreement.startupName}.`,
+        type: 'funding_confirmed',
+        data: { agreementId: agreement.id },
+      }),
+      notificationService.createNotification({
+        userId: agreement.founderId,
+        title: 'Funding agreement completed',
+        body: `${agreement.startupName} moved to Archive / Portfolio.`,
+        type: 'funding_confirmed',
+        data: { agreementId: agreement.id },
       }),
     ]);
 

@@ -54,6 +54,7 @@
           "microphonePermission": false
         }
       ],
+      "expo-notifications",
       "expo-asset"
     ]
   }

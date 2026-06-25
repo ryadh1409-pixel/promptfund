@@ -8,7 +8,11 @@ export type InvestmentFlowStatus =
   | 'awaiting_funding'
   | 'funding_arranged'
   | 'funded'
-  | 'completed';
+  | 'completed'
+  | 'archived'
+  | 'frozen'
+  | 'suspended'
+  | 'deleted';
 
 export type DiscussionMessage = {
   id: string;
@@ -17,6 +21,9 @@ export type DiscussionMessage = {
   senderName: string;
   body: string;
   createdAt: string;
+  deliveredTo?: string[];
+  readBy?: string[];
+  moderationFlags?: string[];
 };
 
 export type InvestmentOpportunity = {
@@ -55,6 +62,14 @@ export type DiscussionRoom = {
   investorReady: boolean;
   messages: DiscussionMessage[];
   status: InvestmentFlowStatus;
+  lastMessage?: string;
+  lastMessageAt?: string;
+  lastMessageSenderId?: string;
+  typingBy?: Record<string, boolean>;
+  readReceipts?: Record<string, string>;
+  unreadCounts?: Record<string, number>;
+  mutedBy?: Record<string, boolean>;
+  leftBy?: Record<string, boolean>;
   agreementId?: string;
   createdAt?: string;
   updatedAt?: string;

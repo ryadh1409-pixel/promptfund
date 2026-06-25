@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Card, PrimaryButton, Screen } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { userService } from '@/services/userService';
+
+const reportReasons = ['Spam', 'Fraud', 'Harassment', 'Abuse', 'Scam', 'Fake Startup', 'Other'];
 
 export default function ReportUserScreen() {
   const { authUser } = useAuth();
@@ -41,7 +43,17 @@ export default function ReportUserScreen() {
     <Screen eyebrow="Safety" title="Report a User" subtitle="Reports are reviewed by PromptFund admins.">
       <Card>
         <TextInput placeholder="Reported user UID" placeholderTextColor={colors.subtle} value={reportedUid} onChangeText={setReportedUid} autoCapitalize="none" style={styles.input} />
-        <TextInput placeholder="Reason" placeholderTextColor={colors.subtle} value={reason} onChangeText={setReason} style={styles.input} />
+        <View style={styles.reasonGrid}>
+          {reportReasons.map((item) => (
+            <Pressable
+              key={item}
+              onPress={() => setReason(item)}
+              style={[styles.reasonChip, reason === item ? styles.reasonChipActive : null]}
+            >
+              <Text style={styles.reasonText}>{item}</Text>
+            </Pressable>
+          ))}
+        </View>
         <TextInput placeholder="Details" placeholderTextColor={colors.subtle} value={details} onChangeText={setDetails} multiline style={[styles.input, styles.textArea]} />
         {message ? <Text style={styles.success}>{message}</Text> : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -66,6 +78,27 @@ const styles = StyleSheet.create({
     minHeight: 132,
     paddingTop: spacing.md,
     textAlignVertical: 'top',
+  },
+  reasonGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  reasonChip: {
+    borderWidth: 1,
+    borderColor: 'rgba(200, 162, 74, 0.36)',
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.black,
+  },
+  reasonChipActive: {
+    borderColor: colors.luxuryGold,
+    backgroundColor: 'rgba(200, 162, 74, 0.16)',
+  },
+  reasonText: {
+    color: colors.text,
+    fontWeight: '900',
   },
   success: {
     color: colors.success,

@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 admin.initializeApp();
@@ -71,5 +72,44 @@ export const uploadStartupImage = onCall(async (request) => {
   } catch (error) {
     console.error('[Storage Upload Error]', error);
     throw new HttpsError('internal', 'Unable to upload startup image.');
+  }
+});
+
+export const onNotificationCreated = onDocumentCreated('notifications/{notificationId}', async (event) => {
+  const notification = event.data?.data();
+  if (!notification?.userId || !notification?.title || !notification?.body) {
+    return;
+  }
+
+  const tokenSnapshot = await admin
+    .firestore()
+    .collection('pushTokens')
+    .where('userId', '==', notification.userId)
+    .get();
+
+  if (tokenSnapshot.empty) {
+    return;
+  }
+
+  const messages = tokenSnapshot.docs.map((tokenDoc) => ({
+    to: tokenDoc.data().token,
+    sound: 'default',
+    title: notification.title,
+    body: notification.body,
+    data: notification.data ?? {},
+  }));
+
+  try {
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Accept-Encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(messages),
+    });
+  } catch (error) {
+    console.error('[Push Notification Error]', error);
   }
 });

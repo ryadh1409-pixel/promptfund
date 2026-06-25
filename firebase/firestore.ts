@@ -42,6 +42,11 @@ export const firestoreCollections = {
   agreementCertificates: 'agreementCertificates',
   blockedUsers: 'blockedUsers',
   userReports: 'userReports',
+  moderationFlags: 'moderationFlags',
+  adminAnnouncements: 'adminAnnouncements',
+  activityTimeline: 'activityTimeline',
+  notifications: 'notifications',
+  pushTokens: 'pushTokens',
 } as const;
 
 export type FirestoreCollectionName = keyof typeof firestoreCollections;

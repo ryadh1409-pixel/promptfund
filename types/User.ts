@@ -53,9 +53,82 @@ export type UserReport = {
   id: string;
   reporterUid: string;
   reportedUid: string;
-  reason: string;
+  reason: 'Spam' | 'Fraud' | 'Harassment' | 'Abuse' | 'Scam' | 'Fake Startup' | 'Other' | string;
   details: string;
   status: 'open' | 'resolved';
+  discussionRoomId?: string;
+  startupId?: string;
   createdAt: string;
   resolvedAt?: string;
+};
+
+export type ModerationFlag = {
+  id: string;
+  userId: string;
+  discussionRoomId?: string;
+  messagePreview: string;
+  categories: string[];
+  status: 'open' | 'reviewed';
+  createdAt: string;
+};
+
+export type AdminAnnouncement = {
+  id: string;
+  title: string;
+  body: string;
+  target: 'everyone' | 'founders' | 'investors' | 'single_user';
+  targetUserId?: string;
+  sentBy: string;
+  createdAt: string;
+};
+
+export type ActivityTimelineEvent = {
+  id: string;
+  startupId?: string;
+  discussionRoomId?: string;
+  agreementId?: string;
+  actorId: string;
+  eventType:
+    | 'interest_received'
+    | 'match_created'
+    | 'discussion_started'
+    | 'agreement_signed'
+    | 'funding_confirmed'
+    | 'completed'
+    | 'cancelled'
+    | 'archived'
+    | 'admin_action';
+  label: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type AppNotification = {
+  id: string;
+  userId: string;
+  title: string;
+  body: string;
+  type:
+    | 'message'
+    | 'agreement_accepted'
+    | 'funding_confirmed'
+    | 'admin_announcement'
+    | 'interest'
+    | 'match'
+    | 'discussion'
+    | 'agreement_signed'
+    | 'report'
+    | 'block'
+    | 'startup_archived';
+  readAt?: string;
+  data?: Record<string, string>;
+  createdAt: string;
+};
+
+export type PushToken = {
+  id: string;
+  userId: string;
+  token: string;
+  platform?: string;
+  updatedAt: string;
 };
