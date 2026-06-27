@@ -66,13 +66,25 @@ export const tractionService = {
       : investmentFlowService.listInvestmentsByInvestor(userId);
   },
 
-  async listUpdatesByInvestment(investmentId: string) {
-    const updates = await firestoreAdapter.queryByField<FounderUpdate>('founderUpdates', 'investmentId', investmentId);
+  async listUpdatesByInvestment(investment: V5Investment, currentUserId: string, role: 'founder' | 'investor' | 'admin' = 'investor') {
+    const filters = role === 'admin'
+      ? [{ field: 'investmentId', value: investment.id }]
+      : [
+        { field: 'investmentId', value: investment.id },
+        { field: role === 'founder' ? 'founderId' : 'investorId', value: currentUserId },
+      ];
+    const updates = await firestoreAdapter.queryByFields<FounderUpdate>('founderUpdates', filters);
     return [...updates].sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
   },
 
-  async listCommentsByUpdate(updateId: string) {
-    const comments = await firestoreAdapter.queryByField<FounderUpdateComment>('founderUpdateComments', 'updateId', updateId);
+  async listCommentsByUpdate(update: FounderUpdate, currentUserId: string, role: 'founder' | 'investor' | 'admin' = 'investor') {
+    const filters = role === 'admin'
+      ? [{ field: 'updateId', value: update.id }]
+      : [
+        { field: 'updateId', value: update.id },
+        { field: role === 'founder' ? 'founderId' : 'investorId', value: currentUserId },
+      ];
+    const comments = await firestoreAdapter.queryByFields<FounderUpdateComment>('founderUpdateComments', filters);
     return [...comments].sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)));
   },
 
@@ -222,6 +234,8 @@ export const tractionService = {
       updateId: update.id,
       investmentId: investment.id,
       parentCommentId,
+      founderId: investment.founderId ?? update.founderId,
+      investorId: investment.investorId,
       authorId: author.id,
       authorName: displayName(author),
       body,

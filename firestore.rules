@@ -93,6 +93,12 @@ service cloud.firestore {
         );
     }
 
+    function ownsInvestmentAsFounder(investmentId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/investments/$(investmentId))
+        && get(/databases/$(database)/documents/investments/$(investmentId)).data.founderId == request.auth.uid;
+    }
+
     match /users/{userId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.auth.uid == userId;
@@ -348,25 +354,52 @@ service cloud.firestore {
     match /founderUpdates/{updateId} {
       allow create: if isSignedIn()
         && request.resource.data.founderId == request.auth.uid
-        && isInvestmentParticipant(request.resource.data.investmentId);
-      allow read: if isAdmin() || isInvestmentParticipant(resource.data.investmentId);
-      allow update: if isAdmin() || isInvestmentParticipant(resource.data.investmentId);
-      allow delete: if isAdmin();
+        && ownsInvestmentAsFounder(request.resource.data.investmentId)
+        && request.resource.data.investorId == get(/databases/$(database)/documents/investments/$(request.resource.data.investmentId)).data.investorId;
+      allow read: if isAdmin()
+        || (
+          isSignedIn()
+          && (
+            resource.data.founderId == request.auth.uid
+            || resource.data.investorId == request.auth.uid
+          )
+        );
+      allow update: if isAdmin()
+        || (
+          isSignedIn()
+          && resource.data.founderId == request.auth.uid
+          && request.resource.data.founderId == resource.data.founderId
+          && request.resource.data.investorId == resource.data.investorId
+          && request.resource.data.investmentId == resource.data.investmentId
+        );
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.founderId == request.auth.uid);
     }
 
     match /founderUpdateComments/{commentId} {
       allow create: if isSignedIn()
         && request.resource.data.authorId == request.auth.uid
-        && isInvestmentParticipant(request.resource.data.investmentId);
-      allow read: if isAdmin() || isInvestmentParticipant(resource.data.investmentId);
+        && isInvestmentParticipant(request.resource.data.investmentId)
+        && (
+          request.resource.data.founderId == request.auth.uid
+          || request.resource.data.investorId == request.auth.uid
+        );
+      allow read: if isAdmin()
+        || (
+          isSignedIn()
+          && (
+            resource.data.founderId == request.auth.uid
+            || resource.data.investorId == request.auth.uid
+          )
+        );
       allow update: if isAdmin() || (isSignedIn() && resource.data.authorId == request.auth.uid);
       allow delete: if isAdmin();
     }
 
     match /aiUsage/{usageId} {
-      allow create, update: if isAdmin() || isInvestmentParticipant(request.resource.data.investmentId);
-      allow read: if isAdmin() || isInvestmentParticipant(resource.data.investmentId);
-      allow delete: if isAdmin();
+      allow read: if isAdmin()
+        || isInvestmentParticipant(usageId)
+        || (resource != null && isInvestmentParticipant(resource.data.investmentId));
+      allow create, update, delete: if isAdmin();
     }
 
     match /reports/{reportId} {

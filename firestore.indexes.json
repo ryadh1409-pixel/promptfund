@@ -57,10 +57,46 @@
       ]
     },
     {
+      "collectionGroup": "founderUpdates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "investmentId", "order": "ASCENDING" },
+        { "fieldPath": "founderId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "founderUpdates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "investmentId", "order": "ASCENDING" },
+        { "fieldPath": "investorId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "founderUpdateComments",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "updateId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "founderUpdateComments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "updateId", "order": "ASCENDING" },
+        { "fieldPath": "founderId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "founderUpdateComments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "updateId", "order": "ASCENDING" },
+        { "fieldPath": "investorId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "ASCENDING" }
       ]
     }

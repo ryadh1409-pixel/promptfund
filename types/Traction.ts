@@ -53,6 +53,8 @@ export type FounderUpdateComment = {
   updateId: string;
   investmentId: string;
   parentCommentId?: string;
+  founderId: string;
+  investorId: string;
   authorId: string;
   authorName: string;
   body: string;

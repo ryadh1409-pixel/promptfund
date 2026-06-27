@@ -82,11 +82,11 @@ export default function TractionScreen() {
       const nextInvestments = await tractionService.listPortfolioByUser(authUser.uid, isFounderMode ? 'founder' : 'investor');
       const fundedInvestments = nextInvestments.filter((investment) => investment.status === 'completed' || investment.status === 'active');
       const updateEntries = await Promise.all(fundedInvestments.map(async (investment) => {
-        const updates = await tractionService.listUpdatesByInvestment(investment.id);
+        const updates = await tractionService.listUpdatesByInvestment(investment, authUser.uid, isFounderMode ? 'founder' : 'investor');
         return [investment.id, updates] as const;
       }));
       const commentEntries = await Promise.all(updateEntries.flatMap(([, updates]) => updates.map(async (update) => {
-        const comments = await tractionService.listCommentsByUpdate(update.id);
+        const comments = await tractionService.listCommentsByUpdate(update, authUser.uid, isFounderMode ? 'founder' : 'investor');
         return [update.id, comments] as const;
       })));
       const aiUsageEntries = await Promise.all(fundedInvestments.map(async (investment) => {

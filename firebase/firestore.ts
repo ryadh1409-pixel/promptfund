@@ -67,6 +67,10 @@ export type FirestoreAdapter = {
     field: string,
     value: string,
   ) => Promise<Array<FirestoreDocument<T>>>;
+  queryByFields: <T>(
+    collectionName: FirestoreCollectionName,
+    filters: Array<{ field: string; value: string }>,
+  ) => Promise<Array<FirestoreDocument<T>>>;
   getById: <T>(
     collectionName: FirestoreCollectionName,
     id: string,
@@ -145,6 +149,9 @@ export const firestoreAdapter: FirestoreAdapter = {
   },
   async queryByField(collectionName, field, value) {
     return listWithConstraints(collectionName, [where(field, '==', value)]);
+  },
+  async queryByFields(collectionName, filters) {
+    return listWithConstraints(collectionName, filters.map((filter) => where(filter.field, '==', filter.value)));
   },
   async getById(collectionName, id) {
     const path = `${firestoreCollections[collectionName]}/${id}`;
