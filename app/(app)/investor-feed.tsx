@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -58,10 +58,6 @@ export default function FundraisingScreen() {
     setIsLoading(true);
     setNotice(null);
 
-    console.info('[PromptFund Firestore] read start', {
-      path: 'startupOpportunities/*',
-      operation: 'onSnapshot',
-    });
     const unsubscribe = onSnapshot(
       collection(getPromptFundFirestore(), 'startupOpportunities'),
       (snapshot) => {
@@ -73,12 +69,6 @@ export default function FundraisingScreen() {
             return isActive && !isOwnCard;
           });
 
-        console.log('Loaded opportunities', loaded.length);
-        console.info('[PromptFund Firestore] read success', {
-          path: 'startupOpportunities/*',
-          operation: 'onSnapshot',
-          count: snapshot.docs.length,
-        });
         setOpportunities(loaded);
         setActiveIndex(0);
         setIsLoading(false);
@@ -97,7 +87,7 @@ export default function FundraisingScreen() {
     return unsubscribe;
   }, [authUser]);
 
-  async function handleSwipeComplete(direction: 'left' | 'right') {
+  const handleSwipeComplete = useCallback(async (direction: 'left' | 'right') => {
     const swipedOpportunity = activeOpportunity;
     if (!swipedOpportunity) {
       return;
@@ -122,15 +112,11 @@ export default function FundraisingScreen() {
 
     setIsSavingInterest(true);
     try {
-      console.log('STEP 1: Interested button pressed');
       const interest = await investmentFlowService.createInterest({
         opportunity: swipedOpportunity,
         investorId: authUser.uid,
       });
-      console.log('STEP 2: Interest created', interest.interestId);
-      console.log('FOUNDER PROFILE FETCH START', swipedOpportunity.founderId);
       const founderProfile = await userService.getUserById(swipedOpportunity.founderId);
-      console.log('FOUNDER PROFILE FETCH SUCCESS');
       const room = await investmentFlowService.createDiscussionRoomForInterest({
         interest,
         opportunity: {
@@ -139,16 +125,14 @@ export default function FundraisingScreen() {
         },
         investorName: profile.displayName ?? profile.name,
       });
-      console.log('STEP 5: Navigating to room', room.id);
       router.push(`/discussion-room/${room.id}`);
-      console.log('STEP 6: Navigation executed');
     } catch (interestError) {
       console.error('INTEREST FLOW ERROR', interestError);
       setNotice(getFriendlyErrorMessage(interestError));
     } finally {
       setIsSavingInterest(false);
     }
-  }
+  }, [activeOpportunity, authUser, profile]);
 
   return (
     <Screen
@@ -229,6 +213,9 @@ function SwipeDeck({
   const translateY = useSharedValue(0);
   const threshold = Math.min(width * 0.28, 132);
   const exitDistance = width + 180;
+  const activeCard = useMemo(() => mapOpportunityToStartupCard(activeOpportunity), [activeOpportunity]);
+  const nextCard = useMemo(() => nextOpportunity ? mapOpportunityToStartupCard(nextOpportunity) : null, [nextOpportunity]);
+  const thirdCard = useMemo(() => thirdOpportunity ? mapOpportunityToStartupCard(thirdOpportunity) : null, [thirdOpportunity]);
 
   useEffect(() => {
     translateX.value = 0;
@@ -289,14 +276,14 @@ function SwipeDeck({
 
   return (
     <View style={styles.deckStage}>
-      {thirdOpportunity ? (
+      {thirdCard ? (
         <View style={[styles.deckCard, styles.thirdCard]}>
-          <StartupPlayingCard card={mapOpportunityToStartupCard(thirdOpportunity)} />
+          <StartupPlayingCard card={thirdCard} />
         </View>
       ) : null}
-      {nextOpportunity ? (
+      {nextCard ? (
         <View style={[styles.deckCard, styles.nextCard]}>
-          <StartupPlayingCard card={mapOpportunityToStartupCard(nextOpportunity)} />
+          <StartupPlayingCard card={nextCard} />
         </View>
       ) : null}
       <GestureDetector gesture={panGesture}>
@@ -307,7 +294,7 @@ function SwipeDeck({
           <Animated.View style={[styles.swipeBadge, styles.passBadge, passBadgeStyle]}>
             <Text style={styles.passText}>PASS</Text>
           </Animated.View>
-          <StartupPlayingCard card={mapOpportunityToStartupCard(activeOpportunity)} />
+          <StartupPlayingCard card={activeCard} />
         </Animated.View>
       </GestureDetector>
     </View>
@@ -320,7 +307,7 @@ function mapOpportunityToStartupCard(opportunity: InvestmentOpportunity): Startu
   const askAmount = opportunity.askAmount ?? opportunity.fundingGoal ?? opportunity.fundingNeeded;
   const equity = opportunity.equity ?? opportunity.investorAllocation;
 
-  const card: StartupCard = {
+  return {
     id: opportunity.id,
     developerId: opportunity.founderId,
     ownerId: opportunity.founderId,
@@ -347,19 +334,6 @@ function mapOpportunityToStartupCard(opportunity: InvestmentOpportunity): Startu
     traction: description,
     shortPitch: description,
   };
-
-  console.log('[Fundraising Deck] mapped startup card before render', {
-    source: {
-      startupName: opportunity.startupName,
-      founderName: opportunity.founderName,
-      shortDescription: opportunity.shortDescription,
-      fundingNeeded: opportunity.fundingNeeded,
-      imageUrl: opportunity.imageUrl,
-    },
-    card,
-  });
-
-  return card;
 }
 
 const styles = StyleSheet.create({

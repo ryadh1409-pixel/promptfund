@@ -74,8 +74,6 @@ async function uploadUriWithStorageRest({
 }) {
   const idToken = await getCurrentUserIdToken();
 
-  console.log('[Storage] Upload started', { path, contentType });
-
   const response = await FileSystem.uploadAsync(mediaUploadUrl(path), uri, {
     headers: {
       Authorization: `Bearer ${idToken}`,
@@ -90,12 +88,6 @@ async function uploadUriWithStorageRest({
   }
 
   const metadata = JSON.parse(response.body) as FirebaseStorageRestMetadata;
-
-  console.log('[Storage] Upload success', {
-    bucket: metadata.bucket,
-    fullPath: metadata.name,
-    size: metadata.size,
-  });
 
   return {
     path,

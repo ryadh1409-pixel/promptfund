@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { addDoc, collection, getDoc, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -65,11 +65,6 @@ export default function CreateProjectScreen() {
     const shortDescription = description.trim();
     const uid = authUser?.uid ?? null;
 
-    console.log('[Publish] startupName', startupName);
-    console.log('[Publish] description', shortDescription);
-    console.log('[Publish] imageUri', imageUri);
-    console.log('[Publish] uid', uid);
-
     setIsSaving(true);
     setError(null);
 
@@ -94,17 +89,7 @@ export default function CreateProjectScreen() {
         uri: imageUri,
       });
 
-      console.log('[Publish] Firebase Storage upload result', {
-        path: uploadResult.path,
-        bucket: uploadResult.metadata.bucket,
-        fullPath: uploadResult.metadata.fullPath,
-        name: uploadResult.metadata.name,
-        size: uploadResult.metadata.size,
-        contentType: uploadResult.metadata.contentType,
-      });
       downloadUrl = uploadResult.downloadUrl;
-      console.log('[Storage] Download URL created', downloadUrl);
-      console.log('[Publish] download URL', downloadUrl);
     } catch (storageError) {
       console.error('[Storage Upload Error]', storageError);
       setError(`Image upload failed: ${getExactFirebaseErrorMessage(storageError)}`);
@@ -134,20 +119,8 @@ export default function CreateProjectScreen() {
         status: 'active',
         createdAt: serverTimestamp(),
       };
-      console.log('Creating startup opportunity', payload);
 
-      const reference = await addDoc(collection(getPromptFundFirestore(), 'startupOpportunities'), payload);
-      console.log('Startup opportunity created', reference.id);
-
-      const createdDocument = await getDoc(reference);
-      console.log('[Publish] Firestore document exists', {
-        exists: createdDocument.exists(),
-        path: reference.path,
-      });
-
-      if (!createdDocument.exists()) {
-        throw new Error(`Firestore document was not found after create: ${reference.path}`);
-      }
+      await addDoc(collection(getPromptFundFirestore(), 'startupOpportunities'), payload);
 
       Alert.alert('Startup card published', 'Your startup card was saved to My Cards.');
       router.replace('/deck');

@@ -15,8 +15,6 @@ export function isAdminEmail(email: string | null | undefined) {
 }
 
 async function adminList<T>(collectionName: FirestoreCollectionName) {
-  console.log('Admin query:', collectionName);
-
   try {
     return await firestoreAdapter.list<T>(collectionName);
   } catch (error) {

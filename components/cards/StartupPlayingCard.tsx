@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { colors, radii, spacing } from '@/constants/theme';
@@ -121,7 +122,7 @@ export function mapProjectToStartupCard(project: Project): StartupCard {
   };
 }
 
-export function StartupPlayingCard({
+export const StartupPlayingCard = memo(function StartupPlayingCard({
   card,
   compact = false,
   showBack = false,
@@ -139,15 +140,6 @@ export function StartupPlayingCard({
   const founderName = card.founderName ?? 'Founder';
   const shortDescription = card.shortDescription ?? card.description ?? card.shortPitch ?? card.tagline ?? 'Startup opportunity';
   const fundingGoal = card.fundingNeeded ?? card.goalAmount;
-
-  console.log('[StartupPlayingCard] final card before render', {
-    startupName,
-    founderName,
-    shortDescription,
-    fundingNeeded: fundingGoal,
-    imageUrl: card.imageUrl,
-    coverImage: card.coverImage,
-  });
 
   return (
     <View style={[styles.card, compact ? styles.compactCard : null, style]}>
@@ -195,7 +187,7 @@ export function StartupPlayingCard({
       </View>
     </View>
   );
-}
+});
 
 function Corner({ rank, suit, color }: { rank: string; suit: string; color: string }) {
   return (

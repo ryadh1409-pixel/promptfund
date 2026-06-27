@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { StartupPlayingCard, type StartupCard } from '@/components/cards/StartupPlayingCard';
@@ -55,80 +55,16 @@ export default function MyCardsScreen() {
     }),
     [agreements, discussionRooms, founderCards, interests, investments, isFounderMode, matches, opportunities],
   );
-  const { activePipelines, archivedPipelines } = splitPipelinesByActivity(dealPipelines);
+  const { activePipelines, archivedPipelines } = useMemo(() => splitPipelinesByActivity(dealPipelines), [dealPipelines]);
   const archivedCount = archivedPipelines.length;
-  const completedCapital = archivedPipelines.reduce((sum, pipeline) => {
+  const completedCapital = useMemo(() => archivedPipelines.reduce((sum, pipeline) => {
     const amount = pipeline.investment?.amount ?? pipeline.agreement?.investmentAmount ?? pipeline.room?.investmentAmount ?? 0;
     return sum + amount;
-  }, 0);
-
-  const loadMyCards = useCallback(async () => {
-    if (!authUser) {
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setNotice(null);
-    try {
-      const [nextInvestments, nextInterests, nextMatches, nextDiscussionRooms] = await Promise.all([
-        isFounderMode
-          ? investmentFlowService.listInvestmentsByFounder(authUser.uid)
-          : investmentFlowService.listInvestmentsByInvestor(authUser.uid),
-        isFounderMode
-          ? investmentFlowService.listInterestsByFounder(authUser.uid)
-          : investmentFlowService.listInterestsByInvestor(authUser.uid),
-        isFounderMode
-          ? investmentFlowService.listMatchesByFounder(authUser.uid)
-          : investmentFlowService.listMatchesByInvestor(authUser.uid),
-        isFounderMode
-          ? investmentFlowService.listDiscussionRoomsByFounder(authUser.uid)
-          : investmentFlowService.listDiscussionRoomsByInvestor(authUser.uid),
-      ]);
-      const nextAgreements = (await Promise.all(
-        nextDiscussionRooms
-          .map((room) => room.agreementId)
-          .filter((agreementId): agreementId is string => Boolean(agreementId))
-          .map((agreementId) => investmentFlowService.getAgreement(agreementId)),
-      )).filter((agreement): agreement is InvestmentAgreement => Boolean(agreement));
-
-      const startupIds = Array.from(new Set([
-        ...nextInterests.map((interest) => interest.startupId),
-        ...nextMatches.map((match) => match.startupId),
-        ...nextDiscussionRooms.map((room) => room.opportunityId),
-        ...nextAgreements.map((agreement) => agreement.opportunityId),
-        ...nextInvestments.map((investment) => investment.opportunityId).filter((opportunityId): opportunityId is string => Boolean(opportunityId)),
-      ]));
-      const opportunityEntries = await Promise.all(
-        startupIds.map(async (startupId) => {
-          const existingOpportunity = await investmentFlowService.getOpportunity(startupId);
-          if (existingOpportunity) {
-            return [startupId, existingOpportunity] as const;
-          }
-
-          return null;
-        }),
-      );
-
-      setInvestments(nextInvestments);
-      setInterests(nextInterests);
-      setMatches(nextMatches);
-      setDiscussionRooms(nextDiscussionRooms);
-      setAgreements(nextAgreements);
-      setOpportunities(Object.fromEntries(opportunityEntries.filter(Boolean) as Array<readonly [string, InvestmentOpportunity]>));
-    } catch (loadError) {
-      setNotice(getFriendlyErrorMessage(loadError));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [authUser, isFounderMode]);
+  }, 0), [archivedPipelines]);
 
   useEffect(() => {
-    loadMyCards();
-  }, [loadMyCards]);
-
-  useEffect(() => {
-    if (!authUser) {
+    if (!authUser?.uid) {
+      setIsLoading(false);
       return;
     }
 
@@ -154,51 +90,45 @@ export default function MyCardsScreen() {
       where(isFounderMode ? 'founderId' : 'investorId', '==', authUser.uid),
     );
 
-    const interestsPath = `interests/*?${isFounderMode ? 'founderId' : 'investorId'}==${authUser.uid}`;
-    const matchesPath = `matches/*?${isFounderMode ? 'founderUid' : 'investorUid'}==${authUser.uid}`;
-    const roomsPath = `discussionRooms/*?${isFounderMode ? 'founderId' : 'investorId'}==${authUser.uid}`;
-    const investmentsPath = `investments/*?${isFounderMode ? 'founderId' : 'investorId'}==${authUser.uid}`;
-    const agreementsPath = `agreements/*?${isFounderMode ? 'founderId' : 'investorId'}==${authUser.uid}`;
-
-    console.info('[PromptFund Firestore] read start', { path: interestsPath, operation: 'onSnapshot' });
     const unsubscribeInterests = onSnapshot(interestsQuery, (snapshot) => {
-      console.info('[PromptFund Firestore] read success', { path: interestsPath, operation: 'onSnapshot', count: snapshot.docs.length });
-      setInterests(snapshot.docs.map((item) => mapStartupInterestToLegacy({ ...item.data(), id: item.id } as StartupInterest)));
+      setInterests((current) => updateIfChanged(current, snapshot.docs.map((item) => mapStartupInterestToLegacy({ ...item.data(), id: item.id } as StartupInterest))));
+      setIsLoading(false);
     }, (error) => {
-      console.error('[PromptFund Firestore] read failure', { path: interestsPath, operation: 'onSnapshot', error });
+      console.error('[PromptFund Firestore] read failure', { path: 'interests', operation: 'onSnapshot', error });
       setNotice(getFriendlyErrorMessage(error));
+      setIsLoading(false);
     });
-    console.info('[PromptFund Firestore] read start', { path: matchesPath, operation: 'onSnapshot' });
     const unsubscribeMatches = onSnapshot(matchesQuery, (snapshot) => {
-      console.info('[PromptFund Firestore] read success', { path: matchesPath, operation: 'onSnapshot', count: snapshot.docs.length });
-      setMatches(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Match));
+      setMatches((current) => updateIfChanged(current, snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as Match)));
+      setIsLoading(false);
     }, (error) => {
-      console.error('[PromptFund Firestore] read failure', { path: matchesPath, operation: 'onSnapshot', error });
+      console.error('[PromptFund Firestore] read failure', { path: 'matches', operation: 'onSnapshot', error });
       setNotice(getFriendlyErrorMessage(error));
+      setIsLoading(false);
     });
-    console.info('[PromptFund Firestore] read start', { path: roomsPath, operation: 'onSnapshot' });
     const unsubscribeRooms = onSnapshot(roomsQuery, (snapshot) => {
-      console.info('[PromptFund Firestore] read success', { path: roomsPath, operation: 'onSnapshot', count: snapshot.docs.length });
-      setDiscussionRooms(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as DiscussionRoom));
+      setDiscussionRooms((current) => updateIfChanged(current, snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as DiscussionRoom)));
+      setIsLoading(false);
     }, (error) => {
-      console.error('[PromptFund Firestore] read failure', { path: roomsPath, operation: 'onSnapshot', error });
+      console.error('[PromptFund Firestore] read failure', { path: 'discussionRooms', operation: 'onSnapshot', error });
       setNotice(getFriendlyErrorMessage(error));
+      setIsLoading(false);
     });
-    console.info('[PromptFund Firestore] read start', { path: investmentsPath, operation: 'onSnapshot' });
     const unsubscribeInvestments = onSnapshot(investmentsQuery, (snapshot) => {
-      console.info('[PromptFund Firestore] read success', { path: investmentsPath, operation: 'onSnapshot', count: snapshot.docs.length });
-      setInvestments(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as V5Investment));
+      setInvestments((current) => updateIfChanged(current, snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as V5Investment)));
+      setIsLoading(false);
     }, (error) => {
-      console.error('[PromptFund Firestore] read failure', { path: investmentsPath, operation: 'onSnapshot', error });
+      console.error('[PromptFund Firestore] read failure', { path: 'investments', operation: 'onSnapshot', error });
       setNotice(getFriendlyErrorMessage(error));
+      setIsLoading(false);
     });
-    console.info('[PromptFund Firestore] read start', { path: agreementsPath, operation: 'onSnapshot' });
     const unsubscribeAgreements = onSnapshot(agreementsQuery, (snapshot) => {
-      console.info('[PromptFund Firestore] read success', { path: agreementsPath, operation: 'onSnapshot', count: snapshot.docs.length });
-      setAgreements(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as InvestmentAgreement));
+      setAgreements((current) => updateIfChanged(current, snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as InvestmentAgreement)));
+      setIsLoading(false);
     }, (error) => {
-      console.error('[PromptFund Firestore] read failure', { path: agreementsPath, operation: 'onSnapshot', error });
+      console.error('[PromptFund Firestore] read failure', { path: 'agreements', operation: 'onSnapshot', error });
       setNotice(getFriendlyErrorMessage(error));
+      setIsLoading(false);
     });
 
     return () => {
@@ -208,12 +138,12 @@ export default function MyCardsScreen() {
       unsubscribeInvestments();
       unsubscribeAgreements();
     };
-  }, [authUser, isFounderMode]);
+  }, [authUser?.uid, isFounderMode]);
 
   useEffect(() => {
-    if (!authUser || !isFounderMode) {
-      setFounderCards([]);
-      console.log('Loaded founder cards', 0);
+    if (!authUser?.uid || !isFounderMode) {
+      setFounderCards((current) => current.length === 0 ? current : []);
+      setIsLoading(false);
       return;
     }
 
@@ -222,38 +152,74 @@ export default function MyCardsScreen() {
       where('founderId', '==', authUser.uid),
     );
 
-    const founderCardsPath = `startupOpportunities/*?founderId==${authUser.uid}`;
-    console.info('[PromptFund Firestore] read start', { path: founderCardsPath, operation: 'onSnapshot' });
     const unsubscribe = onSnapshot(
       founderCardsQuery,
       (snapshot) => {
         const cards = snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as InvestmentOpportunity);
-        console.info('[PromptFund Firestore] read success', {
-          path: founderCardsPath,
-          operation: 'onSnapshot',
-          count: snapshot.docs.length,
+        setFounderCards((current) => updateIfChanged(current, cards));
+        setOpportunities((current) => {
+          const next = { ...current, ...Object.fromEntries(cards.map((card) => [card.id, card])) };
+          return stableStringify(current) === stableStringify(next) ? current : next;
         });
-        console.log('Loaded founder cards', cards.length);
-        setFounderCards(cards);
-        setOpportunities((current) => ({
-          ...current,
-          ...Object.fromEntries(cards.map((card) => [card.id, card])),
-        }));
+        setIsLoading(false);
       },
       (loadError) => {
         console.error('[PromptFund Firestore] read failure', {
-          path: founderCardsPath,
+          path: 'startupOpportunities',
           operation: 'onSnapshot',
           error: loadError,
         });
         setNotice(getFriendlyErrorMessage(loadError));
+        setIsLoading(false);
       },
     );
 
     return unsubscribe;
-  }, [authUser, isFounderMode]);
+  }, [authUser?.uid, isFounderMode]);
 
-  async function handleAcceptInterest(interest: InvestmentInterest) {
+  const missingOpportunityIds = useMemo(() => Array.from(new Set([
+    ...interests.map((interest) => interest.startupId),
+    ...matches.map((match) => match.startupId),
+    ...discussionRooms.map((room) => room.opportunityId),
+    ...agreements.map((agreement) => agreement.opportunityId),
+    ...investments.map((investment) => investment.opportunityId).filter((opportunityId): opportunityId is string => Boolean(opportunityId)),
+  ])).filter((startupId) => !opportunities[startupId]), [agreements, discussionRooms, interests, investments, matches, opportunities]);
+
+  useEffect(() => {
+    if (missingOpportunityIds.length === 0) {
+      return;
+    }
+
+    let isMounted = true;
+    Promise.all(
+      missingOpportunityIds.map(async (startupId) => {
+        const opportunity = await investmentFlowService.getOpportunity(startupId);
+        return opportunity ? [startupId, opportunity] as const : null;
+      }),
+    )
+      .then((entries) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const nextEntries = entries.filter((entry): entry is readonly [string, InvestmentOpportunity] => entry !== null);
+        if (nextEntries.length === 0) {
+          return;
+        }
+
+        setOpportunities((current) => {
+          const next = { ...current, ...Object.fromEntries(nextEntries) };
+          return stableStringify(current) === stableStringify(next) ? current : next;
+        });
+      })
+      .catch((loadError) => setNotice(getFriendlyErrorMessage(loadError)));
+
+    return () => {
+      isMounted = false;
+    };
+  }, [missingOpportunityIds]);
+
+  const handleAcceptInterest = useCallback(async (interest: InvestmentInterest) => {
     const opportunity = opportunities[interest.startupId];
     if (!profile || !opportunity) {
       setNotice('Unable to load Startup opportunity for this Interest.');
@@ -261,17 +227,6 @@ export default function MyCardsScreen() {
     }
 
     try {
-      console.log('FOUNDER ACCEPT INTEREST START', {
-        founderId: profile.id,
-        investorId: interest.investorId,
-        startupOpportunityId: interest.startupId,
-      });
-      console.log('[ACCEPT FLOW]', {
-        collection: 'users',
-        path: `users/${interest.investorId}`,
-        operation: 'getDoc',
-        currentUid: authUser?.uid ?? null,
-      });
       const investor = await userService.getUserById(interest.investorId);
       const { room } = await investmentFlowService.acceptInterestAndCreateDiscussion({
         interest,
@@ -279,18 +234,13 @@ export default function MyCardsScreen() {
         founderName: profile.displayName ?? profile.name,
         investorName: investor?.displayName ?? investor?.name ?? 'Angel Investor',
       });
-      console.log('FOUNDER ACCEPT DISCUSSION ROOM READY', {
-        founderId: profile.id,
-        investorId: interest.investorId,
-        roomId: room.id,
-      });
       router.push(`/discussion-room/${room.id}`);
     } catch (acceptError) {
       setNotice(getFriendlyErrorMessage(acceptError));
     }
-  }
+  }, [opportunities, profile]);
 
-  async function handleOpenMatch(match: Match) {
+  const handleOpenMatch = useCallback(async (match: Match) => {
     const opportunity = opportunities[match.startupId];
     if (!profile || !opportunity) {
       setNotice('Unable to load Startup opportunity for this Match.');
@@ -310,7 +260,16 @@ export default function MyCardsScreen() {
     } catch (matchError) {
       setNotice(getFriendlyErrorMessage(matchError));
     }
-  }
+  }, [opportunities, profile]);
+  const renderedPipelineCards = useMemo(() => activePipelines.map((pipeline) => (
+    <DealPipelineCard
+      key={pipeline.id}
+      pipeline={pipeline}
+      founderMode={isFounderMode}
+      onAcceptInterest={handleAcceptInterest}
+      onOpenMatch={handleOpenMatch}
+    />
+  )), [activePipelines, handleAcceptInterest, handleOpenMatch, isFounderMode]);
 
   return (
     <Screen
@@ -366,22 +325,14 @@ export default function MyCardsScreen() {
       {!isLoading && activePipelines.length > 0 ? (
         <View style={styles.list}>
           <Text style={styles.sectionTitle}>Active Deal Pipeline</Text>
-          {activePipelines.map((pipeline) => (
-            <DealPipelineCard
-              key={pipeline.id}
-              pipeline={pipeline}
-              founderMode={isFounderMode}
-              onAcceptInterest={pipeline.interest ? () => handleAcceptInterest(pipeline.interest as InvestmentInterest) : undefined}
-              onOpenMatch={pipeline.match ? () => handleOpenMatch(pipeline.match as Match) : undefined}
-            />
-          ))}
+          {renderedPipelineCards}
         </View>
       ) : null}
     </Screen>
   );
 }
 
-function DealPipelineCard({
+const DealPipelineCard = memo(function DealPipelineCard({
   pipeline,
   founderMode,
   onAcceptInterest,
@@ -389,8 +340,8 @@ function DealPipelineCard({
 }: {
   pipeline: DealPipeline;
   founderMode: boolean;
-  onAcceptInterest?: () => void;
-  onOpenMatch?: () => void;
+  onAcceptInterest: (interest: InvestmentInterest) => void;
+  onOpenMatch: (match: Match) => void;
 }) {
   const opportunity = pipeline.opportunity;
   const title = opportunity?.startupName
@@ -416,6 +367,7 @@ function DealPipelineCard({
     ?? pipeline.investment?.allocation
     ?? opportunity?.investorAllocation;
   const stageMeta = getPipelineStageMeta(pipeline);
+  const startupCard = useMemo(() => opportunity ? mapOpportunityToStartupCard(opportunity) : null, [opportunity]);
 
   return (
     <Card style={styles.pipelineCard}>
@@ -430,9 +382,9 @@ function DealPipelineCard({
         </View>
       </View>
 
-      {opportunity ? (
+      {startupCard ? (
         <View style={styles.playingCardWrap}>
-          <StartupPlayingCard card={mapOpportunityToStartupCard(opportunity)} compact />
+          <StartupPlayingCard card={startupCard} compact />
         </View>
       ) : null}
 
@@ -481,7 +433,7 @@ function DealPipelineCard({
       />
     </Card>
   );
-}
+});
 
 function PipelineAction({
   pipeline,
@@ -491,15 +443,14 @@ function PipelineAction({
 }: {
   pipeline: DealPipeline;
   founderMode: boolean;
-  onAcceptInterest?: () => void;
-  onOpenMatch?: () => void;
+  onAcceptInterest: (interest: InvestmentInterest) => void;
+  onOpenMatch: (match: Match) => void;
 }) {
   if (founderMode && pipeline.interest && !pipeline.room) {
     return (
       <PrimaryButton
         label="Accept Interest & Start Discussion"
-        onPress={onAcceptInterest ?? (() => undefined)}
-        disabled={!onAcceptInterest}
+        onPress={() => onAcceptInterest(pipeline.interest as InvestmentInterest)}
       />
     );
   }
@@ -519,7 +470,7 @@ function PipelineAction({
   }
 
   if (pipeline.match) {
-    return <PrimaryButton label="Open Match" onPress={onOpenMatch ?? (() => undefined)} disabled={!onOpenMatch} />;
+    return <PrimaryButton label="Open Match" onPress={() => onOpenMatch(pipeline.match as Match)} />;
   }
 
   return <Text style={styles.meta}>Waiting for the next deal step.</Text>;
@@ -551,7 +502,7 @@ function mapOpportunityToStartupCard(opportunity: InvestmentOpportunity): Startu
   const askAmount = opportunity.askAmount ?? opportunity.fundingGoal ?? opportunity.fundingNeeded;
   const equity = opportunity.equity ?? opportunity.investorAllocation;
 
-  const card: StartupCard = {
+  return {
     id: opportunity.id,
     developerId: opportunity.founderId,
     ownerId: opportunity.founderId,
@@ -577,19 +528,18 @@ function mapOpportunityToStartupCard(opportunity: InvestmentOpportunity): Startu
     stage: opportunity.stage,
     shortPitch: description,
   };
+}
 
-  console.log('[My Cards] mapped startup card before render', {
-    source: {
-      startupName: opportunity.startupName,
-      founderName: opportunity.founderName,
-      shortDescription: opportunity.shortDescription,
-      fundingNeeded: opportunity.fundingNeeded,
-      imageUrl: opportunity.imageUrl,
-    },
-    card,
-  });
+function updateIfChanged<T>(current: T, next: T) {
+  return stableStringify(current) === stableStringify(next) ? current : next;
+}
 
-  return card;
+function stableStringify(value: unknown) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 const styles = StyleSheet.create({

@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Card, FieldPreview, LoadingState, PrimaryButton, Screen } from '@/components/ui/Primitives';
@@ -26,9 +26,11 @@ export default function DiscussionRoomScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const messageScrollRef = useRef<ScrollView | null>(null);
+  const lastTypingStateRef = useRef<boolean | null>(null);
+  const roomId = typeof id === 'string' ? id : '';
 
   const participantRole = useMemo(() => {
-    if (!authUser || !room) {
+    if (!authUser?.uid || !room) {
       return null;
     }
     if (authUser.uid === room.founderId) {
@@ -38,52 +40,60 @@ export default function DiscussionRoomScreen() {
       return 'investor';
     }
     return null;
-  }, [authUser, room]);
+  }, [authUser?.uid, room?.founderId, room?.investorId]);
 
   useEffect(() => {
-    if (!id) {
+    if (!roomId) {
       return;
     }
 
-    const path = `${firestoreCollections.discussionRooms}/${id}`;
-    console.info('[PromptFund Firestore] read start', { path, operation: 'onSnapshot' });
+    const path = `${firestoreCollections.discussionRooms}/${roomId}`;
     const unsubscribe = onSnapshot(
-      doc(getPromptFundFirestore(), firestoreCollections.discussionRooms, id),
+      doc(getPromptFundFirestore(), firestoreCollections.discussionRooms, roomId),
       (snapshot) => {
-        console.info('[PromptFund Firestore] read success', {
-          path,
-          operation: 'onSnapshot',
-          exists: snapshot.exists(),
-        });
-        setRoom(snapshot.exists() ? ({ ...snapshot.data(), id: snapshot.id } as DiscussionRoom) : null);
-        setIsLoading(false);
+        const nextRoom = snapshot.exists() ? ({ ...snapshot.data(), id: snapshot.id } as DiscussionRoom) : null;
+        const nextMessages = sortMessages(nextRoom?.messages ?? []);
+        setRoom((currentRoom) => areDiscussionRoomsEqual(currentRoom, nextRoom) ? currentRoom : nextRoom);
+        setMessages((currentMessages) => areDiscussionMessagesEqual(currentMessages, nextMessages) ? currentMessages : nextMessages);
+        setIsLoading((current) => current ? false : current);
       },
       (error) => {
         console.error('[PromptFund Firestore] read failure', { path, operation: 'onSnapshot', error });
         setNotice(getFriendlyErrorMessage(error));
-        setIsLoading(false);
+        setIsLoading((current) => current ? false : current);
       },
     );
 
     return unsubscribe;
-  }, [id]);
+  }, [roomId]);
 
   useEffect(() => {
-    if (!room || !authUser || messages.length === 0) {
+    lastTypingStateRef.current = null;
+  }, [roomId]);
+
+  const unreadCount = authUser?.uid && room ? (room.unreadCounts?.[authUser.uid] ?? 0) : 0;
+
+  useEffect(() => {
+    if (!room || !authUser?.uid || messages.length === 0 || unreadCount === 0) {
       return;
     }
 
     investmentFlowService.markDiscussionRead(room, authUser.uid).catch((error) => {
       console.info('[PromptFund Discussion] read receipt update failed', error);
     });
-  }, [authUser, messages.length, room]);
+  }, [authUser?.uid, messages.length, room?.id, unreadCount]);
 
   useEffect(() => {
-    if (!room || !authUser) {
+    if (!room || !authUser?.uid) {
       return;
     }
 
     const isTyping = message.trim().length > 0;
+    if (lastTypingStateRef.current === isTyping) {
+      return;
+    }
+
+    lastTypingStateRef.current = isTyping;
     investmentFlowService.setTyping(room, authUser.uid, isTyping).catch((error) => {
       console.info('[PromptFund Discussion] typing update failed', error);
     });
@@ -96,46 +106,13 @@ export default function DiscussionRoomScreen() {
       investmentFlowService.setTyping(room, authUser.uid, false).catch((error) => {
         console.info('[PromptFund Discussion] typing clear failed', error);
       });
+      lastTypingStateRef.current = false;
     }, 1600);
 
     return () => clearTimeout(timeout);
-  }, [authUser, message, room]);
+  }, [authUser?.uid, message, room?.id]);
 
-  useEffect(() => {
-    if (!id) {
-      return;
-    }
-
-    const path = `${firestoreCollections.discussionMessages}/*?discussionRoomId==${id}`;
-    const messagesQuery = query(
-      collection(getPromptFundFirestore(), firestoreCollections.discussionMessages),
-      where('discussionRoomId', '==', id),
-    );
-
-    console.info('[PromptFund Firestore] read start', { path, operation: 'onSnapshot' });
-    const unsubscribe = onSnapshot(
-      messagesQuery,
-      (snapshot) => {
-        console.info('[PromptFund Firestore] read success', {
-          path,
-          operation: 'onSnapshot',
-          count: snapshot.docs.length,
-        });
-        const nextMessages = snapshot.docs
-          .map((item) => ({ ...item.data(), id: item.id }) as DiscussionMessage)
-          .sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)));
-        setMessages(nextMessages);
-      },
-      (error) => {
-        console.error('[PromptFund Firestore] read failure', { path, operation: 'onSnapshot', error });
-        setNotice(getFriendlyErrorMessage(error));
-      },
-    );
-
-    return unsubscribe;
-  }, [id]);
-
-  async function handleSendMessage() {
+  const handleSendMessage = useCallback(async () => {
     if (!room || !profile || !message.trim()) {
       return;
     }
@@ -170,15 +147,15 @@ export default function DiscussionRoomScreen() {
       }
       setNotice(friendlyMessage);
     }
-  }
+  }, [documentAttachmentUrl, imageAttachmentUrl, linkAttachmentUrl, message, profile, room]);
 
-  const visibleMessages = messages.filter((item) => {
+  const visibleMessages = useMemo(() => messages.filter((item) => {
     const search = messageSearch.trim().toLowerCase();
     if (!search) {
       return true;
     }
     return `${item.senderName} ${item.body}`.toLowerCase().includes(search);
-  });
+  }), [messageSearch, messages]);
 
   async function handleReady(role: 'founder' | 'investor') {
     if (!room) {
@@ -198,9 +175,12 @@ export default function DiscussionRoomScreen() {
     }
 
     try {
-      const agreement = room.agreementId
-        ? await investmentFlowService.getAgreement(room.agreementId)
-        : await investmentFlowService.generateAgreement(room);
+      if (room.agreementId) {
+        router.push(`/agreement/${room.agreementId}`);
+        return;
+      }
+
+      const agreement = await investmentFlowService.generateAgreement(room);
 
       if (!agreement) {
         throw new Error('Unable to load Investment Agreement.');
@@ -441,6 +421,26 @@ function ReadyBadge({ label, ready }: { label: string; ready: boolean }) {
       <Text style={styles.readyValue}>{ready ? 'Ready' : 'Pending'}</Text>
     </View>
   );
+}
+
+function sortMessages(messages: DiscussionMessage[]) {
+  return [...messages].sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)));
+}
+
+function areDiscussionRoomsEqual(left: DiscussionRoom | null, right: DiscussionRoom | null) {
+  return stableStringify(left) === stableStringify(right);
+}
+
+function areDiscussionMessagesEqual(left: DiscussionMessage[], right: DiscussionMessage[]) {
+  return stableStringify(left) === stableStringify(right);
+}
+
+function stableStringify(value: unknown) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 function formatMessageTime(value: unknown) {

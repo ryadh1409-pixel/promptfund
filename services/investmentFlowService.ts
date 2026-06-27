@@ -61,16 +61,6 @@ function isPermissionDenied(error: unknown) {
     && (error as { code?: unknown }).code === 'permission-denied';
 }
 
-function logAcceptFlow(operation: string, path: string, extra?: Record<string, unknown>) {
-  console.log('[ACCEPT FLOW]', {
-    collection: path.split('/')[0],
-    path,
-    operation,
-    currentUid: currentUid(),
-    ...extra,
-  });
-}
-
 function recordTimeline(input: Omit<ActivityTimelineEvent, 'id' | 'createdAt'>) {
   return firestoreAdapter.create<Omit<ActivityTimelineEvent, 'id'>>('activityTimeline', {
     ...input,
@@ -157,8 +147,6 @@ export const investmentFlowService = {
   },
 
   async getDiscussionRoom(roomId: string): Promise<DiscussionRoom | null> {
-    console.log('ROOM READ PATH', roomId);
-    console.log('ROOM READ USER', currentUid());
     return firestoreAdapter.getById<DiscussionRoom>('discussionRooms', roomId);
   },
 
@@ -175,11 +163,6 @@ export const investmentFlowService = {
     const investmentAmount = opportunity.askAmount ?? opportunity.fundingGoal ?? opportunity.fundingNeeded;
     const investorAllocation = opportunity.equity ?? opportunity.investorAllocation;
 
-    logAcceptFlow('setDoc', `startupOpportunities/${opportunity.id}`, {
-      founderId: opportunity.founderId,
-      investorId,
-      status: 'discussion_started',
-    });
     await firestoreAdapter.setWithId<Omit<InvestmentOpportunity, 'id'>>('startupOpportunities', opportunity.id, {
       ...opportunity,
       title: startupName,
@@ -193,9 +176,6 @@ export const investmentFlowService = {
     });
 
     const roomId = flowId('room', opportunity.id, investorId);
-    console.log(`discussionRooms/${roomId}`);
-    console.log('ROOM CREATE START');
-    console.log('CREATE ROOM START');
     const payload: DiscussionRoom = {
       id: roomId,
       roomId,
@@ -213,40 +193,7 @@ export const investmentFlowService = {
       messages: [],
       status: 'active',
     };
-    console.log('ROOM CREATE PAYLOAD', payload);
-    console.log('ROOM CREATE USER', currentUid());
-    logAcceptFlow('setDoc', `discussionRooms/${roomId}`, {
-      founderId: payload.founderId,
-      investorId: payload.investorId,
-      status: payload.status,
-    });
-    console.log({
-      operation: 'setDoc',
-      path: `discussionRooms/${roomId}`,
-      isUsingMerge: false,
-      founderId: payload.founderId,
-      investorId: payload.investorId,
-      roomId,
-      currentUid: currentUid(),
-      payload,
-    });
-    const room = await firestoreAdapter.setWithId<DiscussionRoom>('discussionRooms', roomId, payload);
-    console.log('ROOM CREATE SUCCESS', roomId);
-    console.log('CREATE ROOM SUCCESS', roomId);
-    console.log('READ ROOM START', roomId);
-    let createdRoom: DiscussionRoom | null = null;
-    try {
-      logAcceptFlow('getDoc', `discussionRooms/${roomId}`, {
-        founderId: payload.founderId,
-        investorId: payload.investorId,
-      });
-      createdRoom = await this.getDiscussionRoom(roomId);
-      console.log('READ ROOM SUCCESS');
-    } catch (error) {
-      console.error('READ ROOM FAILURE AFTER CREATE', { roomId, error });
-    }
-
-    return createdRoom ?? room;
+    return firestoreAdapter.setWithId<DiscussionRoom>('discussionRooms', roomId, payload);
   },
 
   async addDiscussionMessage(
@@ -317,9 +264,6 @@ export const investmentFlowService = {
       [recipientId]: (room.unreadCounts?.[recipientId] ?? 0) + 1,
       [sender.id]: 0,
     };
-    console.log('ROOM UPDATE PATH', room.id);
-    console.log('ROOM UPDATE USER', currentUid());
-    console.log('ROOM UPDATE PAYLOAD', { messages: [...(room.messages ?? []), message] });
     return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
       messages: [...(room.messages ?? []), message],
       lastMessage: body,
@@ -374,9 +318,6 @@ export const investmentFlowService = {
       investorReady,
       status,
     };
-    console.log('ROOM UPDATE PATH', room.id);
-    console.log('ROOM UPDATE USER', currentUid());
-    console.log('ROOM UPDATE PAYLOAD', readyPayload);
     const updatedRoom = await firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, readyPayload);
 
     if (status === 'ready') {
@@ -385,9 +326,6 @@ export const investmentFlowService = {
         agreementId: agreement.id,
         status: 'ready',
       } as const;
-      console.log('ROOM UPDATE PATH', room.id);
-      console.log('ROOM UPDATE USER', currentUid());
-      console.log('ROOM UPDATE PAYLOAD', agreementPayload);
       return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, agreementPayload);
     }
 
@@ -395,8 +333,6 @@ export const investmentFlowService = {
   },
 
   async getAgreement(agreementId: string): Promise<InvestmentAgreement | null> {
-    console.log('AGREEMENT READ START', agreementId);
-    console.log('AGREEMENT USER', currentUid());
     return firestoreAdapter.getById<InvestmentAgreement>('agreements', agreementId);
   },
 
@@ -404,22 +340,14 @@ export const investmentFlowService = {
     const agreementId = `agreement-${room.id}`;
     let existing: InvestmentAgreement | null = null;
     try {
-      console.log('AGREEMENT PRECHECK READ START', agreementId);
-      console.log('AGREEMENT PRECHECK USER', currentUid());
       const snapshot = await getDoc(doc(getPromptFundFirestore(), 'agreements', agreementId));
-      console.log('AGREEMENT PRECHECK READ SUCCESS', {
-        agreementId,
-        exists: snapshot.exists(),
-      });
       existing = snapshot.exists()
         ? ({ ...snapshot.data(), id: snapshot.id } as InvestmentAgreement)
         : null;
     } catch (error) {
-      console.log('AGREEMENT PRECHECK READ SKIPPED BEFORE CREATE', {
-        agreementId,
-        currentUid: currentUid(),
-        reason: isPermissionDenied(error) ? 'permission-denied' : 'read-failed',
-      });
+      if (!isPermissionDenied(error)) {
+        console.info('[PromptFund Agreement] pre-create read failed', error);
+      }
     }
 
     if (existing) {
@@ -441,9 +369,6 @@ export const investmentFlowService = {
       investorAccepted: false,
       status: 'agreement_pending',
     };
-    console.log('AGREEMENT CREATE START', agreementId);
-    console.log('AGREEMENT PAYLOAD', payload);
-    console.log('AGREEMENT USER', currentUid());
     const agreement = await firestoreAdapter.setWithId<Omit<InvestmentAgreement, 'id'>>('agreements', agreementId, payload);
     await recordTimeline({
       startupId: room.opportunityId,
@@ -458,9 +383,6 @@ export const investmentFlowService = {
       agreementId,
       status: 'agreement_pending',
     } as const;
-    console.log('ROOM UPDATE PATH', room.id);
-    console.log('ROOM UPDATE USER', currentUid());
-    console.log('ROOM UPDATE PAYLOAD', roomAgreementPayload);
     await firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, roomAgreementPayload);
 
     return agreement;
@@ -476,9 +398,6 @@ export const investmentFlowService = {
       investorAccepted,
       status,
     };
-    console.log('AGREEMENT UPDATE START', agreement.id);
-    console.log('AGREEMENT PAYLOAD', acceptPayload);
-    console.log('AGREEMENT USER', currentUid());
     const updated = await firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, acceptPayload);
 
     const recipientId = role === 'founder' ? agreement.investorId : agreement.founderId;
@@ -504,9 +423,6 @@ export const investmentFlowService = {
       const fundingPayload = {
         status,
       };
-      console.log('ROOM UPDATE PATH', agreement.discussionRoomId);
-      console.log('ROOM UPDATE USER', currentUid());
-      console.log('ROOM UPDATE PAYLOAD', fundingPayload);
       await firestoreAdapter.update<DiscussionRoom>('discussionRooms', agreement.discussionRoomId, fundingPayload);
     }
 
@@ -567,7 +483,6 @@ export const investmentFlowService = {
       status: 'agreementStarted',
       agreementId: flowId('room', opportunity.id, interest.investorId),
     });
-    console.log('STEP 3A: Match created', match.id);
     await recordTimeline({
       startupId: opportunity.id,
       actorId: interest.investorId,
@@ -587,13 +502,11 @@ export const investmentFlowService = {
       matchId: match.id,
     });
 
-    console.log('STEP 3B: Creating discussion room');
     const room = await this.startDiscussion({
       opportunity,
       investorId: interest.investorId,
       investorName,
     });
-    console.log('STEP 4: Discussion room created', room.id);
     await recordTimeline({
       startupId: opportunity.id,
       discussionRoomId: room.id,
@@ -637,14 +550,10 @@ export const investmentFlowService = {
   },
 
   async listDiscussionRoomsByFounder(founderId: string): Promise<DiscussionRoom[]> {
-    console.log('ROOM READ PATH', `discussionRooms/*?founderId==${founderId}`);
-    console.log('ROOM READ USER', currentUid());
     return firestoreAdapter.queryByField<DiscussionRoom>('discussionRooms', 'founderId', founderId);
   },
 
   async listDiscussionRoomsByInvestor(investorId: string): Promise<DiscussionRoom[]> {
-    console.log('ROOM READ PATH', `discussionRooms/*?investorId==${investorId}`);
-    console.log('ROOM READ USER', currentUid());
     return firestoreAdapter.queryByField<DiscussionRoom>('discussionRooms', 'investorId', investorId);
   },
 
@@ -696,21 +605,10 @@ export const investmentFlowService = {
     founderName: string;
     investorName: string;
   }) {
-    logAcceptFlow('updateDoc', `interests/${interest.id}`, {
-      founderId: interest.founderUid,
-      investorId: interest.investorId,
-      startupOpportunityId: interest.startupId,
-      status: 'accepted',
-    });
     await firestoreAdapter.update<StartupInterest>('interests', interest.id, {
       status: 'accepted',
     });
 
-    logAcceptFlow('addDoc', 'matches/*', {
-      founderId: interest.founderUid,
-      investorId: interest.investorId,
-      startupOpportunityId: interest.startupId,
-    });
     const match = await firestoreAdapter.create<Omit<Match, 'id'>>('matches', {
       founderUid: interest.founderUid,
       investorUid: interest.investorId,
@@ -719,11 +617,6 @@ export const investmentFlowService = {
       status: 'matched',
     });
 
-    logAcceptFlow('addDoc success', `matches/${match.id}`, {
-      founderId: interest.founderUid,
-      investorId: interest.investorId,
-      startupOpportunityId: interest.startupId,
-    });
     const room = await this.startDiscussion({
       opportunity: {
         ...opportunity,
@@ -733,12 +626,6 @@ export const investmentFlowService = {
       investorName,
     });
 
-    logAcceptFlow('updateDoc', `matches/${match.id}`, {
-      founderId: interest.founderUid,
-      investorId: interest.investorId,
-      agreementId: room.id,
-      status: 'agreementStarted',
-    });
     await firestoreAdapter.update<Match>('matches', match.id, {
       agreementId: room.id,
       status: 'agreementStarted',
@@ -840,10 +727,6 @@ export const investmentFlowService = {
     const completedRoomPayload = {
       status: 'completed',
     } as const;
-    console.log('ROOM UPDATE PATH', agreement.discussionRoomId);
-    console.log('ROOM UPDATE USER', currentUid());
-    console.log('ROOM UPDATE PAYLOAD', completedRoomPayload);
-
     await Promise.all([
       firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, {
         status: 'completed',
