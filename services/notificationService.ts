@@ -1,32 +1,58 @@
 import Constants from 'expo-constants';
-import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 
 import { firestoreAdapter } from '@/firebase/firestore';
 import type { AppNotification, PushToken } from '@/types/User';
+
+type NotificationsModule = typeof import('expo-notifications');
 
 function now() {
   return new Date().toISOString();
 }
 
+async function loadNotifications(): Promise<NotificationsModule | null> {
+  const nativeModules = NativeModules as Record<string, unknown>;
+  if (!nativeModules.ExpoPushTokenManager && !nativeModules.ExponentPushTokenManager) {
+    console.info('[PromptFund Notifications] push native module unavailable');
+    return null;
+  }
+
+  try {
+    return await import('expo-notifications');
+  } catch (error) {
+    console.info('[PromptFund Notifications] expo-notifications unavailable', error);
+    return null;
+  }
+}
+
 export const notificationService = {
   async registerPushToken(userId: string) {
-    const permission = await Notifications.getPermissionsAsync();
-    const finalPermission = permission.granted ? permission : await Notifications.requestPermissionsAsync();
-
-    if (!finalPermission.granted) {
+    const Notifications = await loadNotifications();
+    if (!Notifications) {
       return null;
     }
 
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-    const token = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+    try {
+      const permission = await Notifications.getPermissionsAsync();
+      const finalPermission = permission.granted ? permission : await Notifications.requestPermissionsAsync();
 
-    return firestoreAdapter.setWithId<Omit<PushToken, 'id'>>('pushTokens', userId, {
-      userId,
-      token: token.data,
-      platform: Platform.OS,
-      updatedAt: now(),
-    });
+      if (!finalPermission.granted) {
+        return null;
+      }
+
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+      const token = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+
+      return firestoreAdapter.setWithId<Omit<PushToken, 'id'>>('pushTokens', userId, {
+        userId,
+        token: token.data,
+        platform: Platform.OS,
+        updatedAt: now(),
+      });
+    } catch (error) {
+      console.info('[PromptFund Notifications] push notifications disabled', error);
+      return null;
+    }
   },
 
   async createNotification(input: Omit<AppNotification, 'id' | 'createdAt'>) {
