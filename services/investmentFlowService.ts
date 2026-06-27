@@ -253,7 +253,7 @@ export const investmentFlowService = {
     room: DiscussionRoom,
     sender: Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle'>,
     body: string,
-    options: { imageUrl?: string; type?: 'user' | 'system' } = {},
+    options: { imageUrl?: string; documentUrl?: string; linkUrl?: string; type?: 'user' | 'system' } = {},
   ) {
     const moderation = moderateChatMessage(body);
     if (!moderation.allowed) {
@@ -282,6 +282,8 @@ export const investmentFlowService = {
       createdAt,
       type: options.type ?? 'user',
       imageUrl: options.imageUrl,
+      documentUrl: options.documentUrl,
+      linkUrl: options.linkUrl,
       deliveredTo: [recipientId],
       readBy: [sender.id],
     };
@@ -294,6 +296,8 @@ export const investmentFlowService = {
       createdAt: message.createdAt,
       type: message.type,
       imageUrl: message.imageUrl,
+      documentUrl: message.documentUrl,
+      linkUrl: message.linkUrl,
       deliveredTo: message.deliveredTo,
       readBy: message.readBy,
     });
@@ -870,7 +874,7 @@ export const investmentFlowService = {
       notificationService.createNotification({
         userId: agreement.founderId,
         title: 'Funding agreement completed',
-        body: `${agreement.startupName} moved to Archive / Portfolio.`,
+        body: `${agreement.startupName} moved to Traction as a portfolio company.`,
         type: 'funding_confirmed',
         data: { agreementId: agreement.id },
       }),

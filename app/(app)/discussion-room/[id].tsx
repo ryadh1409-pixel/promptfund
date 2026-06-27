@@ -20,6 +20,8 @@ export default function DiscussionRoomScreen() {
   const [message, setMessage] = useState('');
   const [messageSearch, setMessageSearch] = useState('');
   const [imageAttachmentUrl, setImageAttachmentUrl] = useState('');
+  const [documentAttachmentUrl, setDocumentAttachmentUrl] = useState('');
+  const [linkAttachmentUrl, setLinkAttachmentUrl] = useState('');
   const [moderationWarning, setModerationWarning] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
@@ -152,10 +154,14 @@ export default function DiscussionRoomScreen() {
         message.trim(),
         {
           imageUrl: imageAttachmentUrl.trim() || undefined,
+          documentUrl: documentAttachmentUrl.trim() || undefined,
+          linkUrl: linkAttachmentUrl.trim() || undefined,
         },
       );
       setMessage('');
       setImageAttachmentUrl('');
+      setDocumentAttachmentUrl('');
+      setLinkAttachmentUrl('');
     } catch (messageError) {
       const friendlyMessage = getFriendlyErrorMessage(messageError);
       if (friendlyMessage.includes('Community Guidelines')) {
@@ -261,9 +267,9 @@ export default function DiscussionRoomScreen() {
 
   return (
     <Screen
-      eyebrow="Investment Discussion Room"
-      title="Investment Discussion Room"
-      subtitle="Founder and Angel Investor align on the opportunity before agreement generation."
+      eyebrow="Investment Chat"
+      title="Investment Chat"
+      subtitle="Founder and Angel Investor keep a permanent private portfolio chat before and after funding."
     >
       {isLoading ? <LoadingState label="Loading Investment Discussion Room" /> : null}
       {notice ? (
@@ -325,6 +331,8 @@ export default function DiscussionRoomScreen() {
                       <Text style={styles.messageAuthor}>{item.type === 'system' ? 'PromptFund System' : item.senderName}</Text>
                       <Text style={styles.messageBody}>{item.body}</Text>
                       {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.messageImage} /> : null}
+                      {item.documentUrl ? <Text style={styles.attachmentText}>Document: {item.documentUrl}</Text> : null}
+                      {item.linkUrl ? <Text style={styles.attachmentText}>Link: {item.linkUrl}</Text> : null}
                       <View style={styles.messageMetaRow}>
                         <Text style={styles.messageMeta}>{formatMessageTime(item.createdAt)}</Text>
                         {authUser?.uid === item.senderId && room ? (
@@ -356,6 +364,22 @@ export default function DiscussionRoomScreen() {
               placeholderTextColor={colors.subtle}
               value={imageAttachmentUrl}
               onChangeText={setImageAttachmentUrl}
+              autoCapitalize="none"
+              style={styles.searchInput}
+            />
+            <TextInput
+              placeholder="Optional document URL"
+              placeholderTextColor={colors.subtle}
+              value={documentAttachmentUrl}
+              onChangeText={setDocumentAttachmentUrl}
+              autoCapitalize="none"
+              style={styles.searchInput}
+            />
+            <TextInput
+              placeholder="Optional link URL"
+              placeholderTextColor={colors.subtle}
+              value={linkAttachmentUrl}
+              onChangeText={setLinkAttachmentUrl}
               autoCapitalize="none"
               style={styles.searchInput}
             />
@@ -563,6 +587,12 @@ const styles = StyleSheet.create({
     height: 180,
     borderRadius: radii.md,
     backgroundColor: colors.panelMuted,
+  },
+  attachmentText: {
+    color: colors.luxuryGold,
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 20,
   },
   typingText: {
     color: colors.luxuryGold,

@@ -73,6 +73,14 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="traction/index"
+        options={{
+          title: 'Traction',
+          tabBarBadge: unreadNotifications > 0 ? unreadNotifications : undefined,
+          tabBarIcon: ({ color }) => <TabGlyph color={color} label="T" />,
+        }}
+      />
+      <Tabs.Screen
         name="profile/index"
         options={{
           title: 'Profile',

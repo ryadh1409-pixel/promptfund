@@ -23,6 +23,8 @@ export type DiscussionMessage = {
   createdAt: string;
   type?: 'user' | 'system';
   imageUrl?: string;
+  documentUrl?: string;
+  linkUrl?: string;
   deliveredTo?: string[];
   readBy?: string[];
   moderationFlags?: string[];
@@ -124,6 +126,16 @@ export type V5Investment = {
   amount?: number;
   allocation?: number;
   status?: 'completed' | 'active';
+  portfolioStage?: 'funded' | 'traction_updates' | 'testflight_ready' | 'production_ready' | 'growing_portfolio_company';
+  portfolioStageNumber?: 5 | 6 | 7 | 8;
+  currentStage?: string;
+  lastUpdateAt?: string;
+  testFlightAvailable?: boolean;
+  testFlightAvailableAt?: string;
+  testFlightTested?: boolean;
+  testFlightTestedAt?: string;
+  needsChanges?: boolean;
+  needsChangesAt?: string;
   paymentStatus?: 'completed';
   transactionId?: string;
   paidAt?: string;

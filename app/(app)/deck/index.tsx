@@ -339,9 +339,9 @@ export default function MyCardsScreen() {
 
       {archivedCount > 0 ? (
         <Card style={styles.archiveCard}>
-          <Text style={styles.sectionTitle}>Archive / Portfolio</Text>
-          <Text style={styles.meta}>View completed investments</Text>
-          <PrimaryButton label="Archive / Portfolio >" variant="secondary" onPress={() => router.push('/archive')} />
+          <Text style={styles.sectionTitle}>Traction</Text>
+          <Text style={styles.meta}>Funded startups become permanent portfolio companies in Traction.</Text>
+          <PrimaryButton label="Open Traction >" variant="secondary" onPress={() => router.push('/traction')} />
         </Card>
       ) : null}
 

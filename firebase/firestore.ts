@@ -47,6 +47,9 @@ export const firestoreCollections = {
   activityTimeline: 'activityTimeline',
   notifications: 'notifications',
   pushTokens: 'pushTokens',
+  founderUpdates: 'founderUpdates',
+  founderUpdateComments: 'founderUpdateComments',
+  aiUsage: 'aiUsage',
 } as const;
 
 export type FirestoreCollectionName = keyof typeof firestoreCollections;
@@ -103,9 +106,13 @@ function mapDocument<T>(id: string, data: DocumentData): FirestoreDocument<T> {
   };
 }
 
+function omitUndefined(input: object) {
+  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
+}
+
 function withWriteMetadata<T extends object>(input: T) {
   return {
-    ...input,
+    ...omitUndefined(input),
     updatedAt: serverTimestamp(),
   };
 }
@@ -199,7 +206,7 @@ export const firestoreAdapter: FirestoreAdapter = {
       console.info('[PromptFund Firestore] setWithId start', { path });
       await withFriendlyErrors(async () => {
         await setDoc(reference, {
-          ...input,
+          ...omitUndefined(input as object),
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
