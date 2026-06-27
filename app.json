@@ -13,7 +13,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "PromptFund needs camera access for Agreement Room video sessions.",
         "NSMicrophoneUsageDescription": "PromptFund needs microphone access to record agreement meetings.",
-        "NSPhotoLibraryUsageDescription": "PromptFund needs photo library access to update your profile photo."
+        "NSPhotoLibraryUsageDescription": "PromptFund needs photo library access to update your profile photo.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -24,7 +25,13 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.thamer.promptfund"
+      "package": "com.thamer.promptfund",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -56,6 +63,12 @@
       ],
       "expo-notifications",
       "expo-asset"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "39042b2c-97f1-46d1-8280-344eb8ee7663"
+      }
+    }
   }
 }
