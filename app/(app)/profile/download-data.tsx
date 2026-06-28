@@ -6,7 +6,6 @@ import { colors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { fundingService } from '@/services/fundingService';
-import { userService } from '@/services/userService';
 
 export default function DownloadDataScreen() {
   const { authUser, profile } = useAuth();
@@ -15,20 +14,16 @@ export default function DownloadDataScreen() {
 
   useEffect(() => {
     async function loadData() {
-      if (!authUser) {
+      if (!authUser?.uid) {
         return;
       }
 
       try {
         setError(null);
-        const [blockedUsers, investments] = await Promise.all([
-          userService.listBlockedUsers(authUser.uid),
-          fundingService.listInvestmentsByInvestor(authUser.uid),
-        ]);
+        const investments = await fundingService.listInvestmentsByInvestor(authUser.uid);
 
         setData({
           profile,
-          blockedUsers,
           investments,
           exportedAt: new Date().toISOString(),
         });
@@ -38,7 +33,7 @@ export default function DownloadDataScreen() {
     }
 
     loadData();
-  }, [authUser, profile]);
+  }, [authUser?.uid, profile]);
 
   return (
     <Screen eyebrow="Data" title="Download My Data" subtitle="Review your exportable PromptFund account data.">

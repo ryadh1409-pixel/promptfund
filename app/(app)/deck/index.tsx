@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { StartupPlayingCard, type StartupCard } from '@/components/cards/StartupPlayingCard';
@@ -37,6 +37,7 @@ export default function MyCardsScreen() {
   const [opportunities, setOpportunities] = useState<OpportunityMap>({});
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
+  const requestedOpportunityIdsRef = useRef<Set<string>>(new Set());
 
   const totalFunding = useMemo(
     () => investments.reduce((sum, investment) => sum + (investment.amount ?? 0), 0),
@@ -186,13 +187,23 @@ export default function MyCardsScreen() {
   ])).filter((startupId) => !opportunities[startupId]), [agreements, discussionRooms, interests, investments, matches, opportunities]);
 
   useEffect(() => {
+    requestedOpportunityIdsRef.current = new Set();
+  }, [authUser?.uid, isFounderMode]);
+
+  useEffect(() => {
     if (missingOpportunityIds.length === 0) {
       return;
     }
 
+    const idsToLoad = missingOpportunityIds.filter((startupId) => !requestedOpportunityIdsRef.current.has(startupId));
+    if (idsToLoad.length === 0) {
+      return;
+    }
+
+    idsToLoad.forEach((startupId) => requestedOpportunityIdsRef.current.add(startupId));
     let isMounted = true;
     Promise.all(
-      missingOpportunityIds.map(async (startupId) => {
+      idsToLoad.map(async (startupId) => {
         const opportunity = await investmentFlowService.getOpportunity(startupId);
         return opportunity ? [startupId, opportunity] as const : null;
       }),

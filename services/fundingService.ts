@@ -38,10 +38,6 @@ export const fundingService = {
     return firestoreAdapter.update<FundingRequest>('fundingRequests', requestId, input);
   },
 
-  async listInvestments(): Promise<Investment[]> {
-    return firestoreAdapter.list<Investment>('investments');
-  },
-
   async listInvestmentsByProject(projectId: string): Promise<Investment[]> {
     return firestoreAdapter.queryByField<Investment>('investments', 'projectId', projectId);
   },
@@ -105,10 +101,6 @@ export const fundingService = {
 
   async listMatchesByFounder(founderUid: string): Promise<Match[]> {
     return firestoreAdapter.queryByField<Match>('matches', 'founderUid', founderUid);
-  },
-
-  async listFundings(): Promise<Investment[]> {
-    return this.listInvestments();
   },
 
   async listFundingsByProject(projectId: string): Promise<Investment[]> {

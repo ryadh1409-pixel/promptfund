@@ -1,16 +1,47 @@
+import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { BlockUserControl } from '@/components/safety/BlockUserControl';
+import { TestFlightCard } from '@/components/testflight/TestFlightCard';
 import { Card, FieldPreview, LoadingState, PrimaryButton, Screen } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { firestoreCollections, getPromptFundFirestore } from '@/firebase/firestore';
+import { uploadDiscussionDocumentAttachment, uploadDiscussionImageAttachment } from '@/firebase/storage';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { investmentFlowService } from '@/services/investmentFlowService';
 import { userService } from '@/services/userService';
+import type { BlockStatus } from '@/services/userService';
 import type { DiscussionMessage, DiscussionRoom } from '@/types/InvestmentFlow';
+import type { DiscussionReportReason, User } from '@/types/User';
+
+const supportedDocumentTypes = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+];
+
+const reportReasons: DiscussionReportReason[] = [
+  'Spam',
+  'Scam or Fraud',
+  'Bad language',
+  'False Investment Information',
+  'Other',
+];
+
+type PendingImageAttachment = {
+  localUri: string;
+  downloadUrl: string;
+};
+
+type PendingDocumentAttachment = {
+  name: string;
+  downloadUrl: string;
+};
 
 export default function DiscussionRoomScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -19,12 +50,19 @@ export default function DiscussionRoomScreen() {
   const [messages, setMessages] = useState<DiscussionMessage[]>([]);
   const [message, setMessage] = useState('');
   const [messageSearch, setMessageSearch] = useState('');
-  const [imageAttachmentUrl, setImageAttachmentUrl] = useState('');
-  const [documentAttachmentUrl, setDocumentAttachmentUrl] = useState('');
-  const [linkAttachmentUrl, setLinkAttachmentUrl] = useState('');
+  const [pendingImage, setPendingImage] = useState<PendingImageAttachment | null>(null);
+  const [pendingDocument, setPendingDocument] = useState<PendingDocumentAttachment | null>(null);
   const [moderationWarning, setModerationWarning] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [isSavingTestFlight, setIsSavingTestFlight] = useState(false);
+  const [blockStatus, setBlockStatus] = useState<BlockStatus | null>(null);
+  const [counterpartyProfile, setCounterpartyProfile] = useState<User | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [isReportModalVisible, setIsReportModalVisible] = useState(false);
+  const [reportReason, setReportReason] = useState<DiscussionReportReason>('Spam');
+  const [reportDetails, setReportDetails] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const messageScrollRef = useRef<ScrollView | null>(null);
   const lastTypingStateRef = useRef<boolean | null>(null);
   const roomId = typeof id === 'string' ? id : '';
@@ -72,16 +110,54 @@ export default function DiscussionRoomScreen() {
   }, [roomId]);
 
   const unreadCount = authUser?.uid && room ? (room.unreadCounts?.[authUser.uid] ?? 0) : 0;
+  const counterpartyId = authUser?.uid && room
+    ? authUser.uid === room.founderId
+      ? room.investorId
+      : room.founderId
+    : null;
+  const counterpartyName = authUser?.uid && room
+    ? authUser.uid === room.founderId
+      ? room.investorName
+      : room.founderName
+    : 'this user';
+  const canUseComposer = Boolean(blockStatus && !blockStatus.blockedByMe && !blockStatus.blockedMe);
+  const hasPendingAttachment = Boolean(pendingImage || pendingDocument);
+  const canSendMessage = canUseComposer && !isUploadingAttachment && (message.trim().length > 0 || hasPendingAttachment);
 
   useEffect(() => {
-    if (!room || !authUser?.uid || messages.length === 0 || unreadCount === 0) {
+    if (!counterpartyId) {
+      setCounterpartyProfile(null);
+      return;
+    }
+
+    let isMounted = true;
+    userService.getUserById(counterpartyId)
+      .then((user) => {
+        if (isMounted) {
+          setCounterpartyProfile(user);
+        }
+      })
+      .catch((error) => setNotice(getFriendlyErrorMessage(error)));
+
+    return () => {
+      isMounted = false;
+    };
+  }, [counterpartyId]);
+
+  useEffect(() => {
+    if (!room || !authUser?.uid || messages.length === 0) {
+      return;
+    }
+
+    const hasUnreadInboundMessages = messages.some((item) => item.senderId !== authUser.uid && !item.readBy?.includes(authUser.uid));
+    if (!hasUnreadInboundMessages && unreadCount === 0) {
       return;
     }
 
     investmentFlowService.markDiscussionRead(room, authUser.uid).catch((error) => {
       console.info('[PromptFund Discussion] read receipt update failed', error);
     });
-  }, [authUser?.uid, messages.length, room?.id, unreadCount]);
+  }, [authUser?.uid, messages, room, unreadCount]);
 
   useEffect(() => {
     if (!room || !authUser?.uid) {
@@ -112,13 +188,103 @@ export default function DiscussionRoomScreen() {
     return () => clearTimeout(timeout);
   }, [authUser?.uid, message, room?.id]);
 
+  const handleAttachPhoto = useCallback(async () => {
+    if (!room || !authUser?.uid) {
+      setNotice('Open an Investment Chat before attaching a photo.');
+      return;
+    }
+
+    try {
+      setNotice(null);
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setNotice('Photo library permission is required to attach a photo.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.82,
+      });
+
+      if (result.canceled || result.assets.length === 0) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      setIsUploadingAttachment(true);
+      const upload = await uploadDiscussionImageAttachment({
+        roomId: room.id,
+        userId: authUser.uid,
+        uri: asset.uri,
+        contentType: asset.mimeType ?? 'image/jpeg',
+      });
+
+      setPendingImage({
+        localUri: asset.uri,
+        downloadUrl: upload.downloadUrl,
+      });
+    } catch (error) {
+      setNotice(getFriendlyErrorMessage(error));
+    } finally {
+      setIsUploadingAttachment(false);
+    }
+  }, [authUser?.uid, room?.id]);
+
+  const handleAttachDocument = useCallback(async () => {
+    if (!room || !authUser?.uid) {
+      setNotice('Open an Investment Chat before attaching a document.');
+      return;
+    }
+
+    try {
+      setNotice(null);
+      const DocumentPicker = await import('expo-document-picker');
+      const result = await DocumentPicker.getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: false,
+        type: supportedDocumentTypes,
+      });
+
+      if (result.canceled || result.assets.length === 0) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      const contentType = asset.mimeType ?? mimeTypeFromFileName(asset.name);
+      if (!isSupportedDocumentType(contentType, asset.name)) {
+        setNotice('Attach a PDF, DOC, DOCX, or TXT document.');
+        return;
+      }
+
+      setIsUploadingAttachment(true);
+      const upload = await uploadDiscussionDocumentAttachment({
+        roomId: room.id,
+        userId: authUser.uid,
+        uri: asset.uri,
+        fileName: asset.name,
+        contentType,
+      });
+
+      setPendingDocument({
+        name: asset.name,
+        downloadUrl: upload.downloadUrl,
+      });
+    } catch (error) {
+      setNotice(getFriendlyErrorMessage(error));
+    } finally {
+      setIsUploadingAttachment(false);
+    }
+  }, [authUser?.uid, room?.id]);
+
   const handleSendMessage = useCallback(async () => {
-    if (!room || !profile || !message.trim()) {
+    if (!room || !profile || !canSendMessage || !blockStatus || blockStatus.blockedByMe || blockStatus.blockedMe) {
       return;
     }
 
     try {
       setModerationWarning(null);
+      const body = message.trim() || (pendingDocument ? `Attached ${pendingDocument.name}` : 'Attached photo');
       await investmentFlowService.addDiscussionMessage(
         room,
         {
@@ -128,17 +294,17 @@ export default function DiscussionRoomScreen() {
           username: profile.username,
           handle: profile.handle,
         },
-        message.trim(),
+        body,
         {
-          imageUrl: imageAttachmentUrl.trim() || undefined,
-          documentUrl: documentAttachmentUrl.trim() || undefined,
-          linkUrl: linkAttachmentUrl.trim() || undefined,
+          imageUrl: pendingImage?.downloadUrl,
+          documentUrl: pendingDocument?.downloadUrl,
+          documentName: pendingDocument?.name,
+          blockStatus: blockStatus ?? undefined,
         },
       );
       setMessage('');
-      setImageAttachmentUrl('');
-      setDocumentAttachmentUrl('');
-      setLinkAttachmentUrl('');
+      setPendingImage(null);
+      setPendingDocument(null);
     } catch (messageError) {
       const friendlyMessage = getFriendlyErrorMessage(messageError);
       if (friendlyMessage.includes('Community Guidelines')) {
@@ -147,7 +313,15 @@ export default function DiscussionRoomScreen() {
       }
       setNotice(friendlyMessage);
     }
-  }, [documentAttachmentUrl, imageAttachmentUrl, linkAttachmentUrl, message, profile, room]);
+  }, [blockStatus, canSendMessage, message, pendingDocument, pendingImage, profile, room]);
+
+  const handleOpenDocument = useCallback(async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch (error) {
+      setNotice(getFriendlyErrorMessage(error));
+    }
+  }, []);
 
   const visibleMessages = useMemo(() => messages.filter((item) => {
     const search = messageSearch.trim().toLowerCase();
@@ -192,56 +366,56 @@ export default function DiscussionRoomScreen() {
     }
   }
 
-  async function handleMuteConversation() {
-    if (!room || !authUser) return;
+  async function handleToggleTestFlight(nextReady: boolean) {
+    if (!room || !participantRole) {
+      return;
+    }
+
+    const previousRoom = room;
+    const field = participantRole === 'founder' ? 'founderTestFlightReady' : 'investorTestFlightReady';
 
     try {
-      await investmentFlowService.updateConversationSafety(room, authUser.uid, 'mutedBy');
-      setNotice('Conversation muted.');
+      setRoom((currentRoom) => currentRoom ? { ...currentRoom, [field]: nextReady } : currentRoom);
+      setIsSavingTestFlight(true);
+      await investmentFlowService.setTestFlightReady(room, participantRole, nextReady);
     } catch (error) {
+      setRoom(previousRoom);
       setNotice(getFriendlyErrorMessage(error));
+    } finally {
+      setIsSavingTestFlight(false);
     }
   }
 
-  async function handleLeaveConversation() {
-    if (!room || !authUser) return;
-
-    try {
-      await investmentFlowService.updateConversationSafety(room, authUser.uid, 'leftBy');
-      setNotice('Conversation removed from your active view.');
-    } catch (error) {
-      setNotice(getFriendlyErrorMessage(error));
-    }
+  function handleReportConversation() {
+    setReportReason('Spam');
+    setReportDetails('');
+    setIsReportModalVisible(true);
   }
 
-  async function handleReportConversation() {
-    if (!room || !authUser) return;
+  async function handleSubmitReport() {
+    if (!room || !authUser?.uid || !counterpartyId || isSubmittingReport) return;
+    if (reportReason === 'Other' && !reportDetails.trim()) {
+      setNotice('Describe what happened before submitting the report.');
+      return;
+    }
 
-    const reportedUid = authUser.uid === room.founderId ? room.investorId : room.founderId;
     try {
-      await userService.reportUser({
+      setIsSubmittingReport(true);
+      const result = await userService.submitDiscussionReport({
         reporterUid: authUser.uid,
-        reportedUid,
-        reason: 'Other',
-        details: `Conversation reported from discussion room ${room.id}.`,
+        reportedUid: counterpartyId,
         discussionRoomId: room.id,
-        startupId: room.opportunityId,
+        reason: reportReason,
+        details: reportDetails.trim(),
       });
-      setNotice('Conversation reported for admin review.');
+      setIsReportModalVisible(false);
+      setNotice(result.alreadyExists
+        ? 'You have already submitted a report for this discussion room.'
+        : 'Thank you. Your report has been submitted for review.');
     } catch (error) {
       setNotice(getFriendlyErrorMessage(error));
-    }
-  }
-
-  async function handleBlockCounterparty() {
-    if (!room || !authUser) return;
-
-    const blockedUid = authUser.uid === room.founderId ? room.investorId : room.founderId;
-    try {
-      await userService.blockUser(authUser.uid, blockedUid);
-      setNotice('User blocked.');
-    } catch (error) {
-      setNotice(getFriendlyErrorMessage(error));
+    } finally {
+      setIsSubmittingReport(false);
     }
   }
 
@@ -273,6 +447,13 @@ export default function DiscussionRoomScreen() {
               <FieldPreview label="Angel Investor Profile" value={room.investorName} />
             </View>
           </Card>
+
+          <TestFlightCard
+            room={room}
+            role={participantRole}
+            isSaving={isSavingTestFlight}
+            onToggle={handleToggleTestFlight}
+          />
 
           <Card>
             <View style={styles.chatHeader}>
@@ -311,12 +492,19 @@ export default function DiscussionRoomScreen() {
                       <Text style={styles.messageAuthor}>{item.type === 'system' ? 'PromptFund System' : item.senderName}</Text>
                       <Text style={styles.messageBody}>{item.body}</Text>
                       {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.messageImage} /> : null}
-                      {item.documentUrl ? <Text style={styles.attachmentText}>Document: {item.documentUrl}</Text> : null}
+                      {item.documentUrl ? (
+                        <Pressable style={styles.documentAttachment} onPress={() => handleOpenDocument(item.documentUrl as string)}>
+                          <Text style={styles.attachmentText}>Open Document</Text>
+                          <Text style={styles.documentName} numberOfLines={1}>
+                            {item.documentName ?? fileNameFromUrl(item.documentUrl)}
+                          </Text>
+                        </Pressable>
+                      ) : null}
                       {item.linkUrl ? <Text style={styles.attachmentText}>Link: {item.linkUrl}</Text> : null}
                       <View style={styles.messageMetaRow}>
                         <Text style={styles.messageMeta}>{formatMessageTime(item.createdAt)}</Text>
-                        {authUser?.uid === item.senderId && room ? (
-                          <Text style={styles.messageMeta}>{getDeliveryStatus(item, room, authUser.uid)}</Text>
+                        {authUser?.uid && room ? (
+                          <Text style={styles.messageMeta}>{getMessageStatusLabel(item, room, authUser.uid)}</Text>
                         ) : null}
                       </View>
                     </View>
@@ -328,42 +516,57 @@ export default function DiscussionRoomScreen() {
               <Text style={styles.typingText}>The other party is typing...</Text>
             ) : null}
             {moderationWarning ? <Text style={styles.moderationWarning}>{moderationWarning}</Text> : null}
-            <TextInput
-              multiline
-              placeholder="Write a professional discussion note..."
-              placeholderTextColor={colors.subtle}
-              value={message}
-              onChangeText={(value) => {
-                setModerationWarning(null);
-                setMessage(value);
-              }}
-              style={styles.input}
-            />
-            <TextInput
-              placeholder="Optional image attachment URL"
-              placeholderTextColor={colors.subtle}
-              value={imageAttachmentUrl}
-              onChangeText={setImageAttachmentUrl}
-              autoCapitalize="none"
-              style={styles.searchInput}
-            />
-            <TextInput
-              placeholder="Optional document URL"
-              placeholderTextColor={colors.subtle}
-              value={documentAttachmentUrl}
-              onChangeText={setDocumentAttachmentUrl}
-              autoCapitalize="none"
-              style={styles.searchInput}
-            />
-            <TextInput
-              placeholder="Optional link URL"
-              placeholderTextColor={colors.subtle}
-              value={linkAttachmentUrl}
-              onChangeText={setLinkAttachmentUrl}
-              autoCapitalize="none"
-              style={styles.searchInput}
-            />
-            <PrimaryButton label="Send Message" onPress={handleSendMessage} disabled={!message.trim()} />
+            {!blockStatus ? <Text style={styles.empty}>Checking community safety...</Text> : null}
+            {blockStatus?.blockedByMe ? <Text style={styles.blockedNotice}>You have blocked this user.</Text> : null}
+            {blockStatus?.blockedMe ? <Text style={styles.blockedNotice}>This user has blocked you.</Text> : null}
+            {canUseComposer ? (
+              <>
+                <TextInput
+                  multiline
+                  placeholder="Write a professional discussion note..."
+                  placeholderTextColor={colors.subtle}
+                  value={message}
+                  onChangeText={(value) => {
+                    setModerationWarning(null);
+                    setMessage(value);
+                  }}
+                  style={styles.input}
+                />
+                <View style={styles.attachmentActions}>
+                  <PrimaryButton
+                    label={isUploadingAttachment ? 'Uploading...' : 'Attach Photo'}
+                    variant="secondary"
+                    onPress={handleAttachPhoto}
+                    disabled={isUploadingAttachment}
+                  />
+                  <PrimaryButton
+                    label={isUploadingAttachment ? 'Uploading...' : 'Attach Document'}
+                    variant="secondary"
+                    onPress={handleAttachDocument}
+                    disabled={isUploadingAttachment}
+                  />
+                </View>
+                {pendingImage ? (
+                  <View style={styles.pendingAttachment}>
+                    <Image source={{ uri: pendingImage.localUri }} style={styles.pendingImage} />
+                    <PrimaryButton label="Remove Photo" variant="secondary" onPress={() => setPendingImage(null)} />
+                  </View>
+                ) : null}
+                {pendingDocument ? (
+                  <View style={styles.pendingDocument}>
+                    <Text style={styles.pendingLabel}>Document ready to send</Text>
+                    <Text style={styles.documentName} numberOfLines={1}>{pendingDocument.name}</Text>
+                    <PrimaryButton label="Remove Document" variant="secondary" onPress={() => setPendingDocument(null)} />
+                  </View>
+                ) : null}
+                {isUploadingAttachment ? <Text style={styles.uploadProgress}>Uploading attachment...</Text> : null}
+                <PrimaryButton
+                  label="Send Message"
+                  onPress={handleSendMessage}
+                  disabled={!canSendMessage}
+                />
+              </>
+            ) : null}
           </Card>
 
           <Card>
@@ -397,20 +600,93 @@ export default function DiscussionRoomScreen() {
             ) : null}
           </Card>
 
-          <Card>
-            <Text style={styles.sectionTitle}>Community Safety</Text>
-            <Text style={styles.empty}>Manage this discussion if anything feels unsafe or off-platform.</Text>
-            <View style={styles.actions}>
-              <PrimaryButton label="Mute Conversation" variant="secondary" onPress={handleMuteConversation} />
-              <PrimaryButton label="Leave Discussion" variant="secondary" onPress={handleLeaveConversation} />
-              <PrimaryButton label="Delete Conversation" variant="secondary" onPress={handleLeaveConversation} />
-              <PrimaryButton label="Report Conversation" variant="secondary" onPress={handleReportConversation} />
-              <PrimaryButton label="Block User" variant="secondary" onPress={handleBlockCounterparty} />
-            </View>
-          </Card>
+          <BlockUserControl
+            currentUserId={authUser?.uid}
+            targetUserId={counterpartyId}
+            currentUser={profile}
+            targetUser={counterpartyProfile}
+            targetName={counterpartyName}
+            onStatusChange={setBlockStatus}
+            onReport={handleReportConversation}
+            showReport
+          />
         </>
       ) : null}
+      <ReportUserModal
+        visible={isReportModalVisible}
+        reason={reportReason}
+        details={reportDetails}
+        isSubmitting={isSubmittingReport}
+        onChangeReason={setReportReason}
+        onChangeDetails={setReportDetails}
+        onCancel={() => setIsReportModalVisible(false)}
+        onSubmit={handleSubmitReport}
+      />
     </Screen>
+  );
+}
+
+function ReportUserModal({
+  visible,
+  reason,
+  details,
+  isSubmitting,
+  onChangeReason,
+  onChangeDetails,
+  onCancel,
+  onSubmit,
+}: {
+  visible: boolean;
+  reason: DiscussionReportReason;
+  details: string;
+  isSubmitting: boolean;
+  onChangeReason: (reason: DiscussionReportReason) => void;
+  onChangeDetails: (details: string) => void;
+  onCancel: () => void;
+  onSubmit: () => void | Promise<void>;
+}) {
+  const requiresDetails = reason === 'Other';
+  const canSubmit = !isSubmitting && (!requiresDetails || details.trim().length > 0);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Report User</Text>
+          <Text style={styles.modalSubtitle}>
+            Help us understand what happened. Reports are reviewed by the PromptFund Trust & Safety team.
+          </Text>
+          <View style={styles.reasonList}>
+            {reportReasons.map((item) => (
+              <Pressable
+                key={item}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: reason === item }}
+                onPress={() => onChangeReason(item)}
+                style={[styles.reasonOption, reason === item ? styles.reasonOptionActive : null]}
+              >
+                <View style={[styles.radioDot, reason === item ? styles.radioDotActive : null]} />
+                <Text style={styles.reasonText}>{item}</Text>
+              </Pressable>
+            ))}
+          </View>
+          {requiresDetails ? (
+            <TextInput
+              multiline
+              placeholder="Describe what happened..."
+              placeholderTextColor={colors.subtle}
+              value={details}
+              onChangeText={onChangeDetails}
+              style={styles.reportTextArea}
+            />
+          ) : null}
+          <View style={styles.modalActions}>
+            <PrimaryButton label="Cancel" variant="secondary" onPress={onCancel} disabled={isSubmitting} />
+            <PrimaryButton label={isSubmitting ? 'Submitting...' : 'Submit Report'} onPress={onSubmit} disabled={!canSubmit} />
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -445,9 +721,7 @@ function stableStringify(value: unknown) {
 
 function formatMessageTime(value: unknown) {
   try {
-    const date = typeof value === 'object' && value !== null && 'toDate' in value
-      ? (value as { toDate: () => Date }).toDate()
-      : new Date(String(value));
+    const date = toDate(value);
     return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   } catch {
     return 'Now';
@@ -460,27 +734,82 @@ function getMessageDateLabel(value: unknown) {
   }
 
   try {
-    const date = typeof value === 'object' && value !== null && 'toDate' in value
-      ? (value as { toDate: () => Date }).toDate()
-      : new Date(String(value));
-    return date.toLocaleDateString();
+    const date = toDate(value);
+    const today = startOfDay(new Date());
+    const messageDay = startOfDay(date);
+    const dayDifference = Math.round((today.getTime() - messageDay.getTime()) / 86_400_000);
+
+    if (dayDifference === 0) {
+      return 'Today';
+    }
+    if (dayDifference === 1) {
+      return 'Yesterday';
+    }
+
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
   } catch {
     return '';
   }
+}
+
+function toDate(value: unknown) {
+  if (typeof value === 'object' && value !== null && 'toDate' in value) {
+    return (value as { toDate: () => Date }).toDate();
+  }
+  return new Date(String(value));
+}
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
 function isCounterpartyTyping(room: DiscussionRoom, currentUid: string) {
   return Object.entries(room.typingBy ?? {}).some(([uid, isTyping]) => uid !== currentUid && isTyping);
 }
 
-function getDeliveryStatus(message: DiscussionMessage, room: DiscussionRoom, currentUid: string) {
+function getMessageStatusLabel(message: DiscussionMessage, room: DiscussionRoom, currentUid: string) {
   const otherUid = currentUid === room.founderId ? room.investorId : room.founderId;
-  const otherReadAt = room.readReceipts?.[otherUid];
-  if (otherReadAt && String(otherReadAt) >= String(message.createdAt)) {
-    return 'Read';
+
+  if (message.senderId !== currentUid) {
+    return message.readBy?.includes(currentUid) ? '✓✓ Read' : 'Sent';
   }
 
-  return message.deliveredTo?.includes(otherUid) ? 'Delivered' : 'Sent';
+  if (message.readBy?.includes(otherUid)) {
+    return '✓✓ Read';
+  }
+
+  return message.deliveredTo?.includes(otherUid) ? '✓ Delivered' : 'Sent';
+}
+
+function mimeTypeFromFileName(fileName: string) {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  switch (extension) {
+    case 'pdf':
+      return 'application/pdf';
+    case 'doc':
+      return 'application/msword';
+    case 'docx':
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    case 'txt':
+      return 'text/plain';
+    default:
+      return 'application/octet-stream';
+  }
+}
+
+function isSupportedDocumentType(contentType: string, fileName: string) {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  return supportedDocumentTypes.includes(contentType) || ['pdf', 'doc', 'docx', 'txt'].includes(extension ?? '');
+}
+
+function fileNameFromUrl(url: string) {
+  try {
+    const decoded = decodeURIComponent(url);
+    const path = decoded.split('/').pop()?.split('?')[0];
+    return path || 'Investment document';
+  } catch {
+    return 'Investment document';
+  }
 }
 
 const styles = StyleSheet.create({
@@ -594,6 +923,56 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 20,
   },
+  documentAttachment: {
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: 'rgba(200, 162, 74, 0.34)',
+    borderRadius: radii.md,
+    padding: spacing.md,
+    backgroundColor: 'rgba(200, 162, 74, 0.08)',
+  },
+  documentName: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  attachmentActions: {
+    gap: spacing.sm,
+  },
+  pendingAttachment: {
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(216, 201, 163, 0.22)',
+    borderRadius: radii.md,
+    padding: spacing.md,
+    backgroundColor: colors.black,
+  },
+  pendingImage: {
+    width: '100%',
+    height: 180,
+    borderRadius: radii.md,
+    backgroundColor: colors.panelMuted,
+  },
+  pendingDocument: {
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(216, 201, 163, 0.22)',
+    borderRadius: radii.md,
+    padding: spacing.md,
+    backgroundColor: colors.black,
+  },
+  pendingLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  uploadProgress: {
+    color: colors.luxuryGold,
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
   typingText: {
     color: colors.luxuryGold,
     fontSize: 13,
@@ -604,6 +983,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
     lineHeight: 20,
+  },
+  blockedNotice: {
+    borderWidth: 1,
+    borderColor: 'rgba(177, 18, 38, 0.36)',
+    borderRadius: radii.md,
+    padding: spacing.md,
+    backgroundColor: 'rgba(177, 18, 38, 0.12)',
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
+    lineHeight: 22,
+    textAlign: 'center',
   },
   input: {
     minHeight: 92,
@@ -660,5 +1051,76 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     textAlign: 'center',
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: spacing.lg,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+  },
+  modalCard: {
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(216, 201, 163, 0.26)',
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.panel,
+  },
+  modalTitle: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  modalSubtitle: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 21,
+  },
+  reasonList: {
+    gap: spacing.sm,
+  },
+  reasonOption: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(216, 201, 163, 0.22)',
+    borderRadius: radii.md,
+    padding: spacing.md,
+    backgroundColor: colors.black,
+  },
+  reasonOptionActive: {
+    borderColor: colors.luxuryGold,
+    backgroundColor: 'rgba(200, 162, 74, 0.12)',
+  },
+  radioDot: {
+    width: 14,
+    height: 14,
+    borderWidth: 1,
+    borderColor: colors.muted,
+    borderRadius: 7,
+  },
+  radioDotActive: {
+    borderColor: colors.luxuryGold,
+    backgroundColor: colors.luxuryGold,
+  },
+  reasonText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  reportTextArea: {
+    minHeight: 110,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    color: colors.text,
+    backgroundColor: colors.black,
+    textAlignVertical: 'top',
+  },
+  modalActions: {
+    gap: spacing.sm,
   },
 });

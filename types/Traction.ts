@@ -1,17 +1,9 @@
-export type PortfolioStage =
-  | 'funded'
-  | 'traction_updates'
-  | 'testflight_ready'
-  | 'production_ready'
-  | 'growing_portfolio_company';
-
 export type FounderUpdateKind =
   | 'product'
   | 'milestone'
   | 'revenue'
   | 'hiring'
   | 'funding'
-  | 'testflight'
   | 'general';
 
 export type FounderUpdate = {
@@ -28,7 +20,6 @@ export type FounderUpdate = {
   photoUrls?: string[];
   screenshotUrls?: string[];
   videoLink?: string;
-  testFlightLink?: string;
   appStoreLink?: string;
   website?: string;
   demoLink?: string;
@@ -62,28 +53,3 @@ export type FounderUpdateComment = {
   updatedAt?: string;
 };
 
-export type AiUsageAnalytics = {
-  id: string;
-  investmentId: string;
-  founderId: string;
-  investorId: string;
-  totalTokens: number;
-  tokensThisMonth: number;
-  tokensToday: number;
-  aiConversations: number;
-  lastAiActivity?: string;
-  updatedAt?: string;
-};
-
-export type PortfolioMilestoneState = {
-  stage: PortfolioStage;
-  stageNumber: 5 | 6 | 7 | 8;
-  label: string;
-  testFlightAvailable?: boolean;
-  testFlightAvailableAt?: string;
-  testFlightTested?: boolean;
-  testFlightTestedAt?: string;
-  needsChanges?: boolean;
-  needsChangesAt?: string;
-  lastUpdateAt?: string;
-};

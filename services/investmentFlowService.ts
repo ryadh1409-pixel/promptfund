@@ -6,6 +6,7 @@ import { firestoreAdapter, getPromptFundFirestore } from '@/firebase/firestore';
 import { AppError } from '@/services/errorHandler';
 import { notificationService } from '@/services/notificationService';
 import { userService } from '@/services/userService';
+import type { BlockStatus } from '@/services/userService';
 import type {
   CreateInvestmentOpportunityInput,
   DiscussionMessage,
@@ -44,6 +45,10 @@ function normalizeInvestment(investment: V5Investment): V5Investment {
 
 function sortByCreatedAt<T extends { createdAt?: string }>(items: T[]) {
   return [...items].sort((left, right) => String(left.createdAt ?? '').localeCompare(String(right.createdAt ?? '')));
+}
+
+function omitUndefinedFields<T extends object>(input: T) {
+  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as T;
 }
 
 function flowId(prefix: string, ...parts: string[]) {
@@ -110,10 +115,6 @@ export function mapProjectToOpportunity(project: Project): InvestmentOpportunity
 }
 
 export const investmentFlowService = {
-  async listOpportunities(): Promise<InvestmentOpportunity[]> {
-    return firestoreAdapter.list<InvestmentOpportunity>('startupOpportunities');
-  },
-
   async getOpportunity(opportunityId: string): Promise<InvestmentOpportunity | null> {
     return firestoreAdapter.getById<InvestmentOpportunity>('startupOpportunities', opportunityId);
   },
@@ -190,6 +191,8 @@ export const investmentFlowService = {
       investorAllocation,
       founderReady: false,
       investorReady: false,
+      founderTestFlightReady: false,
+      investorTestFlightReady: false,
       messages: [],
       status: 'active',
     };
@@ -200,7 +203,14 @@ export const investmentFlowService = {
     room: DiscussionRoom,
     sender: Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle'>,
     body: string,
-    options: { imageUrl?: string; documentUrl?: string; linkUrl?: string; type?: 'user' | 'system' } = {},
+    options: {
+      imageUrl?: string;
+      documentUrl?: string;
+      documentName?: string;
+      linkUrl?: string;
+      type?: 'user' | 'system';
+      blockStatus?: BlockStatus;
+    } = {},
   ) {
     const moderation = moderateChatMessage(body);
     if (!moderation.allowed) {
@@ -216,11 +226,14 @@ export const investmentFlowService = {
     }
 
     const recipientId = sender.id === room.founderId ? room.investorId : room.founderId;
-    if (await userService.isBlockedBetween(sender.id, recipientId)) {
+    const isBlocked = options.blockStatus
+      ? options.blockStatus.blockedByMe || options.blockStatus.blockedMe
+      : await userService.isBlockedBetween(sender.id, recipientId);
+    if (isBlocked) {
       throw new AppError('You cannot message this user because one of you has blocked the other.', 'chat/blocked-user');
     }
     const createdAt = now();
-    const message: DiscussionMessage = {
+    const message = omitUndefinedFields<DiscussionMessage>({
       id: `message-${Date.now()}`,
       discussionRoomId: room.id,
       senderId: sender.id,
@@ -228,12 +241,14 @@ export const investmentFlowService = {
       body,
       createdAt,
       type: options.type ?? 'user',
+      status: 'delivered',
       imageUrl: options.imageUrl,
       documentUrl: options.documentUrl,
+      documentName: options.documentName,
       linkUrl: options.linkUrl,
       deliveredTo: [recipientId],
       readBy: [sender.id],
-    };
+    });
 
     await firestoreAdapter.create<Omit<DiscussionMessage, 'id'>>('discussionMessages', {
       discussionRoomId: room.id,
@@ -242,8 +257,10 @@ export const investmentFlowService = {
       body: message.body,
       createdAt: message.createdAt,
       type: message.type,
+      status: message.status,
       imageUrl: message.imageUrl,
       documentUrl: message.documentUrl,
+      documentName: message.documentName,
       linkUrl: message.linkUrl,
       deliveredTo: message.deliveredTo,
       readBy: message.readBy,
@@ -278,10 +295,25 @@ export const investmentFlowService = {
   },
 
   async markDiscussionRead(room: DiscussionRoom, userId: string) {
+    const readAt = now();
+    const messages = (room.messages ?? []).map((message) => {
+      if (message.senderId === userId || message.readBy?.includes(userId)) {
+        return message;
+      }
+
+      return {
+        ...message,
+        status: 'read' as const,
+        deliveredTo: Array.from(new Set([...(message.deliveredTo ?? []), userId])),
+        readBy: Array.from(new Set([...(message.readBy ?? []), userId])),
+      };
+    });
+
     return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
+      messages,
       readReceipts: {
         ...(room.readReceipts ?? {}),
-        [userId]: now(),
+        [userId]: readAt,
       },
       unreadCounts: {
         ...(room.unreadCounts ?? {}),
@@ -295,15 +327,6 @@ export const investmentFlowService = {
       typingBy: {
         ...(room.typingBy ?? {}),
         [userId]: isTyping,
-      },
-    });
-  },
-
-  async updateConversationSafety(room: DiscussionRoom, userId: string, field: 'mutedBy' | 'leftBy') {
-    return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
-      [field]: {
-        ...(room[field] ?? {}),
-        [userId]: true,
       },
     });
   },
@@ -330,6 +353,12 @@ export const investmentFlowService = {
     }
 
     return updatedRoom;
+  },
+
+  async setTestFlightReady(room: DiscussionRoom, role: 'founder' | 'investor', isReady: boolean) {
+    return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
+      [role === 'founder' ? 'founderTestFlightReady' : 'investorTestFlightReady']: isReady,
+    });
   },
 
   async getAgreement(agreementId: string): Promise<InvestmentAgreement | null> {

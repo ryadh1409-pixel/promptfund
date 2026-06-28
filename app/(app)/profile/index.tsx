@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { IdentityCard } from '@/components/cards/IdentityCard';
+import { BlockUserControl } from '@/components/safety/BlockUserControl';
 import { Card, LoadingState, Pill, PrimaryButton, PrimaryLink, Screen, StatCard, ui } from '@/components/ui/Primitives';
 import { colors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -27,7 +28,7 @@ export default function UserProfileScreen() {
 
   useEffect(() => {
     async function loadInvestments() {
-      if (!authUser) {
+      if (!authUser?.uid) {
         return;
       }
 
@@ -40,7 +41,7 @@ export default function UserProfileScreen() {
     }
 
     loadInvestments();
-  }, [authUser]);
+  }, [authUser?.uid]);
 
   async function handleSignOut() {
     try {
@@ -116,6 +117,13 @@ export default function UserProfileScreen() {
         <Text style={styles.settingsCopy}>Current role: {activeRole === 'founder' ? 'Founder' : 'Angel Investor'}</Text>
         <PrimaryButton label="Change Role" variant="secondary" onPress={() => router.push('/choose-path')} />
       </Card>
+      <BlockUserControl
+        currentUserId={authUser?.uid}
+        targetUserId={profile.id}
+        currentUser={profile}
+        targetUser={profile}
+        targetName={profile.displayName ?? profile.name}
+      />
       <SettingsSection
         title="Settings"
         links={[

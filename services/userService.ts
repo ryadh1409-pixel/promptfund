@@ -1,6 +1,32 @@
-import { firestoreAdapter } from '@/firebase/firestore';
+import { collection, doc, onSnapshot, query, setDoc, where, type Unsubscribe } from 'firebase/firestore';
+
+import { firestoreAdapter, firestoreCollections, getPromptFundFirestore } from '@/firebase/firestore';
 import { deleteUserProfilePhoto, uploadUserProfilePhoto } from '@/firebase/storage';
-import type { BlockedUser, CreateUserInput, UpdateUserInput, User, UserReport } from '@/types/User';
+import type { BlockedUser, CreateUserInput, DiscussionReport, DiscussionReportReason, UpdateUserInput, User, UserReport } from '@/types/User';
+import { getRoleTitle } from '@/utils/roles';
+
+export type BlockStatus = {
+  blockedByMe: boolean;
+  blockedMe: boolean;
+  myBlock?: BlockedUser;
+  theirBlock?: BlockedUser;
+};
+
+function blockId(blockerUid: string, blockedUid: string) {
+  return `${blockerUid}_${blockedUid}`;
+}
+
+function discussionReportId(discussionRoomId: string, reporterUid: string) {
+  return `${discussionRoomId}_${reporterUid}`;
+}
+
+function displayName(profile: Pick<User, 'displayName' | 'name' | 'username' | 'handle'>) {
+  return profile.displayName ?? profile.name ?? profile.username ?? profile.handle ?? 'PromptFund Member';
+}
+
+function blockRole(profile: Pick<User, 'activeRole' | 'roles' | 'role'>): 'Founder' | 'Angel Investor' {
+  return getRoleTitle(profile.activeRole ?? profile.roles?.[0] ?? profile.role) === 'Founder' ? 'Founder' : 'Angel Investor';
+}
 
 export const userService = {
   async listUsers(): Promise<User[]> {
@@ -68,27 +94,117 @@ export const userService = {
     await firestoreAdapter.deleteById('users', userId);
   },
 
-  async blockUser(blockerUid: string, blockedUid: string): Promise<BlockedUser> {
-    const blockId = `${blockerUid}_${blockedUid}`;
-
-    return firestoreAdapter.setWithId<Omit<BlockedUser, 'id'>>('blockedUsers', blockId, {
-      blockerUid,
-      blockedUid,
+  async blockUser({
+    blocker,
+    blocked,
+  }: {
+    blocker: Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle' | 'activeRole' | 'roles' | 'role'>;
+    blocked: Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle' | 'activeRole' | 'roles' | 'role' | 'photoURL'>;
+  }): Promise<BlockedUser> {
+    const id = blockId(blocker.id, blocked.id);
+    const existingStatus = await this.getBlockStatus(blocker.id, blocked.id);
+    const payload: Omit<BlockedUser, 'id'> = {
+      blockerUid: blocker.id,
+      blockedUid: blocked.id,
+      blockerName: displayName(blocker),
+      blockedName: displayName(blocked),
+      blockerRole: blockRole(blocker),
+      blockedRole: blockRole(blocked),
       createdAt: new Date().toISOString(),
-    });
+    };
+    if (blocked.photoURL) {
+      payload.blockedPhotoURL = blocked.photoURL;
+    }
+    if (
+      existingStatus.myBlock
+      && existingStatus.myBlock.blockedName
+      && existingStatus.myBlock.blockerName
+      && existingStatus.myBlock.blockedRole
+      && existingStatus.myBlock.blockerRole
+    ) {
+      return existingStatus.myBlock;
+    }
+
+    await setDoc(doc(getPromptFundFirestore(), firestoreCollections.blockedUsers, id), payload);
+    return { ...payload, id };
   },
 
-  async listBlockedUsers(blockerUid: string): Promise<BlockedUser[]> {
-    return firestoreAdapter.queryByField<BlockedUser>('blockedUsers', 'blockerUid', blockerUid);
+  async unblockUser(blockerUid: string, blockedUid: string): Promise<void> {
+    await firestoreAdapter.deleteById('blockedUsers', blockId(blockerUid, blockedUid));
+  },
+
+  async getBlockStatus(currentUid: string, targetUid: string): Promise<BlockStatus> {
+    const [myBlock, theirBlock] = await Promise.all([
+      firestoreAdapter.getById<BlockedUser>('blockedUsers', blockId(currentUid, targetUid)),
+      firestoreAdapter.getById<BlockedUser>('blockedUsers', blockId(targetUid, currentUid)),
+    ]);
+
+    return {
+      blockedByMe: Boolean(myBlock),
+      blockedMe: Boolean(theirBlock),
+      myBlock: myBlock ?? undefined,
+      theirBlock: theirBlock ?? undefined,
+    };
   },
 
   async isBlockedBetween(firstUid: string, secondUid: string): Promise<boolean> {
-    const [firstBlocks, secondBlocks] = await Promise.all([
-      firestoreAdapter.getById<BlockedUser>('blockedUsers', `${firstUid}_${secondUid}`),
-      firestoreAdapter.getById<BlockedUser>('blockedUsers', `${secondUid}_${firstUid}`),
-    ]);
+    const status = await this.getBlockStatus(firstUid, secondUid);
+    return status.blockedByMe || status.blockedMe;
+  },
 
-    return Boolean(firstBlocks || secondBlocks);
+  subscribeBlockStatus(currentUid: string, targetUid: string, onChange: (status: BlockStatus) => void, onError?: (error: unknown) => void): Unsubscribe {
+    const database = getPromptFundFirestore();
+    let myBlock: BlockedUser | undefined;
+    let theirBlock: BlockedUser | undefined;
+
+    const emit = () => {
+      onChange({
+        blockedByMe: Boolean(myBlock),
+        blockedMe: Boolean(theirBlock),
+        myBlock,
+        theirBlock,
+      });
+    };
+
+    const unsubscribeMine = onSnapshot(
+      doc(database, firestoreCollections.blockedUsers, blockId(currentUid, targetUid)),
+      (snapshot) => {
+        myBlock = snapshot.exists() ? ({ ...snapshot.data(), id: snapshot.id } as BlockedUser) : undefined;
+        emit();
+      },
+      onError,
+    );
+    const unsubscribeTheirs = onSnapshot(
+      doc(database, firestoreCollections.blockedUsers, blockId(targetUid, currentUid)),
+      (snapshot) => {
+        theirBlock = snapshot.exists() ? ({ ...snapshot.data(), id: snapshot.id } as BlockedUser) : undefined;
+        emit();
+      },
+      onError,
+    );
+
+    return () => {
+      unsubscribeMine();
+      unsubscribeTheirs();
+    };
+  },
+
+  subscribeBlockedUsers(blockerUid: string, onChange: (blockedUsers: BlockedUser[]) => void, onError?: (error: unknown) => void): Unsubscribe {
+    const blocksQuery = query(
+      collection(getPromptFundFirestore(), firestoreCollections.blockedUsers),
+      where('blockerUid', '==', blockerUid),
+    );
+
+    return onSnapshot(
+      blocksQuery,
+      (snapshot) => {
+        const blocks = snapshot.docs
+          .map((item) => ({ ...item.data(), id: item.id }) as BlockedUser)
+          .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+        onChange(blocks);
+      },
+      onError,
+    );
   },
 
   async reportUser(input: Omit<UserReport, 'id' | 'status' | 'createdAt'>): Promise<UserReport> {
@@ -97,5 +213,27 @@ export const userService = {
       status: 'open',
       createdAt: new Date().toISOString(),
     });
+  },
+
+  async submitDiscussionReport(input: {
+    reporterUid: string;
+    reportedUid: string;
+    discussionRoomId: string;
+    reason: DiscussionReportReason;
+    details: string;
+  }): Promise<{ report: DiscussionReport; alreadyExists: boolean }> {
+    const id = discussionReportId(input.discussionRoomId, input.reporterUid);
+    const existing = await firestoreAdapter.getById<DiscussionReport>('reports', id);
+    if (existing) {
+      return { report: existing, alreadyExists: true };
+    }
+
+    const payload: Omit<DiscussionReport, 'id'> = {
+      ...input,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+    await setDoc(doc(getPromptFundFirestore(), firestoreCollections.reports, id), payload);
+    return { report: { ...payload, id }, alreadyExists: false };
   },
 };

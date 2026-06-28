@@ -65,7 +65,7 @@ export default function FundraisingScreen() {
           .map((item) => ({ ...item.data(), id: item.id }) as InvestmentOpportunity)
           .filter((opportunity) => {
             const isActive = opportunity.status === 'active' || opportunity.status === 'open';
-            const isOwnCard = authUser ? opportunity.founderId === authUser.uid : false;
+            const isOwnCard = authUser?.uid ? opportunity.founderId === authUser.uid : false;
             return isActive && !isOwnCard;
           });
 
@@ -85,7 +85,7 @@ export default function FundraisingScreen() {
     );
 
     return unsubscribe;
-  }, [authUser]);
+  }, [authUser?.uid]);
 
   const handleSwipeComplete = useCallback(async (direction: 'left' | 'right') => {
     const swipedOpportunity = activeOpportunity;

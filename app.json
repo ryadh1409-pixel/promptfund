@@ -13,7 +13,7 @@
       "infoPlist": {
         "NSCameraUsageDescription": "PromptFund needs camera access for Agreement Room video sessions.",
         "NSMicrophoneUsageDescription": "PromptFund needs microphone access to record agreement meetings.",
-        "NSPhotoLibraryUsageDescription": "PromptFund needs photo library access to update your profile photo.",
+        "NSPhotoLibraryUsageDescription": "PromptFund needs photo library access so you can attach photos to Investment Chat and update your profile photo.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -56,11 +56,12 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow PromptFund to access your photos so you can upload startup screenshots.",
+          "photosPermission": "Allow PromptFund to access your photos so you can upload startup screenshots and Investment Chat photos.",
           "cameraPermission": "Allow PromptFund to use your camera for profile photos.",
           "microphonePermission": false
         }
       ],
+      "expo-document-picker",
       "expo-notifications",
       "expo-asset"
     ],

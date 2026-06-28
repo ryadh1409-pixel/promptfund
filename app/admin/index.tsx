@@ -9,7 +9,7 @@ import { adminService } from '@/services/adminService';
 import type { AgreementRoom } from '@/types/Agreement';
 import type { InvestmentInterest, Match } from '@/types/FundingRequest';
 import type { Project } from '@/types/Project';
-import type { ModerationFlag, User, UserReport, BlockedUser, ActivityTimelineEvent } from '@/types/User';
+import type { ModerationFlag, User, UserReport, ActivityTimelineEvent } from '@/types/User';
 import type { DiscussionRoom, InvestmentAgreement, InvestmentOpportunity, StartupInterest, V5Investment } from '@/types/InvestmentFlow';
 import { formatCurrency } from '@/utils/format';
 import { getRoleBadgeLabel } from '@/utils/roles';
@@ -28,7 +28,6 @@ type AdminData = {
   interests: StartupInterest[];
   discussionRooms: DiscussionRoom[];
   reports: UserReport[];
-  blockedUsers: BlockedUser[];
   moderationFlags: ModerationFlag[];
   activityTimeline: ActivityTimelineEvent[];
   revenue: number;
@@ -292,7 +291,6 @@ function buildAdminPipelines(data: AdminData, search: string, filter: AdminFilte
     opportunities,
     includeFounderCards: true,
   });
-  const blockedUids = new Set(data.blockedUsers.flatMap((block) => [block.blockerUid, block.blockedUid]));
   const reportCounts = new Map<string, number>();
   data.reports.forEach((report) => {
     if (report.startupId) {
@@ -307,7 +305,7 @@ function buildAdminPipelines(data: AdminData, search: string, filter: AdminFilte
       stage: getPipelineStageMeta(pipeline),
       reportCount: reportCounts.get(pipeline.id) ?? 0,
       lastActivity: pipeline.agreement?.updatedAt ?? pipeline.room?.updatedAt ?? pipeline.opportunity?.createdAt,
-      isBlocked: blockedUids.has(pipeline.opportunity?.founderId ?? '') || blockedUids.has(pipeline.room?.investorId ?? ''),
+      isBlocked: false,
       timeline: data.activityTimeline
         .filter((event) => event.startupId === pipeline.id || event.discussionRoomId === pipeline.room?.id || event.agreementId === pipeline.agreement?.id)
         .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt))),

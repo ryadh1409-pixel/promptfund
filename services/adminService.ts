@@ -4,7 +4,7 @@ import { userService } from '@/services/userService';
 import { notificationService } from '@/services/notificationService';
 import type { AgreementRoom } from '@/types/Agreement';
 import type { Investment, Match } from '@/types/FundingRequest';
-import type { ActivityTimelineEvent, AdminAnnouncement, BlockedUser, ModerationFlag, User, UserReport, UserStatus } from '@/types/User';
+import type { ActivityTimelineEvent, AdminAnnouncement, ModerationFlag, User, UserReport, UserStatus } from '@/types/User';
 import type { DiscussionMessage, DiscussionRoom, InvestmentAgreement, InvestmentOpportunity, StartupInterest, V5Investment } from '@/types/InvestmentFlow';
 import type { Project } from '@/types/Project';
 
@@ -39,7 +39,6 @@ export const adminService = {
     const interests = await adminList<StartupInterest>('interests');
     const discussionRooms = await adminList<DiscussionRoom>('discussionRooms');
     const reports = await adminList<UserReport>('userReports');
-    const blockedUsers = await adminList<BlockedUser>('blockedUsers');
     const moderationFlags = await adminList<ModerationFlag>('moderationFlags');
     const activityTimeline = await adminList<ActivityTimelineEvent>('activityTimeline');
 
@@ -54,7 +53,6 @@ export const adminService = {
       interests,
       discussionRooms,
       reports,
-      blockedUsers,
       moderationFlags,
       activityTimeline,
       revenue: investments.reduce((sum: number, investment: V5Investment) => sum + (investment.amount ?? 0) * 0.025, 0),
@@ -96,11 +94,14 @@ export const adminService = {
   },
 
   async blockUser(blockerUid: string, blockedUid: string) {
-    return userService.blockUser(blockerUid, blockedUid);
-  },
-
-  async unblockUser(blockId: string) {
-    return firestoreAdapter.deleteById('blockedUsers', blockId);
+    const [blocker, blocked] = await Promise.all([
+      userService.getUserById(blockerUid),
+      userService.getUserById(blockedUid),
+    ]);
+    if (!blocker || !blocked) {
+      throw new Error('Unable to load users for block action.');
+    }
+    return userService.blockUser({ blocker, blocked });
   },
 
   async deleteDiscussionRoom(roomId: string) {

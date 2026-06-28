@@ -49,6 +49,11 @@ export type BlockedUser = {
   id: string;
   blockerUid: string;
   blockedUid: string;
+  blockerName: string;
+  blockedName: string;
+  blockerRole: 'Founder' | 'Angel Investor';
+  blockedRole: 'Founder' | 'Angel Investor';
+  blockedPhotoURL?: string;
   createdAt: string;
 };
 
@@ -63,6 +68,24 @@ export type UserReport = {
   startupId?: string;
   createdAt: string;
   resolvedAt?: string;
+};
+
+export type DiscussionReportReason =
+  | 'Spam'
+  | 'Scam or Fraud'
+  | 'Bad language'
+  | 'False Investment Information'
+  | 'Other';
+
+export type DiscussionReport = {
+  id: string;
+  reporterUid: string;
+  reportedUid: string;
+  discussionRoomId: string;
+  reason: DiscussionReportReason;
+  details: string;
+  createdAt: string;
+  status: 'pending' | 'reviewed' | 'resolved';
 };
 
 export type ModerationFlag = {
@@ -98,8 +121,6 @@ export type ActivityTimelineEvent = {
     | 'agreement_signed'
     | 'funding_instructions_opened'
     | 'funding_confirmed'
-    | 'testflight_ready'
-    | 'testflight_approved'
     | 'milestone_completed'
     | 'revenue_updated'
     | 'completed'
@@ -128,8 +149,6 @@ export type AppNotification = {
     | 'agreement_signed'
     | 'founder_update'
     | 'comment'
-    | 'testflight_ready'
-    | 'testflight_approved'
     | 'milestone_completed'
     | 'revenue_updated'
     | 'report'

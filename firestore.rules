@@ -6,10 +6,6 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isUser(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
     function isAdmin() {
       return request.auth != null
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
@@ -45,6 +41,98 @@ service cloud.firestore {
         || exists(/databases/$(database)/documents/blockedUsers/$(secondUid + '_' + firstUid));
     }
 
+    function blockIdIncludesSignedInUser(blockId) {
+      return isSignedIn()
+        && (
+          blockId.matches(request.auth.uid + '_.*')
+          || blockId.matches('.*_' + request.auth.uid)
+        );
+    }
+
+    function blockResourceIncludesSignedInUser() {
+      return isSignedIn()
+        && resource != null
+        && (
+          resource.data.blockerUid == request.auth.uid
+          || resource.data.blockedUid == request.auth.uid
+        );
+    }
+
+    function blockDocumentHasExpectedSchema() {
+      return request.resource.data.keys().hasOnly([
+          'blockerUid',
+          'blockedUid',
+          'blockerName',
+          'blockedName',
+          'blockerRole',
+          'blockedRole',
+          'blockedPhotoURL',
+          'createdAt'
+        ])
+        && request.resource.data.blockerUid is string
+        && request.resource.data.blockedUid is string
+        && request.resource.data.blockerName is string
+        && request.resource.data.blockedName is string
+        && request.resource.data.blockerRole in ['Founder', 'Angel Investor']
+        && request.resource.data.blockedRole in ['Founder', 'Angel Investor']
+        && (!request.resource.data.keys().hasAny(['blockedPhotoURL']) || request.resource.data.blockedPhotoURL is string)
+        && request.resource.data.createdAt is string;
+    }
+
+    function createsOwnBlockDocument(blockId) {
+      return isSignedIn()
+        && blockDocumentHasExpectedSchema()
+        && request.resource.data.blockerUid == request.auth.uid
+        && blockId == request.auth.uid + '_' + request.resource.data.blockedUid;
+    }
+
+    function updatesOwnBlockDocument(blockId) {
+      return isSignedIn()
+        && resource != null
+        && blockDocumentHasExpectedSchema()
+        && resource.data.blockerUid == request.auth.uid
+        && request.resource.data.blockerUid == resource.data.blockerUid
+        && request.resource.data.blockedUid == resource.data.blockedUid
+        && blockId == resource.data.blockerUid + '_' + resource.data.blockedUid;
+    }
+
+    function canReadBlockDocument(blockId) {
+      return isSignedIn()
+        && (
+          blockResourceIncludesSignedInUser()
+          || (resource == null && blockIdIncludesSignedInUser(blockId))
+        );
+    }
+
+    function reportDocumentHasExpectedSchema() {
+      return request.resource.data.keys().hasOnly([
+          'reporterUid',
+          'reportedUid',
+          'discussionRoomId',
+          'reason',
+          'details',
+          'createdAt',
+          'status'
+        ])
+        && request.resource.data.reporterUid is string
+        && request.resource.data.reportedUid is string
+        && request.resource.data.discussionRoomId is string
+        && request.resource.data.reason in [
+          'Spam',
+          'Scam or Fraud',
+          'Bad language',
+          'False Investment Information',
+          'Other'
+        ]
+        && request.resource.data.details is string
+        && request.resource.data.createdAt is string
+        && request.resource.data.status == 'pending';
+    }
+
+    function reportIdBelongsToSignedInReporter(reportId) {
+      return isSignedIn() && reportId.matches('^.*_' + request.auth.uid + '$');
+    }
+
     function projectOwner(projectId) {
       return get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId;
     }
@@ -65,15 +153,6 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/projects/$(startupId))
         || exists(/databases/$(database)/documents/startupOpportunities/$(startupId))
         || exists(/databases/$(database)/documents/investmentOpportunities/$(startupId));
-    }
-
-    function isV5Participant() {
-      return isSignedIn()
-        && resource != null
-        && (
-          resource.data.founderId == request.auth.uid
-          || resource.data.investorId == request.auth.uid
-        );
     }
 
     function createsV5ParticipantDocument() {
@@ -308,16 +387,12 @@ service cloud.firestore {
     }
 
     match /blockedUsers/{blockId} {
-      allow create: if isSignedIn() && request.resource.data.blockerUid == request.auth.uid;
-      allow read: if isAdmin()
-        || (
-          isSignedIn()
-          && (
-            resource.data.blockerUid == request.auth.uid
-            || resource.data.blockedUid == request.auth.uid
-          )
-        );
-      allow update, delete: if isAdmin();
+      allow create: if createsOwnBlockDocument(blockId);
+      allow read: if canReadBlockDocument(blockId);
+      allow update: if updatesOwnBlockDocument(blockId);
+      allow delete: if isSignedIn()
+        && resource != null
+        && resource.data.blockerUid == request.auth.uid;
     }
 
     match /userReports/{reportId} {
@@ -395,16 +470,20 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    match /aiUsage/{usageId} {
-      allow read: if isAdmin()
-        || isInvestmentParticipant(usageId)
-        || (resource != null && isInvestmentParticipant(resource.data.investmentId));
-      allow create, update, delete: if isAdmin();
-    }
-
     match /reports/{reportId} {
-      allow create: if isSignedIn() && request.resource.data.reporterUid == request.auth.uid;
-      allow read, update: if isAdmin() || (isSignedIn() && resource.data.reporterUid == request.auth.uid);
+      allow create: if isSignedIn()
+        && reportDocumentHasExpectedSchema()
+        && reportId == request.resource.data.discussionRoomId + '_' + request.auth.uid
+        && request.resource.data.reporterUid == request.auth.uid;
+      allow read: if isAdmin()
+        || (
+          isSignedIn()
+          && (
+            reportIdBelongsToSignedInReporter(reportId)
+            || (resource != null && resource.data.reporterUid == request.auth.uid)
+          )
+        );
+      allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 

@@ -41,6 +41,7 @@ export const firestoreCollections = {
   agreementSummaries: 'agreementSummaries',
   agreementCertificates: 'agreementCertificates',
   blockedUsers: 'blockedUsers',
+  reports: 'reports',
   userReports: 'userReports',
   moderationFlags: 'moderationFlags',
   adminAnnouncements: 'adminAnnouncements',
@@ -49,7 +50,6 @@ export const firestoreCollections = {
   pushTokens: 'pushTokens',
   founderUpdates: 'founderUpdates',
   founderUpdateComments: 'founderUpdateComments',
-  aiUsage: 'aiUsage',
 } as const;
 
 export type FirestoreCollectionName = keyof typeof firestoreCollections;

@@ -35,7 +35,7 @@ export default function ProjectsScreen() {
 
       try {
         setProjects(
-          isEntrepreneur && authUser
+          isEntrepreneur && authUser?.uid
             ? await projectService.listProjectsForFounder(authUser.uid)
             : await projectService.listProjects(),
         );
@@ -47,7 +47,7 @@ export default function ProjectsScreen() {
     }
 
     loadProjects();
-  }, [authUser, isEntrepreneur]);
+  }, [authUser?.uid, isEntrepreneur]);
 
   return (
     <Screen

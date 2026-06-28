@@ -22,7 +22,7 @@ export default function ArchivePortfolioScreen() {
 
   useEffect(() => {
     async function loadArchive() {
-      if (!authUser) {
+      if (!authUser?.uid) {
         setIsLoading(false);
         return;
       }
@@ -41,7 +41,7 @@ export default function ArchivePortfolioScreen() {
     }
 
     loadArchive();
-  }, [authUser, isFounderMode]);
+  }, [authUser?.uid, isFounderMode]);
 
   const totalCapital = investments.reduce((sum, investment) => sum + (investment.amount ?? 0), 0);
   const averageInvestment = investments.length > 0 ? totalCapital / investments.length : 0;

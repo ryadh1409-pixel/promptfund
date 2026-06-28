@@ -1,15 +1,17 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { StartupPlayingCard, type StartupCard } from '@/components/cards/StartupPlayingCard';
 import { Card, EmptyState, FieldPreview, LoadingState, PrimaryButton, Screen, StatCard, ui } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { getPromptFundFirestore } from '@/firebase/firestore';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { tractionService } from '@/services/tractionService';
 import type { V5Investment } from '@/types/InvestmentFlow';
-import type { AiUsageAnalytics, FounderUpdate, FounderUpdateComment, FounderUpdateKind } from '@/types/Traction';
+import type { FounderUpdate, FounderUpdateComment, FounderUpdateKind } from '@/types/Traction';
 import { getActiveRole } from '@/utils/roles';
 import { safeCurrency, safeDate, safePercent } from '@/utils/safeFormat';
 
@@ -19,7 +21,6 @@ type UpdateDraft = {
   photoUrls: string;
   screenshotUrls: string;
   videoLink: string;
-  testFlightLink: string;
   appStoreLink: string;
   website: string;
   demoLink: string;
@@ -40,7 +41,6 @@ const emptyDraft: UpdateDraft = {
   photoUrls: '',
   screenshotUrls: '',
   videoLink: '',
-  testFlightLink: '',
   appStoreLink: '',
   website: '',
   demoLink: '',
@@ -62,7 +62,6 @@ export default function TractionScreen() {
   const [investments, setInvestments] = useState<V5Investment[]>([]);
   const [updatesByInvestment, setUpdatesByInvestment] = useState<Record<string, FounderUpdate[]>>({});
   const [commentsByUpdate, setCommentsByUpdate] = useState<Record<string, FounderUpdateComment[]>>({});
-  const [aiUsageByInvestment, setAiUsageByInvestment] = useState<Record<string, AiUsageAnalytics>>({});
   const [drafts, setDrafts] = useState<Record<string, UpdateDraft>>({});
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
@@ -70,51 +69,64 @@ export default function TractionScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const loadTraction = useCallback(async () => {
-    if (!authUser) {
+  useEffect(() => {
+    if (!authUser?.uid) {
+      setInvestments([]);
+      setUpdatesByInvestment({});
+      setCommentsByUpdate({});
       setIsLoading(false);
       return;
     }
 
-    try {
-      setNotice(null);
-      setIsLoading(true);
-      const nextInvestments = await tractionService.listPortfolioByUser(authUser.uid, isFounderMode ? 'founder' : 'investor');
-      const fundedInvestments = nextInvestments.filter((investment) => investment.status === 'completed' || investment.status === 'active');
-      const updateEntries = await Promise.all(fundedInvestments.map(async (investment) => {
-        const updates = await tractionService.listUpdatesByInvestment(investment, authUser.uid, isFounderMode ? 'founder' : 'investor');
-        return [investment.id, updates] as const;
-      }));
-      const commentEntries = await Promise.all(updateEntries.flatMap(([, updates]) => updates.map(async (update) => {
-        const comments = await tractionService.listCommentsByUpdate(update, authUser.uid, isFounderMode ? 'founder' : 'investor');
-        return [update.id, comments] as const;
-      })));
-      const aiUsageEntries = await Promise.all(fundedInvestments.map(async (investment) => {
-        const usage = await tractionService.getAiUsage(investment);
-        return [investment.id, usage] as const;
-      }));
+    setNotice(null);
+    setIsLoading(true);
+    const database = getPromptFundFirestore();
+    const roleField = isFounderMode ? 'founderId' : 'investorId';
+    const investmentsQuery = query(collection(database, 'investments'), where(roleField, '==', authUser.uid));
+    const updatesQuery = query(collection(database, 'founderUpdates'), where(roleField, '==', authUser.uid));
+    const commentsQuery = query(collection(database, 'founderUpdateComments'), where(roleField, '==', authUser.uid));
 
-      setInvestments(fundedInvestments);
-      setUpdatesByInvestment(Object.fromEntries(updateEntries));
-      setCommentsByUpdate(Object.fromEntries(commentEntries));
-      setAiUsageByInvestment(Object.fromEntries(aiUsageEntries));
-    } catch (error) {
-      setNotice(getFriendlyErrorMessage(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [authUser, isFounderMode]);
+    const unsubscribeInvestments = onSnapshot(
+      investmentsQuery,
+      (snapshot) => {
+        const fundedInvestments = snapshot.docs
+          .map((item) => ({ ...item.data(), id: item.id }) as V5Investment)
+          .filter((investment) => investment.status === 'completed' || investment.status === 'active');
+        setInvestments((current) => updateArrayIfChanged(current, fundedInvestments));
+        setIsLoading(false);
+      },
+      (error) => {
+        setNotice(getFriendlyErrorMessage(error));
+        setIsLoading(false);
+      },
+    );
 
-  useEffect(() => {
-    loadTraction();
-  }, [loadTraction]);
+    const unsubscribeUpdates = onSnapshot(
+      updatesQuery,
+      (snapshot) => {
+        const grouped = groupByInvestment(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as FounderUpdate));
+        setUpdatesByInvestment((current) => updateRecordIfChanged(current, grouped));
+      },
+      (error) => setNotice(getFriendlyErrorMessage(error)),
+    );
+
+    const unsubscribeComments = onSnapshot(
+      commentsQuery,
+      (snapshot) => {
+        const grouped = groupCommentsByUpdate(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as FounderUpdateComment));
+        setCommentsByUpdate((current) => updateRecordIfChanged(current, grouped));
+      },
+      (error) => setNotice(getFriendlyErrorMessage(error)),
+    );
+
+    return () => {
+      unsubscribeInvestments();
+      unsubscribeUpdates();
+      unsubscribeComments();
+    };
+  }, [authUser?.uid, isFounderMode]);
 
   const totalCapital = investments.reduce((sum, investment) => sum + (investment.amount ?? 0), 0);
-  const totalTokens = Object.values(aiUsageByInvestment).reduce((sum, usage) => sum + usage.totalTokens, 0);
-  const latestUpdate = useMemo(() => {
-    const allUpdates = Object.values(updatesByInvestment).flat();
-    return allUpdates.sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))[0];
-  }, [updatesByInvestment]);
 
   async function handlePublishUpdate(investment: V5Investment) {
     if (!profile) {
@@ -137,7 +149,6 @@ export default function TractionScreen() {
         photoUrls: parseList(draft.photoUrls),
         screenshotUrls: parseList(draft.screenshotUrls),
         videoLink: draft.videoLink.trim() || undefined,
-        testFlightLink: draft.testFlightLink.trim() || undefined,
         appStoreLink: draft.appStoreLink.trim() || undefined,
         website: draft.website.trim() || undefined,
         demoLink: draft.demoLink.trim() || undefined,
@@ -152,7 +163,6 @@ export default function TractionScreen() {
         newFundingRounds: draft.newFundingRounds.trim() || undefined,
       });
       setDrafts((current) => ({ ...current, [investment.id]: emptyDraft }));
-      await loadTraction();
     } catch (error) {
       setNotice(getFriendlyErrorMessage(error));
     } finally {
@@ -164,7 +174,6 @@ export default function TractionScreen() {
     if (!authUser) return;
     try {
       await tractionService.likeUpdate(update, authUser.uid);
-      await loadTraction();
     } catch (error) {
       setNotice(getFriendlyErrorMessage(error));
     }
@@ -189,47 +198,8 @@ export default function TractionScreen() {
       } else {
         setCommentDrafts((current) => ({ ...current, [draftKey]: '' }));
       }
-      await loadTraction();
     } catch (error) {
       setNotice(getFriendlyErrorMessage(error));
-    }
-  }
-
-  async function handleTestFlightAvailable(investment: V5Investment) {
-    try {
-      setIsSaving(true);
-      const draft = drafts[investment.id] ?? emptyDraft;
-      await tractionService.markTestFlightAvailable(investment, draft.testFlightLink.trim() || undefined);
-      await loadTraction();
-    } catch (error) {
-      setNotice(getFriendlyErrorMessage(error));
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function handleTestFlightReview(investment: V5Investment, decision: 'tested' | 'needs_changes') {
-    if (!authUser) return;
-    try {
-      setIsSaving(true);
-      await tractionService.reviewTestFlight(investment, authUser.uid, decision);
-      await loadTraction();
-    } catch (error) {
-      setNotice(getFriendlyErrorMessage(error));
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function handleGrowingPortfolio(investment: V5Investment) {
-    try {
-      setIsSaving(true);
-      await tractionService.markGrowingPortfolioCompany(investment);
-      await loadTraction();
-    } catch (error) {
-      setNotice(getFriendlyErrorMessage(error));
-    } finally {
-      setIsSaving(false);
     }
   }
 
@@ -237,7 +207,7 @@ export default function TractionScreen() {
     <Screen
       eyebrow="Traction"
       title="Portfolio Companies"
-      subtitle="PromptFund keeps adding value after funding with updates, milestones, AI usage, and permanent Investment Chat."
+      subtitle="PromptFund keeps adding value after funding with updates, milestones, and permanent Investment Chat."
     >
       {isLoading ? <LoadingState label="Loading Traction portfolio" /> : null}
       {notice ? (
@@ -250,11 +220,6 @@ export default function TractionScreen() {
         <StatCard label="Portfolio Companies" value={String(investments.length)} tone={colors.luxuryGold} />
         <StatCard label="Total Capital" value={safeCurrency(totalCapital)} tone={colors.success} />
       </View>
-      <View style={ui.row}>
-        <StatCard label="Total AI Tokens" value={totalTokens.toLocaleString()} tone={colors.accent} />
-        <StatCard label="Last Update" value={latestUpdate ? safeDate(latestUpdate.createdAt) : 'None'} />
-      </View>
-
       {!isLoading && investments.length === 0 ? (
         <EmptyState
           title="No funded portfolio companies yet."
@@ -268,7 +233,6 @@ export default function TractionScreen() {
           investment={investment}
           updates={updatesByInvestment[investment.id] ?? []}
           commentsByUpdate={commentsByUpdate}
-          aiUsage={aiUsageByInvestment[investment.id]}
           isFounderMode={isFounderMode}
           draft={drafts[investment.id] ?? emptyDraft}
           setDraft={(draft) => setDrafts((current) => ({ ...current, [investment.id]: draft }))}
@@ -281,9 +245,6 @@ export default function TractionScreen() {
           onLike={handleLike}
           onComment={(update) => handleAddComment(investment, update)}
           onReply={(update, commentId) => handleAddComment(investment, update, commentId)}
-          onTestFlightAvailable={() => handleTestFlightAvailable(investment)}
-          onTestFlightReview={(decision) => handleTestFlightReview(investment, decision)}
-          onGrowingPortfolio={() => handleGrowingPortfolio(investment)}
         />
       ))}
     </Screen>
@@ -294,7 +255,6 @@ function PortfolioCompanyCard({
   investment,
   updates,
   commentsByUpdate,
-  aiUsage,
   isFounderMode,
   draft,
   setDraft,
@@ -307,14 +267,10 @@ function PortfolioCompanyCard({
   onLike,
   onComment,
   onReply,
-  onTestFlightAvailable,
-  onTestFlightReview,
-  onGrowingPortfolio,
 }: {
   investment: V5Investment;
   updates: FounderUpdate[];
   commentsByUpdate: Record<string, FounderUpdateComment[]>;
-  aiUsage?: AiUsageAnalytics;
   isFounderMode: boolean;
   draft: UpdateDraft;
   setDraft: (draft: UpdateDraft) => void;
@@ -327,12 +283,7 @@ function PortfolioCompanyCard({
   onLike: (update: FounderUpdate) => void;
   onComment: (update: FounderUpdate) => void;
   onReply: (update: FounderUpdate, commentId: string) => void;
-  onTestFlightAvailable: () => void;
-  onTestFlightReview: (decision: 'tested' | 'needs_changes') => void;
-  onGrowingPortfolio: () => void;
 }) {
-  const stage = getPortfolioStage(investment);
-
   return (
     <Card style={styles.companyCard}>
       <View style={styles.headerRow}>
@@ -340,10 +291,6 @@ function PortfolioCompanyCard({
           <Text style={styles.companyTitle}>{investment.startupName ?? 'Portfolio Company'}</Text>
           <Text style={styles.meta}>Founder: {investment.founderName ?? 'Founder'}</Text>
           <Text style={styles.meta}>Angel Investor: {investment.investorName ?? 'Angel Investor'}</Text>
-        </View>
-        <View style={styles.stageBadge}>
-          <Text style={styles.stageBadgeText}>Stage {stage.number} of 8</Text>
-          <Text style={styles.stageBadgeLabel}>{stage.label}</Text>
         </View>
       </View>
 
@@ -366,27 +313,7 @@ function PortfolioCompanyCard({
         <FieldPreview label="Equity" value={safePercent(investment.allocation)} />
         <FieldPreview label="Investment Date" value={safeDate(investment.fundedAt ?? investment.createdAt)} />
         <FieldPreview label="Current Status" value={investment.status ?? 'completed'} />
-        <FieldPreview label="Current Stage" value={stage.label} />
-        <FieldPreview label="Last Update" value={safeDate(investment.lastUpdateAt ?? updates[0]?.createdAt)} />
       </View>
-
-      <AiUsageCard usage={aiUsage} />
-
-      <Card style={styles.milestoneCard}>
-        <Text style={styles.sectionTitle}>TestFlight Workflow</Text>
-        <Text style={styles.meta}>Stage 6 of 8 • TestFlight Ready</Text>
-        <View style={styles.actionRow}>
-          {isFounderMode ? (
-            <PrimaryButton label="TestFlight Available" onPress={onTestFlightAvailable} disabled={isSaving} />
-          ) : (
-            <>
-              <PrimaryButton label="TestFlight Tested" onPress={() => onTestFlightReview('tested')} disabled={isSaving || !investment.testFlightAvailable} />
-              <PrimaryButton label="Needs Changes" variant="secondary" onPress={() => onTestFlightReview('needs_changes')} disabled={isSaving || !investment.testFlightAvailable} />
-            </>
-          )}
-          <PrimaryButton label="Mark Growing Portfolio Company" variant="secondary" onPress={onGrowingPortfolio} disabled={isSaving || stage.number < 7} />
-        </View>
-      </Card>
 
       <PrimaryButton
         label="Open Investment Chat"
@@ -437,7 +364,7 @@ function FounderUpdateComposer({
       <Text style={styles.sectionTitle}>Publish Founder Update</Text>
       <TextInput placeholder="Professional update, milestone, product progress, revenue, hiring, funding round..." placeholderTextColor={colors.subtle} multiline value={draft.description} onChangeText={(description) => setDraft({ ...draft, description })} style={[styles.input, styles.textArea]} />
       <View style={styles.kindRow}>
-        {(['general', 'product', 'milestone', 'revenue', 'hiring', 'funding', 'testflight'] as FounderUpdateKind[]).map((kind) => (
+        {(['general', 'product', 'milestone', 'revenue', 'hiring', 'funding'] as FounderUpdateKind[]).map((kind) => (
           <Pressable key={kind} onPress={() => setDraft({ ...draft, kind })} style={[styles.kindChip, draft.kind === kind ? styles.kindChipActive : null]}>
             <Text style={styles.kindText}>{kind}</Text>
           </Pressable>
@@ -446,7 +373,6 @@ function FounderUpdateComposer({
       <TextInput placeholder="Photo URLs, comma separated" placeholderTextColor={colors.subtle} value={draft.photoUrls} onChangeText={(photoUrls) => setDraft({ ...draft, photoUrls })} style={styles.input} />
       <TextInput placeholder="Screenshot URLs, comma separated" placeholderTextColor={colors.subtle} value={draft.screenshotUrls} onChangeText={(screenshotUrls) => setDraft({ ...draft, screenshotUrls })} style={styles.input} />
       <TextInput placeholder="Video link" placeholderTextColor={colors.subtle} value={draft.videoLink} onChangeText={(videoLink) => setDraft({ ...draft, videoLink })} style={styles.input} />
-      <TextInput placeholder="TestFlight invitation link" placeholderTextColor={colors.subtle} value={draft.testFlightLink} onChangeText={(testFlightLink) => setDraft({ ...draft, testFlightLink })} style={styles.input} />
       <TextInput placeholder="App Store link" placeholderTextColor={colors.subtle} value={draft.appStoreLink} onChangeText={(appStoreLink) => setDraft({ ...draft, appStoreLink })} style={styles.input} />
       <TextInput placeholder="Website" placeholderTextColor={colors.subtle} value={draft.website} onChangeText={(website) => setDraft({ ...draft, website })} style={styles.input} />
       <TextInput placeholder="Demo link" placeholderTextColor={colors.subtle} value={draft.demoLink} onChangeText={(demoLink) => setDraft({ ...draft, demoLink })} style={styles.input} />
@@ -521,21 +447,6 @@ function FounderUpdateCard({
   );
 }
 
-function AiUsageCard({ usage }: { usage?: AiUsageAnalytics }) {
-  return (
-    <Card style={styles.aiCard}>
-      <Text style={styles.sectionTitle}>PromptFund AI Usage</Text>
-      <View style={styles.detailGrid}>
-        <FieldPreview label="Total AI tokens" value={(usage?.totalTokens ?? 0).toLocaleString()} />
-        <FieldPreview label="Tokens this month" value={(usage?.tokensThisMonth ?? 0).toLocaleString()} />
-        <FieldPreview label="Tokens today" value={(usage?.tokensToday ?? 0).toLocaleString()} />
-        <FieldPreview label="AI conversations" value={(usage?.aiConversations ?? 0).toLocaleString()} />
-        <FieldPreview label="Last AI activity" value={safeDate(usage?.lastAiActivity)} />
-      </View>
-    </Card>
-  );
-}
-
 function MediaStrip({ urls }: { urls: string[] }) {
   if (urls.length === 0) {
     return null;
@@ -553,7 +464,6 @@ function MediaStrip({ urls }: { urls: string[] }) {
 function LinkList({ update }: { update: FounderUpdate }) {
   const links = [
     update.videoLink ? ['Video', update.videoLink] : null,
-    update.testFlightLink ? ['TestFlight', update.testFlightLink] : null,
     update.appStoreLink ? ['App Store', update.appStoreLink] : null,
     update.website ? ['Website', update.website] : null,
     update.demoLink ? ['Demo', update.demoLink] : null,
@@ -576,14 +486,48 @@ function LinkList({ update }: { update: FounderUpdate }) {
   );
 }
 
+function groupByInvestment(updates: FounderUpdate[]) {
+  return updates
+    .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))
+    .reduce<Record<string, FounderUpdate[]>>((groups, update) => {
+      groups[update.investmentId] = [...(groups[update.investmentId] ?? []), update];
+      return groups;
+    }, {});
+}
+
+function groupCommentsByUpdate(comments: FounderUpdateComment[]) {
+  return comments
+    .sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)))
+    .reduce<Record<string, FounderUpdateComment[]>>((groups, comment) => {
+      groups[comment.updateId] = [...(groups[comment.updateId] ?? []), comment];
+      return groups;
+    }, {});
+}
+
+function updateArrayIfChanged<T>(current: T[], next: T[]) {
+  return stableStringify(current) === stableStringify(next) ? current : next;
+}
+
+function updateRecordIfChanged<T>(current: Record<string, T[]>, next: Record<string, T[]>) {
+  return stableStringify(current) === stableStringify(next) ? current : next;
+}
+
+function stableStringify(value: unknown) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 function mapInvestmentToStartupCard(investment: V5Investment): StartupCard {
   return {
     id: investment.opportunityId ?? investment.id,
     startupName: investment.startupName ?? 'Portfolio Company',
     title: investment.startupName ?? 'Portfolio Company',
-    tagline: investment.currentStage ?? 'Funded PromptFund portfolio company',
-    shortDescription: investment.currentStage ?? 'Funded PromptFund portfolio company',
-    description: investment.currentStage ?? 'Funded PromptFund portfolio company',
+    tagline: 'Funded PromptFund portfolio company',
+    shortDescription: 'Funded PromptFund portfolio company',
+    description: 'Funded PromptFund portfolio company',
     fundingNeeded: investment.amount ?? 0,
     goalAmount: investment.amount ?? 0,
     equityOffered: investment.allocation,
@@ -592,22 +536,9 @@ function mapInvestmentToStartupCard(investment: V5Investment): StartupCard {
     founderAvatar: initials(investment.founderName),
     founderVerified: true,
     rank: 'A',
-    stage: getPortfolioStage(investment).label,
-    shortPitch: investment.currentStage ?? 'Funded PromptFund portfolio company',
+    stage: 'Portfolio Company',
+    shortPitch: 'Funded PromptFund portfolio company',
   };
-}
-
-function getPortfolioStage(investment: V5Investment) {
-  if (investment.portfolioStage === 'growing_portfolio_company') {
-    return { number: 8, label: 'Growing Portfolio Company' };
-  }
-  if (investment.portfolioStage === 'production_ready' || investment.testFlightTested) {
-    return { number: 7, label: 'Production Ready' };
-  }
-  if (investment.portfolioStage === 'testflight_ready' || investment.testFlightAvailable) {
-    return { number: 6, label: 'TestFlight Ready' };
-  }
-  return { number: 5, label: 'Funded Portfolio Company' };
 }
 
 function initials(value?: string) {
@@ -670,24 +601,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 20,
   },
-  stageBadge: {
-    maxWidth: 150,
-    borderWidth: 1,
-    borderColor: colors.luxuryGold,
-    borderRadius: radii.pill,
-    padding: spacing.sm,
-    backgroundColor: 'rgba(200, 162, 74, 0.12)',
-  },
-  stageBadgeText: {
-    color: colors.luxuryGold,
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  stageBadgeLabel: {
-    color: colors.text,
-    fontSize: 11,
-    fontWeight: '900',
-  },
   cardWrap: {
     alignSelf: 'center',
     width: 190,
@@ -719,13 +632,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-  },
-  aiCard: {
-    gap: spacing.md,
-    backgroundColor: 'rgba(200, 162, 74, 0.08)',
-  },
-  milestoneCard: {
-    gap: spacing.md,
   },
   sectionTitle: {
     color: colors.text,

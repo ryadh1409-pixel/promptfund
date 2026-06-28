@@ -176,6 +176,33 @@ export function getStartupImagePath(userId: string) {
   return `startup-images/${userId}/${Date.now()}.jpg`;
 }
 
+function sanitizeStorageName(value: string) {
+  return value
+    .trim()
+    .replace(/[^A-Za-z0-9._-]/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 120) || 'attachment';
+}
+
+function extensionForContentType(contentType: string) {
+  if (contentType.includes('png')) return 'png';
+  if (contentType.includes('webp')) return 'webp';
+  if (contentType.includes('gif')) return 'gif';
+  return 'jpg';
+}
+
+export function getDiscussionAttachmentPath({
+  roomId,
+  userId,
+  fileName,
+}: {
+  roomId: string;
+  userId: string;
+  fileName: string;
+}) {
+  return `discussion-attachments/${roomId}/${userId}/${Date.now()}-${sanitizeStorageName(fileName)}`;
+}
+
 export async function uploadUserProfilePhoto({
   userId,
   uri,
@@ -223,6 +250,56 @@ export async function uploadStartupImage({
     }
     throw error;
   }
+}
+
+export async function uploadDiscussionImageAttachment({
+  roomId,
+  userId,
+  uri,
+  contentType = 'image/jpeg',
+}: {
+  roomId: string;
+  userId: string;
+  uri: string;
+  contentType?: string;
+}) {
+  const path = getDiscussionAttachmentPath({
+    roomId,
+    userId,
+    fileName: `photo.${extensionForContentType(contentType)}`,
+  });
+
+  return uploadUriWithStorageRest({
+    path,
+    uri,
+    contentType,
+  });
+}
+
+export async function uploadDiscussionDocumentAttachment({
+  roomId,
+  userId,
+  uri,
+  fileName,
+  contentType,
+}: {
+  roomId: string;
+  userId: string;
+  uri: string;
+  fileName: string;
+  contentType: string;
+}) {
+  const path = getDiscussionAttachmentPath({
+    roomId,
+    userId,
+    fileName,
+  });
+
+  return uploadUriWithStorageRest({
+    path,
+    uri,
+    contentType,
+  });
 }
 
 export async function deleteUserProfilePhoto(userId: string) {

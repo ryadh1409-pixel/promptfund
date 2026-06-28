@@ -22,8 +22,10 @@ export type DiscussionMessage = {
   body: string;
   createdAt: string;
   type?: 'user' | 'system';
+  status?: 'sent' | 'delivered' | 'read';
   imageUrl?: string;
   documentUrl?: string;
+  documentName?: string;
   linkUrl?: string;
   deliveredTo?: string[];
   readBy?: string[];
@@ -64,6 +66,8 @@ export type DiscussionRoom = {
   investorAllocation: number;
   founderReady: boolean;
   investorReady: boolean;
+  founderTestFlightReady?: boolean;
+  investorTestFlightReady?: boolean;
   messages: DiscussionMessage[];
   status: InvestmentFlowStatus;
   lastMessage?: string;
@@ -126,16 +130,6 @@ export type V5Investment = {
   amount?: number;
   allocation?: number;
   status?: 'completed' | 'active';
-  portfolioStage?: 'funded' | 'traction_updates' | 'testflight_ready' | 'production_ready' | 'growing_portfolio_company';
-  portfolioStageNumber?: 5 | 6 | 7 | 8;
-  currentStage?: string;
-  lastUpdateAt?: string;
-  testFlightAvailable?: boolean;
-  testFlightAvailableAt?: string;
-  testFlightTested?: boolean;
-  testFlightTestedAt?: string;
-  needsChanges?: boolean;
-  needsChangesAt?: string;
   paymentStatus?: 'completed';
   transactionId?: string;
   paidAt?: string;
