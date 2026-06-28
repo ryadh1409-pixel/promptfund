@@ -36,6 +36,8 @@ export type User = {
   bankName?: string;
   accountHolderName?: string;
   accountLast4?: string;
+  legalOnboardingRequired?: boolean;
+  legalAcceptance?: LegalAcceptance;
   updatedAt?: string;
 };
 
@@ -44,6 +46,18 @@ export type CreateUserInput = Omit<User, 'id' | 'trustScore'> & {
 };
 
 export type UpdateUserInput = Partial<Omit<User, 'id'>>;
+
+export type LegalDocumentVersions = {
+  appVersion: string;
+  termsVersion: string;
+  privacyVersion: string;
+  communityVersion: string;
+};
+
+export type LegalAcceptance = LegalDocumentVersions & {
+  accepted: true;
+  acceptedAt: unknown;
+};
 
 export type BlockedUser = {
   id: string;

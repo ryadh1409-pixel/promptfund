@@ -37,14 +37,15 @@ export default function ProfileSettingsScreen() {
       <SettingsGroup title="Password">
         <PrimaryLink href="/reset-password" label="Reset Password" variant="secondary" />
       </SettingsGroup>
-      <SettingsGroup title="Privacy">
-        <PrimaryLink href="/profile/privacy" label="Privacy Policy" variant="secondary" />
-      </SettingsGroup>
       <SettingsGroup title="Help Center">
         <PrimaryLink href="/profile/help-center" label="Open Help Center" variant="secondary" />
       </SettingsGroup>
-      <SettingsGroup title="Terms">
+      <SettingsGroup title="Legal">
         <PrimaryLink href="/profile/terms" label="Terms of Service" variant="secondary" />
+        <PrimaryLink href="/profile/privacy" label="Privacy Policy" variant="secondary" />
+        <PrimaryLink href="/profile/community-guidelines" label="Community Guidelines" variant="secondary" />
+        <PrimaryLink href="/profile/investment-disclaimer" label="Investment Disclaimer" variant="secondary" />
+        <PrimaryLink href="/profile/ai-disclosure" label="AI Disclosure" variant="secondary" />
       </SettingsGroup>
       <Card>
         <PrimaryButton label="Logout" variant="secondary" onPress={handleLogout} />

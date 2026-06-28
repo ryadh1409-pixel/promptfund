@@ -9,7 +9,7 @@ import { adminService } from '@/services/adminService';
 import type { AgreementRoom } from '@/types/Agreement';
 import type { InvestmentInterest, Match } from '@/types/FundingRequest';
 import type { Project } from '@/types/Project';
-import type { ModerationFlag, User, UserReport, ActivityTimelineEvent } from '@/types/User';
+import type { LegalDocumentVersions, ModerationFlag, User, UserReport, ActivityTimelineEvent } from '@/types/User';
 import type { DiscussionRoom, InvestmentAgreement, InvestmentOpportunity, StartupInterest, V5Investment } from '@/types/InvestmentFlow';
 import { formatCurrency } from '@/utils/format';
 import { getRoleBadgeLabel } from '@/utils/roles';
@@ -30,6 +30,7 @@ type AdminData = {
   reports: UserReport[];
   moderationFlags: ModerationFlag[];
   activityTimeline: ActivityTimelineEvent[];
+  legalVersions: LegalDocumentVersions;
   revenue: number;
   portfolioVolume: number;
 };
@@ -45,6 +46,7 @@ export default function AdminDashboardScreen() {
   const [search, setSearch] = useState('');
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementBody, setAnnouncementBody] = useState('');
+  const [legalVersionDraft, setLegalVersionDraft] = useState<LegalDocumentVersions | null>(null);
 
   useEffect(() => {
     async function loadAdminData() {
@@ -55,7 +57,9 @@ export default function AdminDashboardScreen() {
 
       try {
         setError(null);
-        setData(await adminService.getDashboardData());
+        const nextData = await adminService.getDashboardData();
+        setData(nextData);
+        setLegalVersionDraft(nextData.legalVersions);
       } catch (loadError) {
         setError(getFriendlyErrorMessage(loadError));
       } finally {
@@ -159,6 +163,20 @@ export default function AdminDashboardScreen() {
     }
   }
 
+  async function handleUpdateLegalVersions() {
+    if (!legalVersionDraft) return;
+
+    try {
+      setError(null);
+      await adminService.updateLegalVersions(legalVersionDraft);
+      const nextData = await adminService.getDashboardData();
+      setData(nextData);
+      setLegalVersionDraft(nextData.legalVersions);
+    } catch (versionError) {
+      setError(getFriendlyErrorMessage(versionError));
+    }
+  }
+
   return (
     <Screen eyebrow="Admin" title="PromptFund Admin Dashboard" subtitle="Private operations console for trusted administrators.">
       {isLoading || !data ? <LoadingState label="Loading admin dashboard" /> : null}
@@ -237,6 +255,46 @@ export default function AdminDashboardScreen() {
               <TextInput placeholder="Announcement title" placeholderTextColor={colors.subtle} value={announcementTitle} onChangeText={setAnnouncementTitle} style={styles.input} />
               <TextInput placeholder="Announcement body" placeholderTextColor={colors.subtle} value={announcementBody} onChangeText={setAnnouncementBody} multiline style={[styles.input, styles.textArea]} />
               <PrimaryButton label="Send Announcement To Everyone" onPress={handleSendAnnouncement} disabled={!announcementTitle.trim() || !announcementBody.trim()} />
+            </Card>
+          </AdminSection>
+
+          <AdminSection title="Legal Versions">
+            <Card>
+              {legalVersionDraft ? (
+                <>
+                  <TextInput
+                    placeholder="App version"
+                    placeholderTextColor={colors.subtle}
+                    value={legalVersionDraft.appVersion}
+                    onChangeText={(appVersion) => setLegalVersionDraft({ ...legalVersionDraft, appVersion })}
+                    style={styles.input}
+                  />
+                  <TextInput
+                    placeholder="Terms version"
+                    placeholderTextColor={colors.subtle}
+                    value={legalVersionDraft.termsVersion}
+                    onChangeText={(termsVersion) => setLegalVersionDraft({ ...legalVersionDraft, termsVersion })}
+                    style={styles.input}
+                  />
+                  <TextInput
+                    placeholder="Privacy version"
+                    placeholderTextColor={colors.subtle}
+                    value={legalVersionDraft.privacyVersion}
+                    onChangeText={(privacyVersion) => setLegalVersionDraft({ ...legalVersionDraft, privacyVersion })}
+                    style={styles.input}
+                  />
+                  <TextInput
+                    placeholder="Community version"
+                    placeholderTextColor={colors.subtle}
+                    value={legalVersionDraft.communityVersion}
+                    onChangeText={(communityVersion) => setLegalVersionDraft({ ...legalVersionDraft, communityVersion })}
+                    style={styles.input}
+                  />
+                  <PrimaryButton label="Update Legal Versions" onPress={handleUpdateLegalVersions} />
+                </>
+              ) : (
+                <Text style={styles.itemMeta}>Loading legal versions...</Text>
+              )}
             </Card>
           </AdminSection>
 

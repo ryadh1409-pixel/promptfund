@@ -50,6 +50,7 @@ export const firestoreCollections = {
   pushTokens: 'pushTokens',
   founderUpdates: 'founderUpdates',
   founderUpdateComments: 'founderUpdateComments',
+  legalConfig: 'legalConfig',
 } as const;
 
 export type FirestoreCollectionName = keyof typeof firestoreCollections;

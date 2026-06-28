@@ -6,10 +6,10 @@ import { colors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 import { notificationService } from '@/services/notificationService';
-import { appRouteForProfile, shouldShowChoosePath } from '@/utils/onboarding';
+import { appRouteForProfile, shouldShowChoosePath, shouldShowLegalOnboarding } from '@/utils/onboarding';
 
 export default function AppLayout() {
-  const { authUser, initializing, profile } = useAuth();
+  const { authUser, initializing, legalVersions, profile } = useAuth();
   const segments = useSegments();
   const currentRoute = String(segments[segments.length - 1] ?? '');
   const unreadNotifications = useUnreadNotifications(authUser?.uid);
@@ -28,7 +28,11 @@ export default function AppLayout() {
     return <Redirect href="/login" />;
   }
 
-  if (!initializing && authUser && profile && shouldShowChoosePath(profile) && currentRoute !== 'choose-path') {
+  if (!initializing && authUser && profile && shouldShowLegalOnboarding(profile, legalVersions) && currentRoute !== 'legal-onboarding') {
+    return <Redirect href="/legal-onboarding" />;
+  }
+
+  if (!initializing && authUser && profile && shouldShowChoosePath(profile) && currentRoute !== 'choose-path' && !shouldShowLegalOnboarding(profile, legalVersions)) {
     return <Redirect href="/choose-path" />;
   }
 
@@ -98,6 +102,7 @@ export default function AppLayout() {
       <Tabs.Screen name="projects/create" options={{ href: null }} />
       <Tabs.Screen name="projects/[id]" options={{ href: null }} />
       <Tabs.Screen name="choose-path" options={{ href: null }} />
+      <Tabs.Screen name="legal-onboarding" options={{ href: null }} />
       <Tabs.Screen name="funding/request" options={{ href: null }} />
       <Tabs.Screen name="expenses/index" options={{ href: null }} />
       <Tabs.Screen name="wallet/index" options={{ href: null }} />
@@ -108,6 +113,9 @@ export default function AppLayout() {
       <Tabs.Screen name="profile/report-user" options={{ href: null }} />
       <Tabs.Screen name="profile/terms" options={{ href: null }} />
       <Tabs.Screen name="profile/privacy" options={{ href: null }} />
+      <Tabs.Screen name="profile/community-guidelines" options={{ href: null }} />
+      <Tabs.Screen name="profile/investment-disclaimer" options={{ href: null }} />
+      <Tabs.Screen name="profile/ai-disclosure" options={{ href: null }} />
       <Tabs.Screen name="profile/download-data" options={{ href: null }} />
       <Tabs.Screen name="profile/contact-support" options={{ href: null }} />
       <Tabs.Screen name="profile/help-center" options={{ href: null }} />

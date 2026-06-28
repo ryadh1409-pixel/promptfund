@@ -421,6 +421,11 @@ service cloud.firestore {
       allow read, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
+    match /legalConfig/{configId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
     match /activityTimeline/{eventId} {
       allow create: if isAdmin() || isSignedIn();
       allow read, update, delete: if isAdmin();

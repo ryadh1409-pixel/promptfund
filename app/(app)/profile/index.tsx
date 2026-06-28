@@ -1,11 +1,12 @@
-import { useRouter } from 'expo-router';
+import { Link, useRouter, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { IdentityCard } from '@/components/cards/IdentityCard';
 import { BlockUserControl } from '@/components/safety/BlockUserControl';
 import { Card, LoadingState, Pill, PrimaryButton, PrimaryLink, Screen, StatCard, ui } from '@/components/ui/Primitives';
-import { colors } from '@/constants/theme';
+import { legalDocuments } from '@/constants/legal';
+import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { fundingService } from '@/services/fundingService';
 import type { Investment } from '@/types/FundingRequest';
@@ -131,13 +132,7 @@ export default function UserProfileScreen() {
           ['Help Center', '/profile/help-center'],
         ]}
       />
-      <SettingsSection
-        title="Legal"
-        links={[
-          ['Terms of Service', '/profile/terms'],
-          ['Privacy Policy', '/profile/privacy'],
-        ]}
-      />
+      <LegalSettingsSection />
       <SettingsSection
         title="Safety"
         links={[
@@ -176,13 +171,42 @@ export default function UserProfileScreen() {
   );
 }
 
-function SettingsSection({ title, links }: { title: string; links: Array<[string, any]> }) {
+function SettingsSection({ title, links }: { title: string; links: Array<[string, Href]> }) {
   return (
     <Card>
       <Text style={styles.sectionTitle}>{title}</Text>
       {links.map(([label, href]) => (
         <PrimaryLink key={label} href={href} label={label} variant="secondary" />
       ))}
+    </Card>
+  );
+}
+
+function LegalSettingsSection() {
+  const links: Array<[string, Href, string]> = [
+    [legalDocuments.terms.title, '/profile/terms', legalDocuments.terms.preview],
+    [legalDocuments.privacy.title, '/profile/privacy', legalDocuments.privacy.preview],
+    [legalDocuments.community.title, '/profile/community-guidelines', legalDocuments.community.preview],
+    [legalDocuments.investmentDisclaimer.title, '/profile/investment-disclaimer', legalDocuments.investmentDisclaimer.preview],
+    [legalDocuments.aiDisclosure.title, '/profile/ai-disclosure', legalDocuments.aiDisclosure.preview],
+  ];
+
+  return (
+    <Card style={styles.legalCard}>
+      <Text style={styles.sectionTitle}>Legal</Text>
+      <View style={styles.legalRows}>
+        {links.map(([label, href, preview]) => (
+          <Link key={label} href={href} asChild>
+            <Pressable accessibilityRole="button" style={styles.legalRow}>
+              <View style={styles.legalTextBlock}>
+                <Text style={styles.legalTitle}>{label}</Text>
+                <Text style={styles.legalPreview}>{preview}</Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          </Link>
+        ))}
+      </View>
     </Card>
   );
 }
@@ -199,6 +223,43 @@ const styles = StyleSheet.create({
   settingsCopy: {
     color: colors.muted,
     lineHeight: 22,
+  },
+  legalCard: {
+    gap: spacing.md,
+  },
+  legalRows: {
+    borderWidth: 1,
+    borderColor: 'rgba(216, 201, 163, 0.14)',
+    borderRadius: radii.lg,
+    overflow: 'hidden',
+    backgroundColor: colors.black,
+  },
+  legalRow: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(216, 201, 163, 0.1)',
+    flexDirection: 'row',
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  legalTextBlock: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  legalTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  legalPreview: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  chevron: {
+    color: colors.luxuryGold,
+    fontSize: 26,
+    fontWeight: '700',
   },
   errorText: {
     color: colors.danger,

@@ -2,9 +2,10 @@ import { firestoreAdapter, firestoreCollections, type FirestoreCollectionName } 
 import { projectService } from '@/services/projectService';
 import { userService } from '@/services/userService';
 import { notificationService } from '@/services/notificationService';
+import { legalService } from '@/services/legalService';
 import type { AgreementRoom } from '@/types/Agreement';
 import type { Investment, Match } from '@/types/FundingRequest';
-import type { ActivityTimelineEvent, AdminAnnouncement, ModerationFlag, User, UserReport, UserStatus } from '@/types/User';
+import type { ActivityTimelineEvent, AdminAnnouncement, LegalDocumentVersions, ModerationFlag, User, UserReport, UserStatus } from '@/types/User';
 import type { DiscussionMessage, DiscussionRoom, InvestmentAgreement, InvestmentOpportunity, StartupInterest, V5Investment } from '@/types/InvestmentFlow';
 import type { Project } from '@/types/Project';
 
@@ -41,6 +42,7 @@ export const adminService = {
     const reports = await adminList<UserReport>('userReports');
     const moderationFlags = await adminList<ModerationFlag>('moderationFlags');
     const activityTimeline = await adminList<ActivityTimelineEvent>('activityTimeline');
+    const legalVersions = await legalService.getCurrentVersions();
 
     return {
       users,
@@ -55,6 +57,7 @@ export const adminService = {
       reports,
       moderationFlags,
       activityTimeline,
+      legalVersions,
       revenue: investments.reduce((sum: number, investment: V5Investment) => sum + (investment.amount ?? 0) * 0.025, 0),
       portfolioVolume: investments.reduce((sum: number, investment: V5Investment) => sum + (investment.amount ?? 0), 0),
     };
@@ -62,6 +65,10 @@ export const adminService = {
 
   async updateUserStatus(userId: string, status: UserStatus): Promise<User | null> {
     return userService.updateUser(userId, { status });
+  },
+
+  async updateLegalVersions(versions: LegalDocumentVersions) {
+    return legalService.updateVersions(versions);
   },
 
   async deleteUserProfile(userId: string): Promise<void> {

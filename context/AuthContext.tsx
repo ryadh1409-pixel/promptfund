@@ -15,9 +15,11 @@ import {
 } from '@/firebase/auth';
 import { isFirebaseEnabled, missingFirebaseConfigKeys } from '@/firebase/config';
 import { isAdminEmail } from '@/services/adminService';
+import { defaultLegalVersions } from '@/constants/legal';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
+import { legalService } from '@/services/legalService';
 import { userService } from '@/services/userService';
-import type { CreateUserInput, User } from '@/types/User';
+import type { CreateUserInput, LegalDocumentVersions, User } from '@/types/User';
 import { getActiveRole } from '@/utils/roles';
 
 type RegisterInput = AuthCredentials &
@@ -32,10 +34,12 @@ type AuthContextValue = {
   initializing: boolean;
   loading: boolean;
   error: string | null;
+  legalVersions: LegalDocumentVersions | null;
   signIn: (credentials: AuthCredentials) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  refreshLegalVersions: () => Promise<LegalDocumentVersions>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -67,6 +71,7 @@ function buildRecoveredProfile(user: AuthUser): CreateUserInput {
     activeRole: 'investor',
     intent: 'investor',
     hasChosenPath: false,
+    legalOnboardingRequired: false,
     avatar: getInitials(displayName),
     bio: 'PromptFund profile restored automatically after Firebase Auth sign-in.',
     location: '',
@@ -81,6 +86,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [initializing, setInitializing] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [legalVersions, setLegalVersions] = useState<LegalDocumentVersions | null>(null);
+
+  const refreshLegalVersions = useCallback(async () => {
+    const versions = await legalService.getCurrentVersions();
+    setLegalVersions(versions);
+    return versions;
+  }, []);
 
   const normalizeProfileOnLoad = useCallback(async (user: AuthUser, nextProfile: User): Promise<User> => {
     if (nextProfile.hasChosenPath === false || nextProfile.hasChosenPath === true) {
@@ -166,6 +178,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthUser(user);
 
       try {
+        if (user) {
+          await refreshLegalVersions();
+        } else {
+          setLegalVersions(defaultLegalVersions);
+        }
         const nextProfile = await loadUserProfile(user);
         if (user && !nextProfile) {
           await createMissingProfile(user);
@@ -180,7 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return unsubscribe;
-  }, [createMissingProfile, loadUserProfile]);
+  }, [createMissingProfile, loadUserProfile, refreshLegalVersions]);
 
   const signIn = useCallback(
     async (credentials: AuthCredentials) => {
@@ -189,6 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       try {
         const user = await firebaseAuth.signIn(credentials);
+        await refreshLegalVersions();
         console.info('[PromptFund Auth] signIn success', {
           uid: user.uid,
           path: `users/${user.uid}`,
@@ -207,7 +225,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     },
-    [createMissingProfile, loadUserProfile],
+    [createMissingProfile, loadUserProfile, refreshLegalVersions],
   );
 
   const register = useCallback(
@@ -217,6 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       try {
         const user = await firebaseAuth.register({ email, password, displayName });
+        await refreshLegalVersions();
         const path = `users/${user.uid}`;
         console.info('[PromptFund Auth] register auth user created', {
           uid: user.uid,
@@ -228,6 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           roles: profileInput.roles ?? [profileInput.activeRole ?? 'investor'],
           activeRole: profileInput.activeRole ?? profileInput.roles?.[0] ?? 'investor',
           hasChosenPath: profileInput.hasChosenPath ?? false,
+          legalOnboardingRequired: true,
           displayName: displayName || profileInput.name,
           username: profileInput.username ?? profileInput.handle,
         };
@@ -255,7 +275,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     },
-    [],
+    [refreshLegalVersions],
   );
 
   const signOut = useCallback(async () => {
@@ -278,12 +298,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       initializing,
       loading,
       error,
+      legalVersions,
       signIn,
       register,
       signOut,
       refreshProfile,
+      refreshLegalVersions,
     }),
-    [authUser, error, initializing, loading, profile, refreshProfile, register, signIn, signOut],
+    [authUser, error, initializing, legalVersions, loading, profile, refreshLegalVersions, refreshProfile, register, signIn, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
