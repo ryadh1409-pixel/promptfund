@@ -133,6 +133,118 @@ service cloud.firestore {
       return isSignedIn() && reportId.matches('^.*_' + request.auth.uid + '$');
     }
 
+    function supportTicketHasExpectedSchema() {
+      return request.resource.data.keys().hasOnly([
+          'ticketNumber',
+          'userId',
+          'userName',
+          'userEmail',
+          'subject',
+          'category',
+          'message',
+          'attachments',
+          'status',
+          'priority',
+          'unreadByAdmin',
+          'unreadByUser',
+          'lastMessageAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.ticketNumber is string
+        && request.resource.data.ticketNumber.matches('^PF-[0-9]{8}-[0-9]{6}$')
+        && request.resource.data.userId is string
+        && request.resource.data.userName is string
+        && request.resource.data.userEmail is string
+        && request.resource.data.subject is string
+        && request.resource.data.subject.size() > 0
+        && request.resource.data.category in [
+          'Account',
+          'Verification',
+          'Funding',
+          'Investments',
+          'Payments',
+          'Technical Issue',
+          'Report a User',
+          'Report a Bug',
+          'Feature Request',
+          'Other'
+        ]
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.attachments is list
+        && request.resource.data.status == 'Open'
+        && request.resource.data.priority == 'Normal'
+        && request.resource.data.unreadByAdmin == true
+        && request.resource.data.unreadByUser == false
+        && request.resource.data.lastMessageAt is timestamp
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    function supportTicketUpdateHasExpectedSchema() {
+      return request.resource.data.keys().hasOnly([
+          'ticketNumber',
+          'userId',
+          'userName',
+          'userEmail',
+          'subject',
+          'category',
+          'message',
+          'attachments',
+          'status',
+          'priority',
+          'unreadByAdmin',
+          'unreadByUser',
+          'lastMessageAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.ticketNumber == resource.data.ticketNumber
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.userName == resource.data.userName
+        && request.resource.data.userEmail == resource.data.userEmail
+        && request.resource.data.subject == resource.data.subject
+        && request.resource.data.category == resource.data.category
+        && request.resource.data.message == resource.data.message
+        && request.resource.data.attachments == resource.data.attachments
+        && request.resource.data.status in ['Open', 'Waiting for User', 'In Progress', 'Resolved', 'Closed']
+        && request.resource.data.priority == resource.data.priority
+        && request.resource.data.unreadByAdmin is bool
+        && request.resource.data.unreadByUser is bool
+        && request.resource.data.lastMessageAt is timestamp
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    function supportMessageHasExpectedSchema() {
+      return request.resource.data.keys().hasOnly([
+          'senderId',
+          'senderRole',
+          'text',
+          'attachments',
+          'createdAt'
+        ])
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.senderRole in ['user', 'admin']
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.attachments is list
+        && request.resource.data.createdAt is timestamp;
+    }
+
+    function ownsSupportTicket(ticketId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/supportTickets/$(ticketId))
+        && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid;
+    }
+
+    function ownsSupportTicketAfter(ticketId) {
+      return isSignedIn()
+        && existsAfter(/databases/$(database)/documents/supportTickets/$(ticketId))
+        && getAfter(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid;
+    }
+
     function projectOwner(projectId) {
       return get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId;
     }
@@ -424,6 +536,63 @@ service cloud.firestore {
     match /legalConfig/{configId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isAdmin();
+    }
+
+    match /supportTicketCounters/{dateKey} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['count', 'updatedAt'])
+        && request.resource.data.count == 1
+        && request.resource.data.updatedAt is timestamp;
+      allow update: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['count', 'updatedAt'])
+        && resource.data.count is number
+        && request.resource.data.count == resource.data.count + 1
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if isAdmin();
+    }
+
+    match /supportTickets/{ticketId} {
+      allow create: if isSignedIn()
+        && supportTicketHasExpectedSchema()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'Open';
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow update: if supportTicketUpdateHasExpectedSchema()
+        && (
+          isAdmin()
+          || (
+            isSignedIn()
+            && resource.data.userId == request.auth.uid
+            && (
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['unreadByUser'])
+              || (
+                request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                  'status',
+                  'unreadByAdmin',
+                  'unreadByUser',
+                  'lastMessageAt',
+                  'updatedAt'
+                ])
+                && request.resource.data.status == 'Open'
+                && request.resource.data.unreadByAdmin == true
+                && request.resource.data.unreadByUser == false
+              )
+            )
+          )
+        );
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow create: if isSignedIn()
+          && supportMessageHasExpectedSchema()
+          && (
+            (request.resource.data.senderRole == 'admin' && isAdmin())
+            || (request.resource.data.senderRole == 'user' && ownsSupportTicketAfter(ticketId))
+          );
+        allow read: if isAdmin() || ownsSupportTicket(ticketId);
+        allow update, delete: if false;
+      }
     }
 
     match /activityTimeline/{eventId} {

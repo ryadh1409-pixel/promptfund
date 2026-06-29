@@ -1,48 +1,19 @@
 import { Link, useRouter, type Href } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { IdentityCard } from '@/components/cards/IdentityCard';
-import { BlockUserControl } from '@/components/safety/BlockUserControl';
-import { Card, LoadingState, Pill, PrimaryButton, PrimaryLink, Screen, StatCard, ui } from '@/components/ui/Primitives';
+import { Card, LoadingState, PrimaryButton, PrimaryLink, Screen, ui } from '@/components/ui/Primitives';
 import { legalDocuments } from '@/constants/legal';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
-import { fundingService } from '@/services/fundingService';
-import type { Investment } from '@/types/FundingRequest';
-import { formatCurrency } from '@/utils/format';
-import { getFriendlyErrorMessage } from '@/services/errorHandler';
-import { getRoleBadgeLabel, isEntrepreneurRole } from '@/utils/roles';
+import { isEntrepreneurRole } from '@/utils/roles';
 import { getActiveRole } from '@/utils/roles';
 
 export default function UserProfileScreen() {
   const router = useRouter();
-  const { authUser, profile, signOut } = useAuth();
-  const [investments, setInvestments] = useState<Investment[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const totalInvested = investments.reduce((sum, investment) => sum + investment.amount, 0);
-  const portfolioValue = totalInvested * 1.18;
-  const dealsCompleted = investments.length;
-  const successRate = dealsCompleted > 0 ? '92%' : 'New';
+  const { profile, signOut } = useAuth();
   const activeRole = getActiveRole(profile);
   const isEntrepreneur = activeRole === 'founder' || isEntrepreneurRole(profile?.role);
-
-  useEffect(() => {
-    async function loadInvestments() {
-      if (!authUser?.uid) {
-        return;
-      }
-
-      try {
-        setError(null);
-        setInvestments(await fundingService.listInvestmentsByInvestor(authUser.uid));
-      } catch (loadError) {
-        setError(getFriendlyErrorMessage(loadError));
-      }
-    }
-
-    loadInvestments();
-  }, [authUser?.uid]);
 
   async function handleSignOut() {
     try {
@@ -79,59 +50,13 @@ export default function UserProfileScreen() {
         />
         <View style={ui.wrap}>
           <PrimaryLink href="/profile/edit" label="Edit profile" />
-          <PrimaryLink href="/profile/settings" label="Settings" variant="secondary" />
         </View>
-      </Card>
-      {error ? (
-        <Card>
-          <Text style={styles.errorText}>{error}</Text>
-        </Card>
-      ) : null}
-
-      <View style={ui.row}>
-        <StatCard label={isEntrepreneur ? 'Investor matches' : 'Total investments'} value={String(investments.length)} tone={colors.accent} />
-        <StatCard label={isEntrepreneur ? 'Funding progress' : 'Total invested'} value={isEntrepreneur ? 'Ready' : formatCurrency(totalInvested)} tone={colors.luxuryGold} />
-      </View>
-
-      <View style={ui.row}>
-        <StatCard label={isEntrepreneur ? 'Startup card' : 'Deal Cards'} value={isEntrepreneur ? 'Live' : String(dealsCompleted)} tone={colors.pokerRed} />
-        <StatCard label={isEntrepreneur ? 'Role badge' : 'Card Value'} value={isEntrepreneur ? 'Active' : formatCurrency(portfolioValue)} />
-      </View>
-
-      <View style={ui.row}>
-        <StatCard label={isEntrepreneur ? 'Readiness' : 'Success rate'} value={isEntrepreneur ? 'Verified' : successRate} tone={colors.success} />
-        <StatCard label={isEntrepreneur ? 'Capital stage' : 'Risk profile'} value={isEntrepreneur ? 'Raising' : 'Balanced'} tone={colors.warning} />
-      </View>
-
-      <SettingsSection
-        title="Account"
-        links={[
-          ['Edit Profile', '/profile/edit'],
-        ]}
-      />
-      <Card>
-        <Text style={styles.sectionTitle}>Verification</Text>
-        <Text style={styles.settingsCopy}>Identity, role, and agreement verification are represented through PromptFund cards.</Text>
       </Card>
       <Card>
         <Text style={styles.sectionTitle}>Change Role</Text>
         <Text style={styles.settingsCopy}>Current role: {activeRole === 'founder' ? 'Founder' : 'Angel Investor'}</Text>
         <PrimaryButton label="Change Role" variant="secondary" onPress={() => router.push('/choose-path')} />
       </Card>
-      <BlockUserControl
-        currentUserId={authUser?.uid}
-        targetUserId={profile.id}
-        currentUser={profile}
-        targetUser={profile}
-        targetName={profile.displayName ?? profile.name}
-      />
-      <SettingsSection
-        title="Settings"
-        links={[
-          ['Settings', '/profile/settings'],
-          ['Help Center', '/profile/help-center'],
-        ]}
-      />
       <LegalSettingsSection />
       <SettingsSection
         title="Safety"
@@ -140,20 +65,7 @@ export default function UserProfileScreen() {
           ['Report a User', '/profile/report-user'],
         ]}
       />
-      <SettingsSection
-        title="Data"
-        links={[
-          ['Download My Data', '/profile/download-data'],
-          ['Delete Account', '/profile/delete-account'],
-        ]}
-      />
-      <SettingsSection
-        title="Support"
-        links={[
-          ['Contact Support', '/profile/contact-support'],
-          ['Help Center', '/profile/help-center'],
-        ]}
-      />
+      <SupportSection />
 
       {profile.role === 'admin' ? (
         <SettingsSection
@@ -163,6 +75,13 @@ export default function UserProfileScreen() {
           ]}
         />
       ) : null}
+
+      <SettingsSection
+        title="Account"
+        links={[
+          ['Delete Account', '/profile/delete-account'],
+        ]}
+      />
 
       <Card>
         <PrimaryButton label="Sign out" variant="secondary" onPress={handleSignOut} />
@@ -188,7 +107,6 @@ function LegalSettingsSection() {
     [legalDocuments.privacy.title, '/profile/privacy', legalDocuments.privacy.preview],
     [legalDocuments.community.title, '/profile/community-guidelines', legalDocuments.community.preview],
     [legalDocuments.investmentDisclaimer.title, '/profile/investment-disclaimer', legalDocuments.investmentDisclaimer.preview],
-    [legalDocuments.aiDisclosure.title, '/profile/ai-disclosure', legalDocuments.aiDisclosure.preview],
   ];
 
   return (
@@ -206,6 +124,34 @@ function LegalSettingsSection() {
             </Pressable>
           </Link>
         ))}
+      </View>
+    </Card>
+  );
+}
+
+function SupportSection() {
+  return (
+    <Card style={styles.legalCard}>
+      <Text style={styles.sectionTitle}>Support</Text>
+      <View style={styles.legalRows}>
+        <Link href="/profile/contact-support" asChild>
+          <Pressable accessibilityRole="button" style={styles.legalRow}>
+            <View style={styles.legalTextBlock}>
+              <Text style={styles.legalTitle}>Contact PromptFund Support</Text>
+              <Text style={styles.legalPreview}>Send a message to our team. We typically respond within 24 hours.</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+        </Link>
+        <Link href="/profile/support-tickets" asChild>
+          <Pressable accessibilityRole="button" style={styles.legalRow}>
+            <View style={styles.legalTextBlock}>
+              <Text style={styles.legalTitle}>My Support Tickets</Text>
+              <Text style={styles.legalPreview}>View status and replies from PromptFund Support.</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+        </Link>
       </View>
     </Card>
   );
@@ -260,9 +206,5 @@ const styles = StyleSheet.create({
     color: colors.luxuryGold,
     fontSize: 26,
     fontWeight: '700',
-  },
-  errorText: {
-    color: colors.danger,
-    lineHeight: 22,
   },
 });

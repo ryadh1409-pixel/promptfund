@@ -9,7 +9,7 @@ import { adminService } from '@/services/adminService';
 import type { AgreementRoom } from '@/types/Agreement';
 import type { InvestmentInterest, Match } from '@/types/FundingRequest';
 import type { Project } from '@/types/Project';
-import type { LegalDocumentVersions, ModerationFlag, User, UserReport, ActivityTimelineEvent } from '@/types/User';
+import type { LegalDocumentVersions, ModerationFlag, SupportTicket, SupportTicketStatus, User, UserReport, ActivityTimelineEvent } from '@/types/User';
 import type { DiscussionRoom, InvestmentAgreement, InvestmentOpportunity, StartupInterest, V5Investment } from '@/types/InvestmentFlow';
 import { formatCurrency } from '@/utils/format';
 import { getRoleBadgeLabel } from '@/utils/roles';
@@ -31,11 +31,13 @@ type AdminData = {
   moderationFlags: ModerationFlag[];
   activityTimeline: ActivityTimelineEvent[];
   legalVersions: LegalDocumentVersions;
+  supportTickets: SupportTicket[];
   revenue: number;
   portfolioVolume: number;
 };
 
 type AdminFilter = 'all' | 'active' | 'completed' | 'reported' | 'blocked' | 'archived';
+const supportStatuses: SupportTicketStatus[] = ['Open', 'In Progress', 'Waiting for User', 'Resolved', 'Closed'];
 
 export default function AdminDashboardScreen() {
   const { authUser, initializing, profile } = useAuth();
@@ -47,6 +49,7 @@ export default function AdminDashboardScreen() {
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementBody, setAnnouncementBody] = useState('');
   const [legalVersionDraft, setLegalVersionDraft] = useState<LegalDocumentVersions | null>(null);
+  const [supportReplyDrafts, setSupportReplyDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     async function loadAdminData() {
@@ -177,6 +180,30 @@ export default function AdminDashboardScreen() {
     }
   }
 
+  async function handleSupportReply(ticketId: string) {
+    const body = supportReplyDrafts[ticketId]?.trim();
+    if (!authUser?.uid || !body) return;
+
+    try {
+      setError(null);
+      await adminService.replyToSupportTicket(ticketId, authUser.uid, body);
+      setSupportReplyDrafts((current) => ({ ...current, [ticketId]: '' }));
+      setData(await adminService.getDashboardData());
+    } catch (replyError) {
+      setError(getSupportErrorMessage(replyError));
+    }
+  }
+
+  async function handleSupportStatus(ticketId: string, status: SupportTicketStatus) {
+    try {
+      setError(null);
+      await adminService.updateSupportTicketStatus(ticketId, status);
+      setData(await adminService.getDashboardData());
+    } catch (statusError) {
+      setError(getSupportErrorMessage(statusError));
+    }
+  }
+
   return (
     <Screen eyebrow="Admin" title="PromptFund Admin Dashboard" subtitle="Private operations console for trusted administrators.">
       {isLoading || !data ? <LoadingState label="Loading admin dashboard" /> : null}
@@ -250,6 +277,47 @@ export default function AdminDashboardScreen() {
             ))}
           </AdminSection>
 
+          <AdminSection title="Support Tickets">
+            {data.supportTickets.length === 0 ? (
+              <Card>
+                <Text style={styles.itemMeta}>No support tickets yet.</Text>
+              </Card>
+            ) : null}
+            {sortSupportTickets(data.supportTickets).slice(0, 10).map((ticket) => (
+              <Card key={ticket.id}>
+                <Text style={styles.itemTitle}>Ticket #{ticket.ticketNumber}</Text>
+                <Text style={styles.itemMeta}>{ticket.subject}</Text>
+                <Text style={styles.itemMeta}>User: {ticket.userName} · {ticket.userEmail || ticket.userId}</Text>
+                <Text style={styles.itemMeta}>Category: {ticket.category} · Status: {ticket.status} · Created: {supportDateTime(ticket.createdAt)}</Text>
+                {ticket.unreadByAdmin ? <Text style={styles.unreadText}>Unread</Text> : null}
+                <Text style={styles.itemMeta}>{ticket.message}</Text>
+                <View style={ui.wrap}>
+                  {supportStatuses.map((status) => (
+                    <Pressable
+                      key={status}
+                      onPress={() => handleSupportStatus(ticket.id, status)}
+                      style={[styles.filterChip, ticket.status === status ? styles.filterChipActive : null]}
+                    >
+                      <Text style={styles.filterText}>{status}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <TextInput
+                  placeholder="Reply to this ticket"
+                  placeholderTextColor={colors.subtle}
+                  value={supportReplyDrafts[ticket.id] ?? ''}
+                  onChangeText={(value) => setSupportReplyDrafts((current) => ({ ...current, [ticket.id]: value }))}
+                  multiline
+                  style={[styles.input, styles.textArea]}
+                />
+                <View style={ui.wrap}>
+                  <PrimaryButton label="Open Conversation" variant="secondary" onPress={() => router.push(`/profile/support-ticket/${ticket.id}`)} />
+                  <PrimaryButton label="Send Reply" onPress={() => handleSupportReply(ticket.id)} disabled={!supportReplyDrafts[ticket.id]?.trim()} />
+                </View>
+              </Card>
+            ))}
+          </AdminSection>
+
           <AdminSection title="Announcement Center">
             <Card>
               <TextInput placeholder="Announcement title" placeholderTextColor={colors.subtle} value={announcementTitle} onChangeText={setAnnouncementTitle} style={styles.input} />
@@ -315,6 +383,44 @@ export default function AdminDashboardScreen() {
       ) : null}
     </Screen>
   );
+}
+
+function timestampMillis(value: unknown) {
+  if (typeof value === 'object' && value && 'toMillis' in value) {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+
+  return 0;
+}
+
+function supportDateTime(value: unknown) {
+  if (typeof value === 'object' && value && 'toDate' in value) {
+    return new Intl.DateTimeFormat('en', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format((value as { toDate: () => Date }).toDate());
+  }
+
+  return 'Just now';
+}
+
+function getSupportErrorMessage(error: unknown) {
+  console.error('[PromptFund Admin Support] Firebase support error', error);
+  const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: unknown }).code) : null;
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (code === 'permission-denied') {
+    return `Firestore permission denied for admin support action. Check supportTickets status/message rules for admin role. Firebase: ${message}`;
+  }
+
+  return code ? `${code}: ${message}` : message;
+}
+
+function sortSupportTickets(tickets: SupportTicket[]) {
+  return [...tickets].sort((left, right) => timestampMillis(right.createdAt) - timestampMillis(left.createdAt));
 }
 
 function confirmAction(message: string) {
@@ -530,5 +636,17 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.danger,
     lineHeight: 22,
+  },
+  unreadText: {
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
+    borderRadius: radii.pill,
+    backgroundColor: colors.pokerRed,
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '900',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    textTransform: 'uppercase',
   },
 });

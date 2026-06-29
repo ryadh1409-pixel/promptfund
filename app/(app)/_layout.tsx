@@ -118,6 +118,8 @@ export default function AppLayout() {
       <Tabs.Screen name="profile/ai-disclosure" options={{ href: null }} />
       <Tabs.Screen name="profile/download-data" options={{ href: null }} />
       <Tabs.Screen name="profile/contact-support" options={{ href: null }} />
+      <Tabs.Screen name="profile/support-tickets" options={{ href: null }} />
+      <Tabs.Screen name="profile/support-ticket/[id]" options={{ href: null }} />
       <Tabs.Screen name="profile/help-center" options={{ href: null }} />
     </Tabs>
   );

@@ -41,6 +41,11 @@ service firebase.storage {
       allow read, write: if hasAgreementAccess(agreementId);
     }
 
+    match /support-tickets/{userId}/{ticketId}/{fileName} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

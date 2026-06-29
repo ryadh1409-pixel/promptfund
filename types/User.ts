@@ -112,6 +112,55 @@ export type ModerationFlag = {
   createdAt: string;
 };
 
+export type SupportTicketCategory =
+  | 'Account'
+  | 'Verification'
+  | 'Funding'
+  | 'Investments'
+  | 'Payments'
+  | 'Technical Issue'
+  | 'Report a User'
+  | 'Report a Bug'
+  | 'Feature Request'
+  | 'Other';
+
+export type SupportTicketStatus = 'Open' | 'Waiting for User' | 'In Progress' | 'Resolved' | 'Closed';
+
+export type SupportTicketAttachment = {
+  name: string;
+  path: string;
+  downloadUrl: string;
+  contentType: string;
+};
+
+export type SupportTicket = {
+  id: string;
+  ticketNumber: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  subject: string;
+  category: SupportTicketCategory;
+  message: string;
+  attachments: SupportTicketAttachment[];
+  status: SupportTicketStatus;
+  priority: 'Normal';
+  unreadByAdmin: boolean;
+  unreadByUser: boolean;
+  lastMessageAt?: unknown;
+  createdAt: unknown;
+  updatedAt: unknown;
+};
+
+export type SupportTicketMessage = {
+  id: string;
+  senderId: string;
+  senderRole: 'user' | 'admin';
+  text: string;
+  attachments: SupportTicketAttachment[];
+  createdAt: unknown;
+};
+
 export type AdminAnnouncement = {
   id: string;
   title: string;

@@ -203,6 +203,18 @@ export function getDiscussionAttachmentPath({
   return `discussion-attachments/${roomId}/${userId}/${Date.now()}-${sanitizeStorageName(fileName)}`;
 }
 
+export function getSupportScreenshotPath({
+  ticketId,
+  userId,
+  fileName,
+}: {
+  ticketId: string;
+  userId: string;
+  fileName: string;
+}) {
+  return `support-tickets/${userId}/${ticketId}/${Date.now()}-${sanitizeStorageName(fileName)}`;
+}
+
 export async function uploadUserProfilePhoto({
   userId,
   uri,
@@ -297,6 +309,28 @@ export async function uploadDiscussionDocumentAttachment({
 
   return uploadUriWithStorageRest({
     path,
+    uri,
+    contentType,
+  });
+}
+
+export async function uploadSupportScreenshot({
+  ticketId,
+  userId,
+  uri,
+  contentType = 'image/jpeg',
+}: {
+  ticketId: string;
+  userId: string;
+  uri: string;
+  contentType?: string;
+}) {
+  return uploadUriWithStorageRest({
+    path: getSupportScreenshotPath({
+      ticketId,
+      userId,
+      fileName: `screenshot.${extensionForContentType(contentType)}`,
+    }),
     uri,
     contentType,
   });

@@ -3,9 +3,10 @@ import { projectService } from '@/services/projectService';
 import { userService } from '@/services/userService';
 import { notificationService } from '@/services/notificationService';
 import { legalService } from '@/services/legalService';
+import { supportService } from '@/services/supportService';
 import type { AgreementRoom } from '@/types/Agreement';
 import type { Investment, Match } from '@/types/FundingRequest';
-import type { ActivityTimelineEvent, AdminAnnouncement, LegalDocumentVersions, ModerationFlag, User, UserReport, UserStatus } from '@/types/User';
+import type { ActivityTimelineEvent, AdminAnnouncement, LegalDocumentVersions, ModerationFlag, SupportTicket, SupportTicketStatus, User, UserReport, UserStatus } from '@/types/User';
 import type { DiscussionMessage, DiscussionRoom, InvestmentAgreement, InvestmentOpportunity, StartupInterest, V5Investment } from '@/types/InvestmentFlow';
 import type { Project } from '@/types/Project';
 
@@ -42,6 +43,7 @@ export const adminService = {
     const reports = await adminList<UserReport>('userReports');
     const moderationFlags = await adminList<ModerationFlag>('moderationFlags');
     const activityTimeline = await adminList<ActivityTimelineEvent>('activityTimeline');
+    const supportTickets = await adminList<SupportTicket>('supportTickets');
     const legalVersions = await legalService.getCurrentVersions();
 
     return {
@@ -57,6 +59,7 @@ export const adminService = {
       reports,
       moderationFlags,
       activityTimeline,
+      supportTickets,
       legalVersions,
       revenue: investments.reduce((sum: number, investment: V5Investment) => sum + (investment.amount ?? 0) * 0.025, 0),
       portfolioVolume: investments.reduce((sum: number, investment: V5Investment) => sum + (investment.amount ?? 0), 0),
@@ -69,6 +72,19 @@ export const adminService = {
 
   async updateLegalVersions(versions: LegalDocumentVersions) {
     return legalService.updateVersions(versions);
+  },
+
+  async replyToSupportTicket(ticketId: string, adminId: string, body: string) {
+    return supportService.addMessage({
+      ticketId,
+      senderId: adminId,
+      senderRole: 'admin',
+      body,
+    });
+  },
+
+  async updateSupportTicketStatus(ticketId: string, status: SupportTicketStatus) {
+    return supportService.updateTicketStatus(ticketId, status);
   },
 
   async deleteUserProfile(userId: string): Promise<void> {
