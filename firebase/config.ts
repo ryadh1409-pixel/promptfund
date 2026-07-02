@@ -1,4 +1,7 @@
+import Constants from 'expo-constants';
 import { getApp, getApps, initializeApp, type FirebaseApp, type FirebaseOptions } from 'firebase/app';
+
+import type { FirebaseExtraConfig } from '@/types/FirebaseExtra';
 
 export type FirebaseEnvironment = 'development' | 'staging' | 'production';
 
@@ -11,19 +14,46 @@ export type PromptFundFirebaseConfig = FirebaseOptions & {
   appId: string;
 };
 
-const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ?? 'promptfund';
+function readFirebaseExtra(): FirebaseExtraConfig | undefined {
+  const fromExpoConfig = Constants.expoConfig?.extra?.firebase;
+  if (fromExpoConfig && typeof fromExpoConfig === 'object') {
+    return fromExpoConfig as FirebaseExtraConfig;
+  }
 
-export const firebaseEnvironment: FirebaseEnvironment =
-  (process.env.EXPO_PUBLIC_FIREBASE_ENV as FirebaseEnvironment | undefined) ?? 'development';
+  const fromManifest2 = (Constants.manifest2?.extra as { firebase?: FirebaseExtraConfig } | undefined)?.firebase;
+  if (fromManifest2 && typeof fromManifest2 === 'object') {
+    return fromManifest2;
+  }
 
-export const firebaseConfig: PromptFundFirebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? '',
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN ?? `${projectId}.firebaseapp.com`,
-  projectId,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET ?? `${projectId}.appspot.com`,
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? '',
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID ?? '',
-};
+  const fromManifest = (Constants.manifest as { extra?: { firebase?: FirebaseExtraConfig } } | null)?.extra?.firebase;
+  if (fromManifest && typeof fromManifest === 'object') {
+    return fromManifest;
+  }
+
+  return undefined;
+}
+
+function resolveFirebaseConfig(): PromptFundFirebaseConfig {
+  const fromExtra = readFirebaseExtra();
+  const projectId = fromExtra?.projectId?.trim() || 'promptfund';
+
+  return {
+    apiKey: fromExtra?.apiKey?.trim() ?? '',
+    authDomain: fromExtra?.authDomain?.trim() || `${projectId}.firebaseapp.com`,
+    projectId,
+    storageBucket: fromExtra?.storageBucket?.trim() || `${projectId}.appspot.com`,
+    messagingSenderId: fromExtra?.messagingSenderId?.trim() ?? '',
+    appId: fromExtra?.appId?.trim() ?? '',
+  };
+}
+
+function resolveFirebaseEnvironment(): FirebaseEnvironment {
+  return readFirebaseExtra()?.env ?? 'development';
+}
+
+export const firebaseConfig: PromptFundFirebaseConfig = resolveFirebaseConfig();
+
+export const firebaseEnvironment: FirebaseEnvironment = resolveFirebaseEnvironment();
 
 const requiredConfigKeys: Array<keyof PromptFundFirebaseConfig> = [
   'apiKey',
@@ -38,17 +68,50 @@ export const missingFirebaseConfigKeys = requiredConfigKeys.filter((key) => !fir
 
 export const isFirebaseEnabled = missingFirebaseConfigKeys.length === 0;
 
+function getFirebaseDiagnostics() {
+  const extra = readFirebaseExtra();
+
+  return {
+    missingKeys: missingFirebaseConfigKeys,
+    hasExpoConfig: Boolean(Constants.expoConfig),
+    hasExpoExtra: Boolean(Constants.expoConfig?.extra),
+    hasFirebaseExtra: Boolean(extra),
+    expoExtraKeys: Constants.expoConfig?.extra ? Object.keys(Constants.expoConfig.extra) : [],
+    firebaseExtraKeys: extra ? Object.keys(extra) : [],
+    executionEnvironment: Constants.executionEnvironment,
+    appOwnership: Constants.appOwnership,
+  };
+}
+
+export function getFirebaseConfigErrorMessage() {
+  if (isFirebaseEnabled) {
+    return null;
+  }
+
+  return `Firebase is not configured for this build. Missing: ${missingFirebaseConfigKeys.join(', ')}. Set EXPO_PUBLIC_FIREBASE_* in EAS secrets (or local .env), then create a new EAS production build.`;
+}
+
+export function logFirebaseConfigDiagnostics(context = 'startup') {
+  const diagnostics = getFirebaseDiagnostics();
+  console.info(`[PromptFund Firebase] config diagnostics (${context})`, diagnostics);
+
+  if (!isFirebaseEnabled) {
+    console.error('[PromptFund Firebase] missing configuration values', diagnostics);
+  }
+}
+
 export function assertFirebaseEnabled() {
   if (!isFirebaseEnabled) {
-    throw new Error(
-      `Firebase config is incomplete. Missing: ${missingFirebaseConfigKeys.join(
-        ', ',
-      )}. Add EXPO_PUBLIC_FIREBASE_* values before calling Firebase.`,
-    );
+    logFirebaseConfigDiagnostics('assertFirebaseEnabled');
+    throw new Error(getFirebaseConfigErrorMessage() ?? 'Firebase config is incomplete.');
   }
 }
 
 export function getFirebaseApp(): FirebaseApp {
   assertFirebaseEnabled();
   return getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+}
+
+if (!isFirebaseEnabled) {
+  logFirebaseConfigDiagnostics('module-init');
 }

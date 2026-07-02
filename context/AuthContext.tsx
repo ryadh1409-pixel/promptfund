@@ -13,7 +13,7 @@ import {
   type AuthCredentials,
   type AuthUser,
 } from '@/firebase/auth';
-import { isFirebaseEnabled, missingFirebaseConfigKeys } from '@/firebase/config';
+import { getFirebaseConfigErrorMessage, isFirebaseEnabled, logFirebaseConfigDiagnostics } from '@/firebase/config';
 import { isAdminEmail } from '@/services/adminService';
 import { defaultLegalVersions } from '@/constants/legal';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
@@ -169,7 +169,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isFirebaseEnabled) {
-      setError(`Missing Firebase env vars: ${missingFirebaseConfigKeys.join(', ')}`);
+      logFirebaseConfigDiagnostics('AuthContext');
+      setError(getFirebaseConfigErrorMessage());
       setInitializing(false);
       return undefined;
     }
