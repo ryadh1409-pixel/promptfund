@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { getAuth } from 'firebase/auth';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { deleteObject, getStorage, ref } from 'firebase/storage';
 
 import { firebaseConfig, getFirebaseApp } from './config';
@@ -242,24 +243,20 @@ export async function uploadStartupImage({
 }: {
   userId: string;
   uri: string;
-}) {
-  const path = getStartupImagePath(userId);
+}): Promise<{ path: string; downloadUrl: string }> {
+  const base64 = await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  const fileName = `${Date.now()}.jpg`;
 
   try {
-    await FileSystem.readAsStringAsync(uri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-
-    return await uploadUriWithStorageRest({
-      path,
-      uri,
-      contentType: 'image/jpeg',
-    });
+    const callUpload = httpsCallable(getFunctions(getFirebaseApp(), 'us-central1'), 'uploadStartupImage');
+    const result = await callUpload({ base64, fileName, contentType: 'image/jpeg', userId });
+    const { downloadURL, path } = result.data as { downloadURL: string; path: string };
+    return { path, downloadUrl: downloadURL };
   } catch (error) {
     console.error('[Storage Upload Error]', error);
-    if (error instanceof Error) {
-      console.error('[Storage Upload Error Stack]', error.stack);
-    }
+    if (error instanceof Error) console.error('[Storage Upload Error Stack]', error.stack);
     throw error;
   }
 }
