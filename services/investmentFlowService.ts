@@ -1,6 +1,6 @@
 import { getFirebaseAuth } from '@/firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { firestoreAdapter, getPromptFundFirestore } from '@/firebase/firestore';
+import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { firestoreAdapter, firestoreCollections, getPromptFundFirestore } from '@/firebase/firestore';
 import { AppError } from '@/services/errorHandler';
 import { notificationService } from '@/services/notificationService';
 import { userService } from '@/services/userService';
@@ -18,6 +18,10 @@ import type { InvestmentInterest, Match } from '@/types/FundingRequest';
 import type { Project } from '@/types/Project';
 import type { ActivityTimelineEvent, ModerationFlag, User } from '@/types/User';
 import { moderateChatMessage } from '@/utils/chatModeration';
+import {
+  logTractionFlowStep,
+  logTractionInvestmentWrite,
+} from '@/utils/tractionPortfolio';
 
 export const defaultInvestmentAmount = 22;
 export const defaultInvestorAllocation = 1;
@@ -33,10 +37,184 @@ function displayName(profile: Pick<User, 'displayName' | 'name' | 'username' | '
   return profile?.displayName ?? profile?.name ?? profile?.username ?? profile?.handle ?? 'PromptFund Member';
 }
 
+function buildTractionInvestmentPayload(
+  agreement: InvestmentAgreement,
+  status: 'funding_confirmed' | 'completed',
+  timestamps: { fundedAt?: string; createdAt?: string; completedAt?: string },
+  opportunity?: InvestmentOpportunity | null,
+): Omit<V5Investment, 'id'> {
+  const completedAt = status === 'completed'
+    ? (timestamps.completedAt ?? timestamps.fundedAt ?? agreement.completedAt ?? now())
+    : undefined;
+  const fundedAt = timestamps.fundedAt
+    ?? agreement.fundingArrangedAt
+    ?? completedAt
+    ?? now();
+  const createdAt = timestamps.createdAt
+    ?? agreement.fundingArrangedAt
+    ?? agreement.createdAt
+    ?? fundedAt;
+  const fundedAmount = agreement.investmentAmount;
+
+  return {
+    agreementId: agreement.id,
+    discussionRoomId: agreement.discussionRoomId,
+    opportunityId: agreement.opportunityId,
+    startupId: agreement.opportunityId,
+    startupImage: opportunity?.imageUrl ?? '',
+    founderId: agreement.founderId,
+    founderName: agreement.founderName,
+    investorId: agreement.investorId,
+    investorName: agreement.investorName,
+    startupName: agreement.startupName,
+    amount: fundedAmount,
+    fundedAmount,
+    allocation: agreement.investorAllocation,
+    status,
+    isPortfolio: true,
+    isTraction: true,
+    fundedAt,
+    completedAt,
+    createdAt,
+  };
+}
+
+function assertCompletedPortfolioPayload(payload: Omit<V5Investment, 'id'>) {
+  const missing = [
+    ['status', payload.status],
+    ['founderId', payload.founderId],
+    ['investorId', payload.investorId],
+    ['opportunityId', payload.opportunityId],
+    ['startupId', payload.startupId],
+    ['startupName', payload.startupName],
+    ['founderName', payload.founderName],
+    ['fundedAmount', payload.fundedAmount],
+    ['allocation', payload.allocation],
+    ['completedAt', payload.completedAt],
+    ['isPortfolio', payload.isPortfolio],
+    ['isTraction', payload.isTraction],
+  ].filter(([, value]) => value === undefined || value === null || value === '')
+    .map(([field]) => field)
+    .filter((field) => field !== 'startupImage');
+
+  if (payload.status === 'completed' && missing.length > 0) {
+    throw new AppError(
+      `Completed investment is missing required portfolio fields: ${missing.join(', ')}`,
+      'traction/incomplete-portfolio-payload',
+    );
+  }
+}
+
+async function commitPortfolioInvestmentTransaction({
+  agreement,
+  investmentPayload,
+  agreementUpdate,
+  discussionRoomStatus,
+  opportunityStatus,
+}: {
+  agreement: InvestmentAgreement;
+  investmentPayload: Omit<V5Investment, 'id'>;
+  agreementUpdate: Partial<InvestmentAgreement>;
+  discussionRoomStatus: InvestmentOpportunity['status'];
+  opportunityStatus: InvestmentOpportunity['status'];
+}) {
+  const database = getPromptFundFirestore();
+  const batch = writeBatch(database);
+  const writePayload = omitUndefinedFields(investmentPayload);
+
+  batch.set(
+    doc(database, firestoreCollections.investments, agreement.id),
+    {
+      ...writePayload,
+      updatedAt: serverTimestamp(),
+    },
+  );
+  batch.update(
+    doc(database, firestoreCollections.agreements, agreement.id),
+    {
+      ...agreementUpdate,
+      updatedAt: serverTimestamp(),
+    },
+  );
+  batch.update(
+    doc(database, firestoreCollections.discussionRooms, agreement.discussionRoomId),
+    {
+      status: discussionRoomStatus,
+      updatedAt: serverTimestamp(),
+    },
+  );
+  batch.update(
+    doc(database, firestoreCollections.startupOpportunities, agreement.opportunityId),
+    {
+      status: opportunityStatus,
+      updatedAt: serverTimestamp(),
+    },
+  );
+
+  await batch.commit();
+
+  logTractionInvestmentWrite({
+    documentId: agreement.id,
+    status: String(investmentPayload.status),
+    founderId: investmentPayload.founderId ?? undefined,
+    investorId: investmentPayload.investorId,
+    payload: writePayload,
+  });
+
+  return {
+    ...investmentPayload,
+    id: agreement.id,
+  };
+}
+
+async function writePortfolioInvestment(
+  agreement: InvestmentAgreement,
+  status: 'funding_confirmed' | 'completed',
+  timestamps: { fundedAt?: string; createdAt?: string; completedAt?: string },
+  transaction: {
+    agreementUpdate: Partial<InvestmentAgreement>;
+    discussionRoomStatus: InvestmentOpportunity['status'];
+    opportunityStatus: InvestmentOpportunity['status'];
+  },
+) {
+  if (!agreement.founderId || !agreement.investorId || !agreement.opportunityId) {
+    throw new AppError(
+      'Agreement is missing founder, investor, or startup details required for Traction.',
+      'traction/invalid-agreement',
+    );
+  }
+
+  const opportunity = await firestoreAdapter.getById<InvestmentOpportunity>(
+    'startupOpportunities',
+    agreement.opportunityId,
+  );
+  const payload = buildTractionInvestmentPayload(agreement, status, timestamps, opportunity);
+
+  if (status === 'completed') {
+    assertCompletedPortfolioPayload(payload);
+  }
+
+  logTractionFlowStep({
+    step: 'investment-write-start',
+    collection: 'investments',
+    documentId: agreement.id,
+    data: {
+      ...payload,
+      agreementStatus: agreement.status,
+    },
+  });
+
+  return commitPortfolioInvestmentTransaction({
+    agreement,
+    investmentPayload: payload,
+    ...transaction,
+  });
+}
+
 function normalizeInvestment(investment: V5Investment): V5Investment {
   return {
-    status: 'active',
     ...investment,
+    status: investment.status ?? 'active',
     allocation: investment.allocation ?? 0,
   };
 }
@@ -703,12 +881,45 @@ export const investmentFlowService = {
       fundingArrangedAt: arrangedAt,
     } as const;
 
-    await Promise.all([
-      firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, fundingArrangedPayload),
-      firestoreAdapter.update<DiscussionRoom>('discussionRooms', agreement.discussionRoomId, {
+    logTractionFlowStep({
+      step: 'confirm-arrangement-start',
+      collection: 'agreements',
+      documentId: agreement.id,
+      data: {
+        ...agreement,
+        nextStatus: fundingArrangedPayload.status,
+        fundingArrangedAt: arrangedAt,
+      },
+    });
+
+    await writePortfolioInvestment(
+      agreement,
+      'funding_confirmed',
+      {
+        createdAt: arrangedAt,
+        fundedAt: arrangedAt,
+      },
+      {
+        agreementUpdate: fundingArrangedPayload,
+        discussionRoomStatus: 'funding_arranged',
+        opportunityStatus: 'funding_arranged',
+      },
+    );
+
+    logTractionFlowStep({
+      step: 'funding-confirmed-complete',
+      collection: 'agreements',
+      documentId: agreement.id,
+      data: {
         status: 'funding_arranged',
-      }),
-    ]);
+        founderId: agreement.founderId,
+        investorId: agreement.investorId,
+        opportunityId: agreement.opportunityId,
+        startupId: agreement.opportunityId,
+        fundingArrangedAt: arrangedAt,
+        investmentDocumentId: agreement.id,
+      },
+    });
     await recordTimeline({
       startupId: agreement.opportunityId,
       discussionRoomId: agreement.discussionRoomId,
@@ -717,6 +928,22 @@ export const investmentFlowService = {
       eventType: 'funding_confirmed',
       label: 'Funding Confirmed',
     });
+    await Promise.all([
+      notificationService.createNotification({
+        userId: agreement.founderId,
+        title: 'Funding confirmed outside PromptFund',
+        body: `${agreement.investorName} marked funding as arranged for ${agreement.startupName}. Continue in Traction.`,
+        type: 'funding_confirmed',
+        data: { agreementId: agreement.id, investmentId: agreement.id },
+      }),
+      notificationService.createNotification({
+        userId: agreement.investorId,
+        title: 'Funding confirmed outside PromptFund',
+        body: `${agreement.startupName} is now in your Traction portfolio.`,
+        type: 'funding_confirmed',
+        data: { agreementId: agreement.id, investmentId: agreement.id },
+      }),
+    ]);
   },
 
   async recordFundingInstructionsOpened(agreement: InvestmentAgreement, actorId: string) {
@@ -736,34 +963,41 @@ export const investmentFlowService = {
 
   async completeFundingAgreement(agreement: InvestmentAgreement) {
     const completedAt = now();
-    const investment = await firestoreAdapter.setWithId<Omit<V5Investment, 'id'>>('investments', agreement.id, {
-      agreementId: agreement.id,
-      discussionRoomId: agreement.discussionRoomId,
-      opportunityId: agreement.opportunityId,
-      founderId: agreement.founderId,
-      founderName: agreement.founderName,
-      investorId: agreement.investorId,
-      investorName: agreement.investorName,
-      startupName: agreement.startupName,
-      amount: agreement.investmentAmount,
-      allocation: agreement.investorAllocation,
-      status: 'completed',
-      fundedAt: completedAt,
+
+    logTractionFlowStep({
+      step: 'confirm-arrangement-start',
+      collection: 'agreements',
+      documentId: agreement.id,
+      data: {
+        ...agreement,
+        nextStatus: 'completed',
+      },
     });
 
-    const completedRoomPayload = {
-      status: 'completed',
-    } as const;
-    await Promise.all([
-      firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, {
-        status: 'completed',
+    const investment = await writePortfolioInvestment(
+      agreement,
+      'completed',
+      {
+        fundedAt: completedAt,
+        createdAt: agreement.fundingArrangedAt ?? completedAt,
         completedAt,
-      }),
-      firestoreAdapter.update<DiscussionRoom>('discussionRooms', agreement.discussionRoomId, completedRoomPayload),
-      firestoreAdapter.update<InvestmentOpportunity>('startupOpportunities', agreement.opportunityId, {
-        status: 'completed',
-      }),
-    ]);
+      },
+      {
+        agreementUpdate: {
+          status: 'completed',
+          completedAt,
+        },
+        discussionRoomStatus: 'completed',
+        opportunityStatus: 'completed',
+      },
+    );
+
+    logTractionFlowStep({
+      step: 'deal-completed',
+      collection: 'investments',
+      documentId: investment.id,
+      data: investment,
+    });
     await recordTimeline({
       startupId: agreement.opportunityId,
       discussionRoomId: agreement.discussionRoomId,

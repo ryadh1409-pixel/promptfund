@@ -116,11 +116,15 @@ export type InvestmentAgreement = {
   updatedAt?: string;
 };
 
+export type TractionPortfolioStatus = 'funding_confirmed' | 'active' | 'completed';
+
 export type V5Investment = {
   id: string;
   agreementId?: string;
   discussionRoomId?: string;
   opportunityId?: string;
+  startupId?: string;
+  startupImage?: string;
   projectId?: string;
   founderId?: string;
   founderName?: string;
@@ -128,8 +132,13 @@ export type V5Investment = {
   investorName?: string;
   startupName?: string;
   amount?: number;
+  fundedAmount?: number;
   allocation?: number;
-  status?: 'completed' | 'active';
+  status?: TractionPortfolioStatus | 'archived';
+  isTraction?: boolean;
+  isPortfolio?: boolean;
+  fundingConfirmedAt?: string;
+  completedAt?: string;
   paymentStatus?: 'completed';
   transactionId?: string;
   paidAt?: string;

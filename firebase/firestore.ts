@@ -91,6 +91,11 @@ export type FirestoreAdapter = {
     id: string,
     input: T,
   ) => Promise<FirestoreDocument<T>>;
+  setWithIdMerge: <T>(
+    collectionName: FirestoreCollectionName,
+    id: string,
+    input: T,
+  ) => Promise<FirestoreDocument<T>>;
   deleteById: (
     collectionName: FirestoreCollectionName,
     id: string,
@@ -223,6 +228,29 @@ export const firestoreAdapter: FirestoreAdapter = {
       console.info('[PromptFund Firestore] setWithId success', { path });
     } catch (error) {
       console.error('[PromptFund Firestore] setWithId failure', { path, error });
+      throw error;
+    }
+
+    return {
+      ...input,
+      id,
+    };
+  },
+  async setWithIdMerge(collectionName, id, input) {
+    const reference = doc(getPromptFundFirestore(), firestoreCollections[collectionName], id);
+    const path = `${firestoreCollections[collectionName]}/${id}`;
+
+    try {
+      console.info('[PromptFund Firestore] setWithIdMerge start', { path });
+      await withFriendlyErrors(async () => {
+        await setDoc(reference, {
+          ...omitUndefined(input as object),
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      });
+      console.info('[PromptFund Firestore] setWithIdMerge success', { path });
+    } catch (error) {
+      console.error('[PromptFund Firestore] setWithIdMerge failure', { path, error });
       throw error;
     }
 

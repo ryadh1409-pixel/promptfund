@@ -203,8 +203,15 @@ export default function PaymentScreen() {
                   <Text style={styles.copy}>
                     {isFundingArranged
                       ? 'Investor has indicated that funding arrangements were completed outside PromptFund.'
-                      : 'Waiting for the Investor to indicate that funding arrangements were completed outside PromptFund.'}
+                      : 'Arrange funding directly with the Investor outside PromptFund, then confirm here or wait for Investor confirmation.'}
                   </Text>
+                  {isAwaitingInvestor ? (
+                    <PrimaryButton
+                      label={isSaving ? 'Saving...' : 'I Have Arranged Funding Outside PromptFund'}
+                      onPress={handleFundingArranged}
+                      disabled={isSaving}
+                    />
+                  ) : null}
                   <PrimaryButton
                     label={isSaving ? 'Confirming...' : 'Confirm Arrangement'}
                     onPress={handleConfirmArrangement}

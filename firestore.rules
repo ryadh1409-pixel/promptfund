@@ -275,19 +275,89 @@ service cloud.firestore {
         );
     }
 
-    function isInvestmentParticipant(investmentId) {
+    function isLinkedAgreementInvestment(investmentId) {
+      return exists(/databases/$(database)/documents/agreements/$(investmentId));
+    }
+
+    function linkedAgreementParticipantData(investmentId) {
+      return get(/databases/$(database)/documents/agreements/$(investmentId)).data;
+    }
+
+    function investmentParticipantData(data) {
+      return data.founderId == request.auth.uid || data.investorId == request.auth.uid;
+    }
+
+    function isInvestmentFounder() {
       return isSignedIn()
-        && exists(/databases/$(database)/documents/investments/$(investmentId))
+        && resource != null
+        && resource.data.keys().hasAny(['founderId'])
+        && resource.data.founderId == request.auth.uid;
+    }
+
+    function isInvestmentInvestor() {
+      return isSignedIn()
+        && resource != null
+        && resource.data.keys().hasAny(['investorId'])
+        && resource.data.investorId == request.auth.uid;
+    }
+
+    function canListInvestment() {
+      return isAdmin() || isInvestmentFounder() || isInvestmentInvestor();
+    }
+
+    function canAccessInvestmentAsParticipant(investmentId) {
+      return isSignedIn() && (
+        (
+          exists(/databases/$(database)/documents/investments/$(investmentId))
+          && investmentParticipantData(get(/databases/$(database)/documents/investments/$(investmentId)).data)
+        )
+        || (
+          isLinkedAgreementInvestment(investmentId)
+          && investmentParticipantData(linkedAgreementParticipantData(investmentId))
+        )
+      );
+    }
+
+    function canCreateInvestmentAsParticipant() {
+      return isSignedIn() && investmentParticipantData(request.resource.data);
+    }
+
+    function canUpdateInvestmentAsParticipant(investmentId) {
+      return isSignedIn()
+        && investmentParticipantData(request.resource.data)
         && (
-          get(/databases/$(database)/documents/investments/$(investmentId)).data.founderId == request.auth.uid
-          || get(/databases/$(database)/documents/investments/$(investmentId)).data.investorId == request.auth.uid
+          (
+            exists(/databases/$(database)/documents/investments/$(investmentId))
+            && investmentParticipantData(resource.data)
+          )
+          || (
+            isLinkedAgreementInvestment(investmentId)
+            && investmentParticipantData(linkedAgreementParticipantData(investmentId))
+          )
         );
     }
 
+    function linkedInvestmentInvestorId(investmentId) {
+      return exists(/databases/$(database)/documents/investments/$(investmentId))
+        ? get(/databases/$(database)/documents/investments/$(investmentId)).data.investorId
+        : linkedAgreementParticipantData(investmentId).investorId;
+    }
+
+    function isInvestmentParticipant(investmentId) {
+      return canAccessInvestmentAsParticipant(investmentId);
+    }
+
     function ownsInvestmentAsFounder(investmentId) {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/investments/$(investmentId))
-        && get(/databases/$(database)/documents/investments/$(investmentId)).data.founderId == request.auth.uid;
+      return isSignedIn() && (
+        (
+          exists(/databases/$(database)/documents/investments/$(investmentId))
+          && get(/databases/$(database)/documents/investments/$(investmentId)).data.founderId == request.auth.uid
+        )
+        || (
+          isLinkedAgreementInvestment(investmentId)
+          && linkedAgreementParticipantData(investmentId).founderId == request.auth.uid
+        )
+      );
     }
 
     match /users/{userId} {
@@ -331,14 +401,11 @@ service cloud.firestore {
             && exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId))
             && !isBlockedBetween(request.auth.uid, projectOwner(request.resource.data.projectId))
           )
-          || request.resource.data.investorId == request.auth.uid
-          || request.resource.data.founderId == request.auth.uid
+          || canCreateInvestmentAsParticipant()
         );
-      allow read, update: if isAdmin()
-        || (isSignedIn() && (
-          resource.data.investorId == request.auth.uid
-          || resource.data.founderId == request.auth.uid
-        ));
+      allow get: if isAdmin() || canAccessInvestmentAsParticipant(investmentId);
+      allow list: if canListInvestment();
+      allow update: if isAdmin() || canUpdateInvestmentAsParticipant(investmentId);
       allow delete: if false;
     }
 
@@ -604,7 +671,7 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.founderId == request.auth.uid
         && ownsInvestmentAsFounder(request.resource.data.investmentId)
-        && request.resource.data.investorId == get(/databases/$(database)/documents/investments/$(request.resource.data.investmentId)).data.investorId;
+        && request.resource.data.investorId == linkedInvestmentInvestorId(request.resource.data.investmentId);
       allow read: if isAdmin()
         || (
           isSignedIn()

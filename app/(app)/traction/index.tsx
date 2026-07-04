@@ -12,7 +12,13 @@ import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { tractionService } from '@/services/tractionService';
 import type { V5Investment } from '@/types/InvestmentFlow';
 import type { FounderUpdate, FounderUpdateComment, FounderUpdateKind } from '@/types/Traction';
-import { getActiveRole } from '@/utils/roles';
+import {
+  dedupeInvestmentsById,
+  describeTractionExclusion,
+  isTractionPortfolioInvestment,
+  logTractionQuerySnapshot,
+} from '@/utils/tractionPortfolio';
+import { investmentFlowService } from '@/services/investmentFlowService';
 import { safeCurrency, safeDate, safePercent } from '@/utils/safeFormat';
 
 type UpdateDraft = {
@@ -57,8 +63,7 @@ const emptyDraft: UpdateDraft = {
 
 export default function TractionScreen() {
   const { authUser, profile } = useAuth();
-  const activeRole = getActiveRole(profile);
-  const isFounderMode = activeRole === 'founder';
+  const isAdminMode = profile?.role === 'admin';
   const [investments, setInvestments] = useState<V5Investment[]>([]);
   const [updatesByInvestment, setUpdatesByInvestment] = useState<Record<string, FounderUpdate[]>>({});
   const [commentsByUpdate, setCommentsByUpdate] = useState<Record<string, FounderUpdateComment[]>>({});
@@ -81,52 +86,238 @@ export default function TractionScreen() {
     setNotice(null);
     setIsLoading(true);
     const database = getPromptFundFirestore();
-    const roleField = isFounderMode ? 'founderId' : 'investorId';
-    const investmentsQuery = query(collection(database, 'investments'), where(roleField, '==', authUser.uid));
-    const updatesQuery = query(collection(database, 'founderUpdates'), where(roleField, '==', authUser.uid));
-    const commentsQuery = query(collection(database, 'founderUpdateComments'), where(roleField, '==', authUser.uid));
+    const participantId = authUser.uid;
 
-    const unsubscribeInvestments = onSnapshot(
-      investmentsQuery,
-      (snapshot) => {
-        const fundedInvestments = snapshot.docs
-          .map((item) => ({ ...item.data(), id: item.id }) as V5Investment)
-          .filter((investment) => investment.status === 'completed' || investment.status === 'active');
-        setInvestments((current) => updateArrayIfChanged(current, fundedInvestments));
-        setIsLoading(false);
-      },
-      (error) => {
-        setNotice(getFriendlyErrorMessage(error));
-        setIsLoading(false);
-      },
-    );
+    let founderInvestments: V5Investment[] = [];
+    let investorInvestments: V5Investment[] = [];
+    let adminInvestments: V5Investment[] = [];
+    let founderUpdates: FounderUpdate[] = [];
+    let investorUpdates: FounderUpdate[] = [];
+    let adminUpdates: FounderUpdate[] = [];
+    let founderComments: FounderUpdateComment[] = [];
+    let investorComments: FounderUpdateComment[] = [];
+    let adminComments: FounderUpdateComment[] = [];
 
-    const unsubscribeUpdates = onSnapshot(
-      updatesQuery,
-      (snapshot) => {
-        const grouped = groupByInvestment(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as FounderUpdate));
-        setUpdatesByInvestment((current) => updateRecordIfChanged(current, grouped));
-      },
-      (error) => setNotice(getFriendlyErrorMessage(error)),
-    );
+    const syncInvestments = () => {
+      const nextInvestments = isAdminMode
+        ? adminInvestments
+        : dedupeInvestmentsById([...founderInvestments, ...investorInvestments]);
+      const fundedInvestments = nextInvestments.filter(isTractionPortfolioInvestment);
+      const excludedDocuments = nextInvestments.flatMap((investment) => {
+        const reason = describeTractionExclusion(investment);
+        return reason
+          ? [{
+            id: investment.id,
+            status: investment.status ?? null,
+            founderId: investment.founderId ?? null,
+            investorId: investment.investorId ?? null,
+            reason,
+          }]
+          : [];
+      });
 
-    const unsubscribeComments = onSnapshot(
-      commentsQuery,
-      (snapshot) => {
-        const grouped = groupCommentsByUpdate(snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as FounderUpdateComment));
-        setCommentsByUpdate((current) => updateRecordIfChanged(current, grouped));
-      },
-      (error) => setNotice(getFriendlyErrorMessage(error)),
-    );
+      logTractionQuerySnapshot({
+        collection: 'investments',
+        filters: isAdminMode
+          ? { mode: 'admin', collection: 'investments/*' }
+          : { founderId: participantId, investorId: participantId },
+        rawDocumentCount: nextInvestments.length,
+        documents: fundedInvestments.map((investment) => ({
+          id: investment.id,
+          status: investment.status ?? null,
+          founderId: investment.founderId ?? null,
+          investorId: investment.investorId ?? null,
+          opportunityId: investment.opportunityId ?? null,
+          startupId: investment.startupId ?? null,
+          startupImage: investment.startupImage ?? null,
+          fundedAmount: investment.fundedAmount ?? investment.amount ?? null,
+          isTraction: investment.isTraction ?? null,
+          isPortfolio: investment.isPortfolio ?? null,
+          completedAt: investment.completedAt ?? null,
+        })),
+        excludedDocuments,
+      });
+
+      setInvestments((current) => updateArrayIfChanged(current, fundedInvestments));
+      setIsLoading(false);
+    };
+
+    const syncUpdates = () => {
+      const nextUpdates = isAdminMode
+        ? adminUpdates
+        : dedupeById([...founderUpdates, ...investorUpdates]);
+      const grouped = groupByInvestment(nextUpdates);
+
+      logTractionQuerySnapshot({
+        collection: 'founderUpdates',
+        filters: isAdminMode
+          ? { mode: 'admin', collection: 'founderUpdates/*' }
+          : { founderId: participantId, investorId: participantId },
+        rawDocumentCount: nextUpdates.length,
+        documents: nextUpdates.map((update) => ({
+          id: update.id,
+          status: update.investmentId,
+          founderId: update.founderId,
+          investorId: update.investorId,
+        })),
+      });
+
+      setUpdatesByInvestment((current) => updateRecordIfChanged(current, grouped));
+    };
+
+    const syncComments = () => {
+      const nextComments = isAdminMode
+        ? adminComments
+        : dedupeById([...founderComments, ...investorComments]);
+      const grouped = groupCommentsByUpdate(nextComments);
+
+      logTractionQuerySnapshot({
+        collection: 'founderUpdateComments',
+        filters: isAdminMode
+          ? { mode: 'admin', collection: 'founderUpdateComments/*' }
+          : { founderId: participantId, investorId: participantId },
+        rawDocumentCount: nextComments.length,
+        documents: nextComments.map((comment) => ({
+          id: comment.id,
+          status: comment.updateId,
+          founderId: comment.founderId,
+          investorId: comment.investorId,
+        })),
+      });
+
+      setCommentsByUpdate((current) => updateRecordIfChanged(current, grouped));
+    };
+
+    const handleSnapshotError = (error: unknown) => {
+      setNotice(getFriendlyErrorMessage(error));
+      setIsLoading(false);
+    };
+
+    const unsubscribeInvestments = isAdminMode
+      ? onSnapshot(
+        collection(database, 'investments'),
+        (snapshot) => {
+          adminInvestments = snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as V5Investment);
+          syncInvestments();
+        },
+        handleSnapshotError,
+      )
+      : (() => {
+        const founderInvestmentsQuery = query(collection(database, 'investments'), where('founderId', '==', participantId));
+        const investorInvestmentsQuery = query(collection(database, 'investments'), where('investorId', '==', participantId));
+
+        const unsubscribeFounderInvestments = onSnapshot(
+          founderInvestmentsQuery,
+          (snapshot) => {
+            founderInvestments = snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as V5Investment);
+            syncInvestments();
+          },
+          handleSnapshotError,
+        );
+        const unsubscribeInvestorInvestments = onSnapshot(
+          investorInvestmentsQuery,
+          (snapshot) => {
+            investorInvestments = snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as V5Investment);
+            syncInvestments();
+          },
+          handleSnapshotError,
+        );
+
+        return () => {
+          unsubscribeFounderInvestments();
+          unsubscribeInvestorInvestments();
+        };
+      })();
+
+    const unsubscribeUpdates = isAdminMode
+      ? onSnapshot(
+        collection(database, 'founderUpdates'),
+        (snapshot) => {
+          adminUpdates = snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as FounderUpdate);
+          syncUpdates();
+        },
+        handleSnapshotError,
+      )
+      : (() => {
+        const founderUpdatesQuery = query(collection(database, 'founderUpdates'), where('founderId', '==', participantId));
+        const investorUpdatesQuery = query(collection(database, 'founderUpdates'), where('investorId', '==', participantId));
+
+        const unsubscribeFounderUpdates = onSnapshot(
+          founderUpdatesQuery,
+          (snapshot) => {
+            founderUpdates = snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as FounderUpdate);
+            syncUpdates();
+          },
+          handleSnapshotError,
+        );
+        const unsubscribeInvestorUpdates = onSnapshot(
+          investorUpdatesQuery,
+          (snapshot) => {
+            investorUpdates = snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as FounderUpdate);
+            syncUpdates();
+          },
+          handleSnapshotError,
+        );
+
+        return () => {
+          unsubscribeFounderUpdates();
+          unsubscribeInvestorUpdates();
+        };
+      })();
+
+    const unsubscribeComments = isAdminMode
+      ? onSnapshot(
+        collection(database, 'founderUpdateComments'),
+        (snapshot) => {
+          adminComments = snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as FounderUpdateComment);
+          syncComments();
+        },
+        handleSnapshotError,
+      )
+      : (() => {
+        const founderCommentsQuery = query(collection(database, 'founderUpdateComments'), where('founderId', '==', participantId));
+        const investorCommentsQuery = query(collection(database, 'founderUpdateComments'), where('investorId', '==', participantId));
+
+        const unsubscribeFounderComments = onSnapshot(
+          founderCommentsQuery,
+          (snapshot) => {
+            founderComments = snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as FounderUpdateComment);
+            syncComments();
+          },
+          handleSnapshotError,
+        );
+        const unsubscribeInvestorComments = onSnapshot(
+          investorCommentsQuery,
+          (snapshot) => {
+            investorComments = snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as FounderUpdateComment);
+            syncComments();
+          },
+          handleSnapshotError,
+        );
+
+        return () => {
+          unsubscribeFounderComments();
+          unsubscribeInvestorComments();
+        };
+      })();
 
     return () => {
-      unsubscribeInvestments();
-      unsubscribeUpdates();
-      unsubscribeComments();
+      if (typeof unsubscribeInvestments === 'function') {
+        unsubscribeInvestments();
+      }
+      if (typeof unsubscribeUpdates === 'function') {
+        unsubscribeUpdates();
+      }
+      if (typeof unsubscribeComments === 'function') {
+        unsubscribeComments();
+      }
     };
-  }, [authUser?.uid, isFounderMode]);
+  }, [authUser?.uid, isAdminMode]);
 
-  const totalCapital = investments.reduce((sum, investment) => sum + (investment.amount ?? 0), 0);
+  const totalCapital = investments.reduce(
+    (sum, investment) => sum + (investment.fundedAmount ?? investment.amount ?? 0),
+    0,
+  );
 
   async function handlePublishUpdate(investment: V5Investment) {
     if (!profile) {
@@ -233,7 +424,7 @@ export default function TractionScreen() {
           investment={investment}
           updates={updatesByInvestment[investment.id] ?? []}
           commentsByUpdate={commentsByUpdate}
-          isFounderMode={isFounderMode}
+          canPublishUpdates={authUser?.uid === investment.founderId}
           draft={drafts[investment.id] ?? emptyDraft}
           setDraft={(draft) => setDrafts((current) => ({ ...current, [investment.id]: draft }))}
           commentDrafts={commentDrafts}
@@ -255,7 +446,7 @@ function PortfolioCompanyCard({
   investment,
   updates,
   commentsByUpdate,
-  isFounderMode,
+  canPublishUpdates,
   draft,
   setDraft,
   commentDrafts,
@@ -271,7 +462,7 @@ function PortfolioCompanyCard({
   investment: V5Investment;
   updates: FounderUpdate[];
   commentsByUpdate: Record<string, FounderUpdateComment[]>;
-  isFounderMode: boolean;
+  canPublishUpdates: boolean;
   draft: UpdateDraft;
   setDraft: (draft: UpdateDraft) => void;
   commentDrafts: Record<string, string>;
@@ -309,10 +500,10 @@ function PortfolioCompanyCard({
       </View>
 
       <View style={styles.detailGrid}>
-        <FieldPreview label="Investment Amount" value={safeCurrency(investment.amount)} />
+        <FieldPreview label="Investment Amount" value={safeCurrency(investment.fundedAmount ?? investment.amount)} />
         <FieldPreview label="Equity" value={safePercent(investment.allocation)} />
-        <FieldPreview label="Investment Date" value={safeDate(investment.fundedAt ?? investment.createdAt)} />
-        <FieldPreview label="Current Status" value={investment.status ?? 'completed'} />
+        <FieldPreview label="Investment Date" value={safeDate(investment.completedAt ?? investment.fundedAt ?? investment.createdAt)} />
+        <FieldPreview label="Current Status" value={formatTractionStatus(investment.status)} />
       </View>
 
       <PrimaryButton
@@ -322,7 +513,7 @@ function PortfolioCompanyCard({
         disabled={!investment.discussionRoomId}
       />
 
-      {isFounderMode ? (
+      {canPublishUpdates ? (
         <FounderUpdateComposer draft={draft} setDraft={setDraft} onPublish={onPublishUpdate} disabled={isSaving} />
       ) : null}
 
@@ -512,6 +703,14 @@ function updateRecordIfChanged<T>(current: Record<string, T[]>, next: Record<str
   return stableStringify(current) === stableStringify(next) ? current : next;
 }
 
+function dedupeById<T extends { id: string }>(items: T[]) {
+  const byId = new Map<string, T>();
+  items.forEach((item) => {
+    byId.set(item.id, item);
+  });
+  return Array.from(byId.values());
+}
+
 function stableStringify(value: unknown) {
   try {
     return JSON.stringify(value);
@@ -520,22 +719,37 @@ function stableStringify(value: unknown) {
   }
 }
 
+function formatTractionStatus(status?: V5Investment['status']) {
+  if (status === 'funding_confirmed') {
+    return 'Funding Confirmed';
+  }
+
+  if (status === 'completed') {
+    return 'Deal Completed';
+  }
+
+  return status ?? 'Active';
+}
+
 function mapInvestmentToStartupCard(investment: V5Investment): StartupCard {
+  const fundedAmount = investment.fundedAmount ?? investment.amount ?? 0;
+
   return {
-    id: investment.opportunityId ?? investment.id,
+    id: investment.startupId ?? investment.opportunityId ?? investment.id,
     startupName: investment.startupName ?? 'Portfolio Company',
     title: investment.startupName ?? 'Portfolio Company',
     tagline: 'Funded PromptFund portfolio company',
     shortDescription: 'Funded PromptFund portfolio company',
     description: 'Funded PromptFund portfolio company',
-    fundingNeeded: investment.amount ?? 0,
-    goalAmount: investment.amount ?? 0,
+    fundingNeeded: fundedAmount,
+    goalAmount: fundedAmount,
     equityOffered: investment.allocation,
     metric: 'Portfolio Company',
     founderName: investment.founderName ?? 'Founder',
     founderAvatar: initials(investment.founderName),
     founderVerified: true,
     rank: 'A',
+    coverImage: investment.startupImage,
     stage: 'Portfolio Company',
     shortPitch: 'Funded PromptFund portfolio company',
   };

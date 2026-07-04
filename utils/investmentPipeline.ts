@@ -59,8 +59,8 @@ export function getPipelineStageMeta(pipeline: DealPipeline) {
 
 export function splitPipelinesByActivity(pipelines: DealPipeline[]) {
   return {
-    activePipelines: pipelines.filter((pipeline) => pipeline.currentStep !== 'completed'),
-    archivedPipelines: pipelines.filter((pipeline) => pipeline.currentStep === 'completed'),
+    activePipelines: pipelines.filter((pipeline) => !pipeline.completedSteps.completed),
+    archivedPipelines: pipelines.filter((pipeline) => pipeline.completedSteps.completed),
   };
 }
 
@@ -153,7 +153,12 @@ export function buildDealPipelines({
 }
 
 function getCompletedPipelineSteps(pipeline: Partial<DealPipeline>) {
-  const hasInvestment = Boolean(pipeline.investment);
+  const investment = pipeline.investment;
+  const hasInvestment = Boolean(investment);
+  const isFundingConfirmed = investment?.status === 'funding_confirmed'
+    || pipeline.agreement?.status === 'funding_arranged'
+    || pipeline.agreement?.status === 'completed';
+  const isDealCompleted = investment?.status === 'completed' || pipeline.agreement?.status === 'completed';
   const agreementSigned = hasInvestment
     || pipeline.agreement?.status === 'awaiting_funding'
     || pipeline.agreement?.status === 'funding_arranged'
@@ -171,7 +176,7 @@ function getCompletedPipelineSteps(pipeline: Partial<DealPipeline>) {
       || pipeline.agreement?.status === 'funding_arranged'
       || pipeline.agreement?.status === 'completed',
     ),
-    funding_confirmed: Boolean(hasInvestment || pipeline.agreement?.status === 'funding_arranged' || pipeline.agreement?.status === 'completed'),
-    completed: Boolean(hasInvestment || pipeline.agreement?.status === 'completed'),
+    funding_confirmed: Boolean(isFundingConfirmed),
+    completed: Boolean(isDealCompleted),
   };
 }

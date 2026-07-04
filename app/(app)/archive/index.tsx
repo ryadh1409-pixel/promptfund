@@ -8,6 +8,7 @@ import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { investmentFlowService } from '@/services/investmentFlowService';
 import type { V5Investment } from '@/types/InvestmentFlow';
 import { getActiveRole } from '@/utils/roles';
+import { isTractionPortfolioInvestment } from '@/utils/tractionPortfolio';
 import { safeCurrency, safeDate, safePercent } from '@/utils/safeFormat';
 import { router } from 'expo-router';
 
@@ -32,7 +33,7 @@ export default function ArchivePortfolioScreen() {
         const nextInvestments = isFounderMode
           ? await investmentFlowService.listInvestmentsByFounder(authUser.uid)
           : await investmentFlowService.listInvestmentsByInvestor(authUser.uid);
-        setInvestments(nextInvestments.filter((investment) => investment.status === 'completed' || investment.status === 'active'));
+        setInvestments(nextInvestments.filter(isTractionPortfolioInvestment));
       } catch (error) {
         setNotice(getFriendlyErrorMessage(error));
       } finally {
@@ -46,7 +47,7 @@ export default function ArchivePortfolioScreen() {
   const totalCapital = investments.reduce((sum, investment) => sum + (investment.amount ?? 0), 0);
   const averageInvestment = investments.length > 0 ? totalCapital / investments.length : 0;
   const visibleInvestments = investments.filter((investment) => {
-    if (filter === 'completed' && investment.status !== 'completed' && investment.status !== 'active') {
+    if (filter === 'completed' && !isTractionPortfolioInvestment(investment)) {
       return false;
     }
 
