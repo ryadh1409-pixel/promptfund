@@ -9,11 +9,13 @@ import {
 } from 'react';
 
 import {
+  bootstrapFirebaseAuth,
   firebaseAuth,
   type AuthCredentials,
   type AuthUser,
 } from '@/firebase/auth';
 import { getFirebaseConfigErrorMessage, isFirebaseEnabled, logFirebaseConfigDiagnostics } from '@/firebase/config';
+import { getPromptFundFunctions } from '@/firebase/functions';
 import { isAdminEmail } from '@/services/adminService';
 import { defaultLegalVersions } from '@/constants/legal';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
@@ -174,6 +176,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setInitializing(false);
       return undefined;
     }
+
+    bootstrapFirebaseAuth();
+    getPromptFundFunctions();
 
     const unsubscribe = firebaseAuth.onAuthStateChanged(async (user) => {
       setAuthUser(user);

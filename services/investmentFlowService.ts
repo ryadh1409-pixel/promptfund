@@ -1,7 +1,5 @@
-import { getAuth } from 'firebase/auth';
+import { getFirebaseAuth } from '@/firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-
-import { getFirebaseApp } from '@/firebase/config';
 import { firestoreAdapter, getPromptFundFirestore } from '@/firebase/firestore';
 import { AppError } from '@/services/errorHandler';
 import { notificationService } from '@/services/notificationService';
@@ -56,7 +54,7 @@ function flowId(prefix: string, ...parts: string[]) {
 }
 
 function currentUid() {
-  return getAuth(getFirebaseApp()).currentUser?.uid ?? null;
+  return getFirebaseAuth().currentUser?.uid ?? null;
 }
 
 function isPermissionDenied(error: unknown) {

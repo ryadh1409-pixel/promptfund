@@ -16,7 +16,7 @@ import {
 } from 'firebase/auth';
 import * as FirebaseAuthModule from 'firebase/auth';
 
-import { getFirebaseApp } from './config';
+import { getFirebaseApp, isFirebaseEnabled } from './config';
 import { AppError, withFriendlyErrors } from '@/services/errorHandler';
 
 export type AuthUser = {
@@ -51,7 +51,11 @@ const { getReactNativePersistence } = FirebaseAuthModule as typeof FirebaseAuthM
   getReactNativePersistence: ReactNativePersistenceFactory;
 };
 
-function getFirebaseAuth() {
+/**
+ * Single Auth instance for the app. Always use this instead of getAuth(getFirebaseApp()).
+ * initializeAuth with AsyncStorage persistence must run before any bare getAuth() call.
+ */
+export function getFirebaseAuth(): Auth {
   if (authInstance) {
     return authInstance;
   }
@@ -68,6 +72,24 @@ function getFirebaseAuth() {
   }
 
   return authInstance;
+}
+
+/** Wait until persisted auth state has been restored (or confirmed absent). */
+export async function waitForAuthReady(): Promise<void> {
+  await getFirebaseAuth().authStateReady();
+}
+
+/** Returns the signed-in Firebase user after auth restoration completes. */
+export async function requireCurrentFirebaseUser() {
+  const auth = getFirebaseAuth();
+  await auth.authStateReady();
+
+  const user = auth.currentUser;
+  if (!user) {
+    throw new AppError('Please sign in again before continuing.');
+  }
+
+  return user;
 }
 
 function mapFirebaseUser(user: FirebaseAuthUser): AuthUser {
@@ -146,3 +168,11 @@ export const firebaseAuth: AuthAdapter = {
     });
   },
 };
+
+export function bootstrapFirebaseAuth() {
+  getFirebaseAuth();
+}
+
+if (isFirebaseEnabled) {
+  bootstrapFirebaseAuth();
+}

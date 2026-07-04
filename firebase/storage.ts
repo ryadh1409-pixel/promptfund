@@ -1,9 +1,11 @@
+import { getApps } from 'firebase/app';
 import * as FileSystem from 'expo-file-system/legacy';
-import { getAuth } from 'firebase/auth';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
 import { deleteObject, getStorage, ref } from 'firebase/storage';
 
+import { getFirebaseAuth, requireCurrentFirebaseUser } from './auth';
 import { firebaseConfig, getFirebaseApp } from './config';
+import { getCallableUploadDiagnostics, getPromptFundFunctions, PROMPTFUND_FUNCTIONS_REGION } from './functions';
 import { withFriendlyErrors } from '@/services/errorHandler';
 
 export type AgreementArtifactKind = 'video' | 'audio' | 'transcript' | 'summary' | 'contract';
@@ -34,12 +36,7 @@ type FirebaseStorageRestMetadata = {
 };
 
 async function getCurrentUserIdToken() {
-  const user = getAuth(getFirebaseApp()).currentUser;
-
-  if (!user) {
-    throw new Error('Sign in before uploading files.');
-  }
-
+  const user = await requireCurrentFirebaseUser();
   return user.getIdToken();
 }
 
@@ -249,16 +246,124 @@ export async function uploadStartupImage({
   });
   const fileName = `${Date.now()}.jpg`;
 
+  const auth = getFirebaseAuth();
+  await auth.authStateReady();
+  const currentUser = auth.currentUser;
+  const { functionsRegion, projectId } = getCallableUploadDiagnostics();
+
+  let idTokenPreview: string | null = null;
+  let idTokenError: string | null = null;
+
   try {
-    const callUpload = httpsCallable(getFunctions(getFirebaseApp(), 'us-central1'), 'uploadStartupImage');
+    idTokenPreview = currentUser ? await currentUser.getIdToken() : null;
+  } catch (tokenError) {
+    idTokenError = tokenError instanceof Error ? tokenError.message : String(tokenError);
+  }
+
+  console.info('[PromptFund Storage] uploadStartupImage preflight', {
+    requestedUserId: userId,
+    currentUserExists: Boolean(currentUser),
+    currentUserUid: currentUser?.uid ?? null,
+    currentUserEmail: currentUser?.email ?? null,
+    idTokenSucceeded: Boolean(idTokenPreview),
+    idTokenError,
+    functionsRegion,
+    firebaseProjectId: projectId,
+    firebaseAppCount: getApps().length,
+  });
+
+  if (!currentUser) {
+    throw new Error('Sign in before uploading a startup image.');
+  }
+
+  if (currentUser.uid !== userId) {
+    throw new Error('You can only upload startup images for your own account.');
+  }
+
+  if (!idTokenPreview) {
+    throw new Error(idTokenError ?? 'Unable to refresh your sign-in token. Please sign in again.');
+  }
+
+  try {
+    const functions = getPromptFundFunctions();
+    const callUpload = httpsCallable(functions, 'uploadStartupImage');
     const result = await callUpload({ base64, fileName, contentType: 'image/jpeg', userId });
     const { downloadURL, path } = result.data as { downloadURL: string; path: string };
     return { path, downloadUrl: downloadURL };
   } catch (error) {
+    const isUnauthenticated =
+      typeof error === 'object'
+      && error !== null
+      && 'code' in error
+      && String((error as { code?: unknown }).code) === 'functions/unauthenticated';
+
+    if (isUnauthenticated && idTokenPreview) {
+      console.warn('[PromptFund Storage] httpsCallable missing auth token; retrying with explicit Bearer token');
+      const { downloadURL, path } = await callUploadStartupImageWithExplicitAuth({
+        base64,
+        fileName,
+        contentType: 'image/jpeg',
+        userId,
+        idToken: idTokenPreview,
+      });
+      return { path, downloadUrl: downloadURL };
+    }
+
     console.error('[Storage Upload Error]', error);
     if (error instanceof Error) console.error('[Storage Upload Error Stack]', error.stack);
     throw error;
   }
+}
+
+async function callUploadStartupImageWithExplicitAuth({
+  base64,
+  fileName,
+  contentType,
+  userId,
+  idToken,
+}: {
+  base64: string;
+  fileName: string;
+  contentType: string;
+  userId: string;
+  idToken: string;
+}) {
+  const { projectId } = getCallableUploadDiagnostics();
+  const url = `https://${PROMPTFUND_FUNCTIONS_REGION}-${projectId}.cloudfunctions.net/uploadStartupImage`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      data: {
+        base64,
+        fileName,
+        contentType,
+        userId,
+      },
+    }),
+  });
+
+  const payload = (await response.json()) as {
+    result?: { downloadURL: string; path: string };
+    error?: { status?: string; message?: string };
+  };
+
+  if (payload.error) {
+    const status = payload.error.status ?? 'unknown';
+    const message = payload.error.message ?? 'Callable request failed.';
+    const callableError = new Error(message) as Error & { code?: string };
+    callableError.code = `functions/${status}`;
+    throw callableError;
+  }
+
+  if (!payload.result) {
+    throw new Error('Callable response did not include an upload result.');
+  }
+
+  return payload.result;
 }
 
 export async function uploadDiscussionImageAttachment({

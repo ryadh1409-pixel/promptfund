@@ -26,6 +26,13 @@ function sanitizeFileName(fileName: string) {
 }
 
 export const uploadStartupImage = onCall(async (request) => {
+  console.info('[uploadStartupImage] request auth diagnostics', {
+    hasAuth: Boolean(request.auth),
+    authUid: request.auth?.uid ?? null,
+    authorizationHeader: request.rawRequest.headers.authorization ?? null,
+    headerKeys: Object.keys(request.rawRequest.headers ?? {}),
+  });
+
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before uploading a startup image.');
   }

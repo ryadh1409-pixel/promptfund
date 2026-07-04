@@ -34,7 +34,7 @@ function getExactFirebaseErrorMessage(error: unknown) {
 
 export default function CreateProjectScreen() {
   const router = useRouter();
-  const { authUser, profile } = useAuth();
+  const { authUser, initializing, profile } = useAuth();
   const [title, setTitle] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [description, setDescription] = useState('');
@@ -67,6 +67,12 @@ export default function CreateProjectScreen() {
 
     setIsSaving(true);
     setError(null);
+
+    if (initializing) {
+      setError('Authentication is still starting. Please try again in a moment.');
+      setIsSaving(false);
+      return;
+    }
 
     if (!uid) {
       console.error('[Auth User Lookup Error]', { authUser });

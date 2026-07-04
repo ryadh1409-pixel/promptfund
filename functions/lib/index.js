@@ -49,6 +49,12 @@ function sanitizeFileName(fileName) {
     return fileName.replace(/[^a-zA-Z0-9._-]/g, '-');
 }
 exports.uploadStartupImage = (0, https_1.onCall)(async (request) => {
+    console.info('[uploadStartupImage] request auth diagnostics', {
+        hasAuth: Boolean(request.auth),
+        authUid: request.auth?.uid ?? null,
+        authorizationHeader: request.rawRequest.headers.authorization ?? null,
+        headerKeys: Object.keys(request.rawRequest.headers ?? {}),
+    });
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'Sign in before uploading a startup image.');
     }
