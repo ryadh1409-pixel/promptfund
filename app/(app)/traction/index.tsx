@@ -436,6 +436,7 @@ export default function TractionScreen() {
           onLike={handleLike}
           onComment={(update) => handleAddComment(investment, update)}
           onReply={(update, commentId) => handleAddComment(investment, update, commentId)}
+          onNotice={setNotice}
         />
       ))}
     </Screen>
@@ -458,6 +459,7 @@ function PortfolioCompanyCard({
   onLike,
   onComment,
   onReply,
+  onNotice,
 }: {
   investment: V5Investment;
   updates: FounderUpdate[];
@@ -474,7 +476,27 @@ function PortfolioCompanyCard({
   onLike: (update: FounderUpdate) => void;
   onComment: (update: FounderUpdate) => void;
   onReply: (update: FounderUpdate, commentId: string) => void;
+  onNotice: (message: string | null) => void;
 }) {
+  const [isOpeningChat, setIsOpeningChat] = useState(false);
+
+  async function handleOpenChat() {
+    try {
+      setIsOpeningChat(true);
+      onNotice(null);
+      const roomId = await investmentFlowService.resolveDiscussionRoomId(investment);
+      if (!roomId) {
+        onNotice('Investment Chat room not found for this portfolio company.');
+        return;
+      }
+      router.push(`/discussion-room/${roomId}`);
+    } catch (error) {
+      onNotice(getFriendlyErrorMessage(error));
+    } finally {
+      setIsOpeningChat(false);
+    }
+  }
+
   return (
     <Card style={styles.companyCard}>
       <View style={styles.headerRow}>
@@ -507,10 +529,10 @@ function PortfolioCompanyCard({
       </View>
 
       <PrimaryButton
-        label="Open Investment Chat"
+        label={isOpeningChat ? 'Opening...' : 'Open Deal Room'}
         variant="secondary"
-        onPress={() => investment.discussionRoomId ? router.push(`/discussion-room/${investment.discussionRoomId}`) : undefined}
-        disabled={!investment.discussionRoomId}
+        onPress={handleOpenChat}
+        disabled={isOpeningChat}
       />
 
       {canPublishUpdates ? (

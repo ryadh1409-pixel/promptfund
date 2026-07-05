@@ -1,29 +1,38 @@
-import * as ImagePicker from 'expo-image-picker';
-import { router, useLocalSearchParams } from 'expo-router';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DealRoomHeader } from '@/components/deal-room/DealRoomHeader';
+import { DealRoomProgressStepper } from '@/components/deal-room/DealRoomProgressStepper';
+import { DealRoomWorkflowWizard } from '@/components/deal-room/DealRoomWorkflowWizard';
+import { InvestmentChatPanel } from '@/components/investment-chat/InvestmentChatPanel';
 import { BlockUserControl } from '@/components/safety/BlockUserControl';
-import { TestFlightCard } from '@/components/testflight/TestFlightCard';
-import { Card, FieldPreview, LoadingState, PrimaryButton, Screen } from '@/components/ui/Primitives';
+import { LoadingState, PrimaryButton } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useBlockStatus } from '@/hooks/useBlockStatus';
 import { firestoreCollections, getPromptFundFirestore } from '@/firebase/firestore';
-import { uploadDiscussionDocumentAttachment, uploadDiscussionImageAttachment } from '@/firebase/storage';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
+import { investmentChatService } from '@/services/investmentChatService';
 import { investmentFlowService } from '@/services/investmentFlowService';
 import { userService } from '@/services/userService';
-import type { BlockStatus } from '@/services/userService';
-import type { DiscussionMessage, DiscussionRoom } from '@/types/InvestmentFlow';
+import type { WorkflowAction } from '@/utils/dealRoom';
+import { getWorkflowSteps } from '@/utils/dealRoom';
+import { buildDealPipelineFromEntities } from '@/utils/investmentPipeline';
+import type { DiscussionRoom, InvestmentAgreement, V5Investment } from '@/types/InvestmentFlow';
 import type { DiscussionReportReason, User } from '@/types/User';
-
-const supportedDocumentTypes = [
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'text/plain',
-];
 
 const reportReasons: DiscussionReportReason[] = [
   'Spam',
@@ -33,360 +42,234 @@ const reportReasons: DiscussionReportReason[] = [
   'Other',
 ];
 
-type PendingImageAttachment = {
-  localUri: string;
-  downloadUrl: string;
-};
-
-type PendingDocumentAttachment = {
-  name: string;
-  downloadUrl: string;
-};
+function nowIso() {
+  return new Date().toISOString();
+}
 
 export default function DiscussionRoomScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const { authUser, profile } = useAuth();
+  const insets = useSafeAreaInsets();
   const [room, setRoom] = useState<DiscussionRoom | null>(null);
-  const [messages, setMessages] = useState<DiscussionMessage[]>([]);
-  const [message, setMessage] = useState('');
-  const [messageSearch, setMessageSearch] = useState('');
-  const [pendingImage, setPendingImage] = useState<PendingImageAttachment | null>(null);
-  const [pendingDocument, setPendingDocument] = useState<PendingDocumentAttachment | null>(null);
-  const [moderationWarning, setModerationWarning] = useState<string | null>(null);
+  const [agreement, setAgreement] = useState<InvestmentAgreement | null>(null);
+  const [investment, setInvestment] = useState<V5Investment | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
-  const [isSavingTestFlight, setIsSavingTestFlight] = useState(false);
-  const [blockStatus, setBlockStatus] = useState<BlockStatus | null>(null);
+  const [isWorkflowSaving, setIsWorkflowSaving] = useState(false);
   const [counterpartyProfile, setCounterpartyProfile] = useState<User | null>(null);
+  const [founderProfile, setFounderProfile] = useState<User | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [isSafetyVisible, setIsSafetyVisible] = useState(false);
   const [isReportModalVisible, setIsReportModalVisible] = useState(false);
   const [reportReason, setReportReason] = useState<DiscussionReportReason>('Spam');
   const [reportDetails, setReportDetails] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
-  const messageScrollRef = useRef<ScrollView | null>(null);
-  const lastTypingStateRef = useRef<boolean | null>(null);
   const roomId = typeof id === 'string' ? id : '';
 
   const participantRole = useMemo(() => {
-    if (!authUser?.uid || !room) {
-      return null;
-    }
-    if (authUser.uid === room.founderId) {
-      return 'founder';
-    }
-    if (authUser.uid === room.investorId) {
-      return 'investor';
-    }
+    if (!authUser?.uid || !room) return null;
+    if (authUser.uid === room.founderId) return 'founder';
+    if (authUser.uid === room.investorId) return 'investor';
     return null;
   }, [authUser?.uid, room?.founderId, room?.investorId]);
 
-  useEffect(() => {
-    if (!roomId) {
-      return;
-    }
+  const pipeline = useMemo(
+    () => buildDealPipelineFromEntities({ room: room ?? undefined, agreement: agreement ?? undefined, investment: investment ?? undefined }),
+    [agreement, investment, room],
+  );
 
-    const path = `${firestoreCollections.discussionRooms}/${roomId}`;
-    const unsubscribe = onSnapshot(
-      doc(getPromptFundFirestore(), firestoreCollections.discussionRooms, roomId),
-      (snapshot) => {
-        const nextRoom = snapshot.exists() ? ({ ...snapshot.data(), id: snapshot.id } as DiscussionRoom) : null;
-        const nextMessages = sortMessages(nextRoom?.messages ?? []);
-        setRoom((currentRoom) => areDiscussionRoomsEqual(currentRoom, nextRoom) ? currentRoom : nextRoom);
-        setMessages((currentMessages) => areDiscussionMessagesEqual(currentMessages, nextMessages) ? currentMessages : nextMessages);
-        setIsLoading((current) => current ? false : current);
+  const workflowSteps = useMemo(() => {
+    if (!room) return [];
+    return getWorkflowSteps({
+      pipeline,
+      room,
+      agreement,
+      participantRole,
+      founderProfile,
+    });
+  }, [agreement, founderProfile, participantRole, pipeline, room]);
+
+  useEffect(() => {
+    if (!roomId) return undefined;
+    const unsubscribe = investmentChatService.subscribeToRoom(
+      roomId,
+      (nextRoom) => {
+        setRoom(nextRoom);
+        setIsLoading(false);
       },
       (error) => {
-        console.error('[PromptFund Firestore] read failure', { path, operation: 'onSnapshot', error });
         setNotice(getFriendlyErrorMessage(error));
-        setIsLoading((current) => current ? false : current);
+        setIsLoading(false);
       },
     );
-
     return unsubscribe;
   }, [roomId]);
 
-  useEffect(() => {
-    lastTypingStateRef.current = null;
-  }, [roomId]);
+  const agreementId = room?.agreementId ?? (room ? `agreement-${room.id}` : null);
 
-  const unreadCount = authUser?.uid && room ? (room.unreadCounts?.[authUser.uid] ?? 0) : 0;
+  useEffect(() => {
+    if (!agreementId) {
+      setAgreement(null);
+      return undefined;
+    }
+
+    const unsubscribe = onSnapshot(
+      doc(getPromptFundFirestore(), firestoreCollections.agreements, agreementId),
+      (snapshot) => {
+        setAgreement(snapshot.exists() ? ({ ...snapshot.data(), id: snapshot.id } as InvestmentAgreement) : null);
+      },
+      (error) => setNotice(getFriendlyErrorMessage(error)),
+    );
+    return unsubscribe;
+  }, [agreementId]);
+
+  useEffect(() => {
+    if (!agreementId) {
+      setInvestment(null);
+      return undefined;
+    }
+
+    const unsubscribe = onSnapshot(
+      doc(getPromptFundFirestore(), firestoreCollections.investments, agreementId),
+      (snapshot) => {
+        setInvestment(snapshot.exists() ? ({ ...snapshot.data(), id: snapshot.id } as V5Investment) : null);
+      },
+      () => setInvestment(null),
+    );
+    return unsubscribe;
+  }, [agreementId]);
+
   const counterpartyId = authUser?.uid && room
-    ? authUser.uid === room.founderId
-      ? room.investorId
-      : room.founderId
+    ? authUser.uid === room.founderId ? room.investorId : room.founderId
     : null;
   const counterpartyName = authUser?.uid && room
-    ? authUser.uid === room.founderId
-      ? room.investorName
-      : room.founderName
+    ? authUser.uid === room.founderId ? room.investorName : room.founderName
     : 'this user';
-  const canUseComposer = Boolean(blockStatus && !blockStatus.blockedByMe && !blockStatus.blockedMe);
-  const hasPendingAttachment = Boolean(pendingImage || pendingDocument);
-  const canSendMessage = canUseComposer && !isUploadingAttachment && (message.trim().length > 0 || hasPendingAttachment);
+  const { blockStatus } = useBlockStatus(authUser?.uid, counterpartyId);
 
   useEffect(() => {
     if (!counterpartyId) {
       setCounterpartyProfile(null);
-      return;
+      return undefined;
     }
-
     let isMounted = true;
     userService.getUserById(counterpartyId)
-      .then((user) => {
-        if (isMounted) {
-          setCounterpartyProfile(user);
-        }
-      })
+      .then((user) => { if (isMounted) setCounterpartyProfile(user); })
       .catch((error) => setNotice(getFriendlyErrorMessage(error)));
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [counterpartyId]);
 
   useEffect(() => {
-    if (!room || !authUser?.uid || messages.length === 0) {
-      return;
+    if (!room?.founderId) {
+      setFounderProfile(null);
+      return undefined;
     }
+    let isMounted = true;
+    userService.getUserById(room.founderId)
+      .then((user) => { if (isMounted) setFounderProfile(user); })
+      .catch(() => undefined);
+    return () => { isMounted = false; };
+  }, [room?.founderId]);
 
-    const hasUnreadInboundMessages = messages.some((item) => item.senderId !== authUser.uid && !item.readBy?.includes(authUser.uid));
-    if (!hasUnreadInboundMessages && unreadCount === 0) {
-      return;
-    }
-
-    investmentFlowService.markDiscussionRead(room, authUser.uid).catch((error) => {
-      console.info('[PromptFund Discussion] read receipt update failed', error);
-    });
-  }, [authUser?.uid, messages, room, unreadCount]);
-
-  useEffect(() => {
-    if (!room || !authUser?.uid) {
-      return;
-    }
-
-    const isTyping = message.trim().length > 0;
-    if (lastTypingStateRef.current === isTyping) {
-      return;
-    }
-
-    lastTypingStateRef.current = isTyping;
-    investmentFlowService.setTyping(room, authUser.uid, isTyping).catch((error) => {
-      console.info('[PromptFund Discussion] typing update failed', error);
-    });
-
-    if (!isTyping) {
-      return;
-    }
-
-    const timeout = setTimeout(() => {
-      investmentFlowService.setTyping(room, authUser.uid, false).catch((error) => {
-        console.info('[PromptFund Discussion] typing clear failed', error);
-      });
-      lastTypingStateRef.current = false;
-    }, 1600);
-
-    return () => clearTimeout(timeout);
-  }, [authUser?.uid, message, room?.id]);
-
-  const handleAttachPhoto = useCallback(async () => {
-    if (!room || !authUser?.uid) {
-      setNotice('Open an Investment Chat before attaching a photo.');
-      return;
-    }
-
-    try {
-      setNotice(null);
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        setNotice('Photo library permission is required to attach a photo.');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.82,
-      });
-
-      if (result.canceled || result.assets.length === 0) {
-        return;
-      }
-
-      const asset = result.assets[0];
-      setIsUploadingAttachment(true);
-      const upload = await uploadDiscussionImageAttachment({
-        roomId: room.id,
-        userId: authUser.uid,
-        uri: asset.uri,
-        contentType: asset.mimeType ?? 'image/jpeg',
-      });
-
-      setPendingImage({
-        localUri: asset.uri,
-        downloadUrl: upload.downloadUrl,
-      });
-    } catch (error) {
-      setNotice(getFriendlyErrorMessage(error));
-    } finally {
-      setIsUploadingAttachment(false);
-    }
-  }, [authUser?.uid, room?.id]);
-
-  const handleAttachDocument = useCallback(async () => {
-    if (!room || !authUser?.uid) {
-      setNotice('Open an Investment Chat before attaching a document.');
-      return;
-    }
-
-    try {
-      setNotice(null);
-      const DocumentPicker = await import('expo-document-picker');
-      const result = await DocumentPicker.getDocumentAsync({
-        copyToCacheDirectory: true,
-        multiple: false,
-        type: supportedDocumentTypes,
-      });
-
-      if (result.canceled || result.assets.length === 0) {
-        return;
-      }
-
-      const asset = result.assets[0];
-      const contentType = asset.mimeType ?? mimeTypeFromFileName(asset.name);
-      if (!isSupportedDocumentType(contentType, asset.name)) {
-        setNotice('Attach a PDF, DOC, DOCX, or TXT document.');
-        return;
-      }
-
-      setIsUploadingAttachment(true);
-      const upload = await uploadDiscussionDocumentAttachment({
-        roomId: room.id,
-        userId: authUser.uid,
-        uri: asset.uri,
-        fileName: asset.name,
-        contentType,
-      });
-
-      setPendingDocument({
-        name: asset.name,
-        downloadUrl: upload.downloadUrl,
-      });
-    } catch (error) {
-      setNotice(getFriendlyErrorMessage(error));
-    } finally {
-      setIsUploadingAttachment(false);
-    }
-  }, [authUser?.uid, room?.id]);
-
-  const handleSendMessage = useCallback(async () => {
-    if (!room || !profile || !canSendMessage || !blockStatus || blockStatus.blockedByMe || blockStatus.blockedMe) {
-      return;
-    }
-
-    try {
-      setModerationWarning(null);
-      const body = message.trim() || (pendingDocument ? `Attached ${pendingDocument.name}` : 'Attached photo');
-      await investmentFlowService.addDiscussionMessage(
-        room,
-        {
-          id: profile.id,
-          displayName: profile.displayName,
-          name: profile.name,
-          username: profile.username,
-          handle: profile.handle,
-        },
-        body,
-        {
-          imageUrl: pendingImage?.downloadUrl,
-          documentUrl: pendingDocument?.downloadUrl,
-          documentName: pendingDocument?.name,
-          blockStatus: blockStatus ?? undefined,
-        },
-      );
-      setMessage('');
-      setPendingImage(null);
-      setPendingDocument(null);
-    } catch (messageError) {
-      const friendlyMessage = getFriendlyErrorMessage(messageError);
-      if (friendlyMessage.includes('Community Guidelines')) {
-        setModerationWarning(friendlyMessage);
-        return;
-      }
-      setNotice(friendlyMessage);
-    }
-  }, [blockStatus, canSendMessage, message, pendingDocument, pendingImage, profile, room]);
-
-  const handleOpenDocument = useCallback(async (url: string) => {
-    try {
-      await Linking.openURL(url);
-    } catch (error) {
-      setNotice(getFriendlyErrorMessage(error));
-    }
-  }, []);
-
-  const visibleMessages = useMemo(() => messages.filter((item) => {
-    const search = messageSearch.trim().toLowerCase();
-    if (!search) {
-      return true;
-    }
-    return `${item.senderName} ${item.body}`.toLowerCase().includes(search);
-  }), [messageSearch, messages]);
-
-  async function handleReady(role: 'founder' | 'investor') {
-    if (!room) {
-      return;
-    }
-
-    try {
-      await investmentFlowService.setReady(room, role);
-    } catch (readyError) {
-      setNotice(getFriendlyErrorMessage(readyError));
-    }
-  }
-
-  async function handleContinueAgreement() {
-    if (!room) {
-      return;
-    }
-
-    try {
-      if (room.agreementId) {
-        router.push(`/agreement/${room.agreementId}`);
-        return;
-      }
-
-      const agreement = await investmentFlowService.generateAgreement(room);
-
-      if (!agreement) {
-        throw new Error('Unable to load Investment Agreement.');
-      }
-
-      router.push(`/agreement/${agreement.id}`);
-    } catch (agreementError) {
-      setNotice(getFriendlyErrorMessage(agreementError));
-    }
-  }
-
-  async function handleToggleTestFlight(nextReady: boolean) {
-    if (!room || !participantRole) {
-      return;
-    }
+  async function handleWorkflowAction(action: WorkflowAction) {
+    if (isWorkflowSaving || !room || !participantRole) return;
 
     const previousRoom = room;
-    const field = participantRole === 'founder' ? 'founderTestFlightReady' : 'investorTestFlightReady';
+    const previousAgreement = agreement;
 
     try {
-      setRoom((currentRoom) => currentRoom ? { ...currentRoom, [field]: nextReady } : currentRoom);
-      setIsSavingTestFlight(true);
-      await investmentFlowService.setTestFlightReady(room, participantRole, nextReady);
+      setIsWorkflowSaving(true);
+
+      if (action === 'mark_ready') {
+        const readyField = participantRole === 'founder' ? 'founderReady' : 'investorReady';
+        const nextFounderReady = participantRole === 'founder' ? true : room.founderReady;
+        const nextInvestorReady = participantRole === 'investor' ? true : room.investorReady;
+        setRoom({
+          ...room,
+          [readyField]: true,
+          founderReady: nextFounderReady,
+          investorReady: nextInvestorReady,
+          status: nextFounderReady && nextInvestorReady ? 'ready' : room.status,
+        });
+        await investmentFlowService.setReady(room, participantRole);
+        return;
+      }
+
+      if (action === 'sign_agreement') {
+        let activeAgreement = agreement;
+        if (!activeAgreement && room.founderReady && room.investorReady) {
+          activeAgreement = await investmentFlowService.generateAgreement(room);
+          setAgreement(activeAgreement);
+        }
+        if (!activeAgreement) return;
+
+        const alreadyAccepted = participantRole === 'founder'
+          ? activeAgreement.founderAccepted
+          : activeAgreement.investorAccepted;
+        if (alreadyAccepted) return;
+
+        const acceptedAt = nowIso();
+        setAgreement({
+          ...activeAgreement,
+          founderAccepted: participantRole === 'founder' ? true : activeAgreement.founderAccepted,
+          investorAccepted: participantRole === 'investor' ? true : activeAgreement.investorAccepted,
+          status: participantRole === 'founder' && activeAgreement.investorAccepted
+            || participantRole === 'investor' && activeAgreement.founderAccepted
+            ? 'awaiting_funding'
+            : activeAgreement.status,
+          updatedAt: acceptedAt,
+        });
+        await investmentFlowService.acceptAgreement(activeAgreement, participantRole);
+        return;
+      }
+
+      if (action === 'continue_funding_instructions') {
+        if (!agreement || !authUser?.uid) return;
+        const acknowledgedAt = nowIso();
+        setAgreement({
+          ...agreement,
+          fundingInstructionsAcknowledgedAt: acknowledgedAt,
+        });
+        await investmentFlowService.acknowledgeFundingInstructions(agreement, authUser.uid);
+        return;
+      }
+
+      if (action === 'confirm_funding') {
+        if (!agreement) return;
+        if (participantRole === 'investor' && agreement.status === 'awaiting_funding') {
+          setAgreement({
+            ...agreement,
+            status: 'funding_arranged',
+            fundingArrangedAt: nowIso(),
+          });
+          await investmentFlowService.markFundingArrangedOutsidePromptFund(agreement);
+          return;
+        }
+        if (participantRole === 'founder' && agreement.status === 'funding_arranged') {
+          setAgreement({
+            ...agreement,
+            status: 'completed',
+            completedAt: nowIso(),
+          });
+          await investmentFlowService.confirmFundingArrangement(agreement);
+          return;
+        }
+      }
+
+      if (action === 'finish_deal') {
+        router.back();
+      }
     } catch (error) {
       setRoom(previousRoom);
+      setAgreement(previousAgreement);
       setNotice(getFriendlyErrorMessage(error));
     } finally {
-      setIsSavingTestFlight(false);
+      setIsWorkflowSaving(false);
     }
   }
 
   function handleReportConversation() {
+    setIsSafetyVisible(false);
     setReportReason('Spam');
     setReportDetails('');
     setIsReportModalVisible(true);
@@ -398,7 +281,6 @@ export default function DiscussionRoomScreen() {
       setNotice('Describe what happened before submitting the report.');
       return;
     }
-
     try {
       setIsSubmittingReport(true);
       const result = await userService.submitDiscussionReport({
@@ -410,7 +292,7 @@ export default function DiscussionRoomScreen() {
       });
       setIsReportModalVisible(false);
       setNotice(result.alreadyExists
-        ? 'You have already submitted a report for this discussion room.'
+        ? 'You have already submitted a report for this conversation.'
         : 'Thank you. Your report has been submitted for review.');
     } catch (error) {
       setNotice(getFriendlyErrorMessage(error));
@@ -420,198 +302,76 @@ export default function DiscussionRoomScreen() {
   }
 
   return (
-    <Screen
-      eyebrow="Investment Chat"
-      title="Investment Chat"
-      subtitle="Founder and Angel Investor keep a permanent private portfolio chat before and after funding."
-    >
-      {isLoading ? <LoadingState label="Loading Investment Discussion Room" /> : null}
-      {notice ? (
-        <Card>
-          <Text style={styles.notice}>{notice}</Text>
-        </Card>
-      ) : null}
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+        style={styles.keyboardAvoiding}
+      >
+        {isLoading ? (
+          <View style={styles.centeredState}>
+            <LoadingState label="Loading Deal Room" />
+          </View>
+        ) : null}
 
-      {!isLoading && !room ? (
-        <Card>
-          <Text style={styles.notice}>Investment Discussion Room not found.</Text>
-        </Card>
-      ) : null}
+        {notice ? (
+          <View style={styles.noticeBanner}>
+            <Text style={styles.noticeText}>{notice}</Text>
+            <Pressable onPress={() => setNotice(null)}>
+              <Text style={styles.noticeDismiss}>Dismiss</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
-      {room ? (
-        <>
-          <Card>
-            <Text style={styles.roomTitle}>{room.startupName}</Text>
-            <View style={styles.grid}>
-              <FieldPreview label="Founder Profile" value={room.founderName} />
-              <FieldPreview label="Angel Investor Profile" value={room.investorName} />
+        {!isLoading && !room ? (
+          <View style={styles.centeredState}>
+            <Text style={styles.noticeText}>Deal Room not found.</Text>
+          </View>
+        ) : null}
+
+        {room && profile ? (
+          <View style={styles.dealRoom}>
+            <View style={styles.workflowZone}>
+              <DealRoomHeader startupName={room.startupName} onSafetyPress={() => setIsSafetyVisible(true)} />
+              <DealRoomProgressStepper pipeline={pipeline} />
+              <DealRoomWorkflowWizard
+                steps={workflowSteps}
+                isSaving={isWorkflowSaving}
+                onAction={handleWorkflowAction}
+              />
             </View>
-          </Card>
 
-          <TestFlightCard
-            room={room}
-            role={participantRole}
-            isSaving={isSavingTestFlight}
-            onToggle={handleToggleTestFlight}
-          />
-
-          <Card>
-            <View style={styles.chatHeader}>
-              <Text style={styles.sectionTitle}>Discussion</Text>
-              {authUser && (room.unreadCounts?.[authUser.uid] ?? 0) > 0 ? (
-                <Text style={styles.unreadBadge}>{room.unreadCounts?.[authUser.uid]} unread</Text>
-              ) : null}
-            </View>
-            {messages.length === 0 ? (
-              <Text style={styles.empty}>No discussion messages yet. Start with the investment purpose and next milestone.</Text>
-            ) : null}
-            <TextInput
-              placeholder="Search messages"
-              placeholderTextColor={colors.subtle}
-              value={messageSearch}
-              onChangeText={setMessageSearch}
-              style={styles.searchInput}
+            <InvestmentChatPanel
+              room={room}
+              embedded
+              currentUser={{
+                id: profile.id,
+                displayName: profile.displayName,
+                name: profile.name,
+                username: profile.username,
+                handle: profile.handle,
+              }}
+              participantRole={participantRole}
+              blockStatus={blockStatus}
+              bottomInset={insets.bottom}
+              onNotice={setNotice}
+              style={styles.chatPanel}
             />
-            <ScrollView
-              ref={messageScrollRef}
-              style={styles.messageList}
-              onContentSizeChange={() => messageScrollRef.current?.scrollToEnd({ animated: true })}
-            >
-              {visibleMessages.map((item, index) => {
-                const previous = visibleMessages[index - 1];
-                const showDateSeparator = getMessageDateLabel(previous?.createdAt) !== getMessageDateLabel(item.createdAt);
+          </View>
+        ) : null}
+      </KeyboardAvoidingView>
 
-                return (
-                  <View key={item.id}>
-                    {showDateSeparator ? <Text style={styles.dateSeparator}>{getMessageDateLabel(item.createdAt)}</Text> : null}
-                    <View style={[
-                      styles.messageBubble,
-                      item.type === 'system' ? styles.systemMessageBubble : null,
-                      authUser?.uid === item.senderId ? styles.ownMessageBubble : null,
-                    ]}>
-                      <Text style={styles.messageAuthor}>{item.type === 'system' ? 'PromptFund System' : item.senderName}</Text>
-                      <Text style={styles.messageBody}>{item.body}</Text>
-                      {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.messageImage} /> : null}
-                      {item.documentUrl ? (
-                        <Pressable style={styles.documentAttachment} onPress={() => handleOpenDocument(item.documentUrl as string)}>
-                          <Text style={styles.attachmentText}>Open Document</Text>
-                          <Text style={styles.documentName} numberOfLines={1}>
-                            {item.documentName ?? fileNameFromUrl(item.documentUrl)}
-                          </Text>
-                        </Pressable>
-                      ) : null}
-                      {item.linkUrl ? <Text style={styles.attachmentText}>Link: {item.linkUrl}</Text> : null}
-                      <View style={styles.messageMetaRow}>
-                        <Text style={styles.messageMeta}>{formatMessageTime(item.createdAt)}</Text>
-                        {authUser?.uid && room ? (
-                          <Text style={styles.messageMeta}>{getMessageStatusLabel(item, room, authUser.uid)}</Text>
-                        ) : null}
-                      </View>
-                    </View>
-                  </View>
-                );
-              })}
-            </ScrollView>
-            {room && authUser && isCounterpartyTyping(room, authUser.uid) ? (
-              <Text style={styles.typingText}>The other party is typing...</Text>
-            ) : null}
-            {moderationWarning ? <Text style={styles.moderationWarning}>{moderationWarning}</Text> : null}
-            {!blockStatus ? <Text style={styles.empty}>Checking community safety...</Text> : null}
-            {blockStatus?.blockedByMe ? <Text style={styles.blockedNotice}>You have blocked this user.</Text> : null}
-            {blockStatus?.blockedMe ? <Text style={styles.blockedNotice}>This user has blocked you.</Text> : null}
-            {canUseComposer ? (
-              <>
-                <TextInput
-                  multiline
-                  placeholder="Write a professional discussion note..."
-                  placeholderTextColor={colors.subtle}
-                  value={message}
-                  onChangeText={(value) => {
-                    setModerationWarning(null);
-                    setMessage(value);
-                  }}
-                  style={styles.input}
-                />
-                <View style={styles.attachmentActions}>
-                  <PrimaryButton
-                    label={isUploadingAttachment ? 'Uploading...' : 'Attach Photo'}
-                    variant="secondary"
-                    onPress={handleAttachPhoto}
-                    disabled={isUploadingAttachment}
-                  />
-                  <PrimaryButton
-                    label={isUploadingAttachment ? 'Uploading...' : 'Attach Document'}
-                    variant="secondary"
-                    onPress={handleAttachDocument}
-                    disabled={isUploadingAttachment}
-                  />
-                </View>
-                {pendingImage ? (
-                  <View style={styles.pendingAttachment}>
-                    <Image source={{ uri: pendingImage.localUri }} style={styles.pendingImage} />
-                    <PrimaryButton label="Remove Photo" variant="secondary" onPress={() => setPendingImage(null)} />
-                  </View>
-                ) : null}
-                {pendingDocument ? (
-                  <View style={styles.pendingDocument}>
-                    <Text style={styles.pendingLabel}>Document ready to send</Text>
-                    <Text style={styles.documentName} numberOfLines={1}>{pendingDocument.name}</Text>
-                    <PrimaryButton label="Remove Document" variant="secondary" onPress={() => setPendingDocument(null)} />
-                  </View>
-                ) : null}
-                {isUploadingAttachment ? <Text style={styles.uploadProgress}>Uploading attachment...</Text> : null}
-                <PrimaryButton
-                  label="Send Message"
-                  onPress={handleSendMessage}
-                  disabled={!canSendMessage}
-                />
-              </>
-            ) : null}
-          </Card>
+      <SafetyModal
+        visible={isSafetyVisible}
+        authUserId={authUser?.uid}
+        counterpartyId={counterpartyId}
+        counterpartyName={counterpartyName}
+        profile={profile ?? null}
+        counterpartyProfile={counterpartyProfile}
+        onClose={() => setIsSafetyVisible(false)}
+        onReport={handleReportConversation}
+      />
 
-          <Card>
-            <Text style={styles.sectionTitle}>Readiness</Text>
-            <View style={styles.readyRow}>
-              <ReadyBadge label="Founder Ready" ready={room.founderReady} />
-              <ReadyBadge label="Investor Ready" ready={room.investorReady} />
-            </View>
-            <View style={styles.actions}>
-              <PrimaryButton
-                label="Founder Ready"
-                variant="secondary"
-                onPress={() => handleReady('founder')}
-                disabled={participantRole !== 'founder' || room.founderReady}
-              />
-              <PrimaryButton
-                label="Investor Ready"
-                variant="secondary"
-                onPress={() => handleReady('investor')}
-                disabled={participantRole !== 'investor' || room.investorReady}
-              />
-            </View>
-            {(room.founderReady || room.investorReady) && room.status !== 'ready' ? (
-              <Text style={styles.waitingCopy}>Waiting for the other party.</Text>
-            ) : null}
-            {room.status === 'ready' ? (
-              <View style={styles.readyPanel}>
-                <Text style={styles.readyCopy}>Both parties are ready.</Text>
-                <PrimaryButton label="Continue To Agreement" onPress={handleContinueAgreement} />
-              </View>
-            ) : null}
-          </Card>
-
-          <BlockUserControl
-            currentUserId={authUser?.uid}
-            targetUserId={counterpartyId}
-            currentUser={profile}
-            targetUser={counterpartyProfile}
-            targetName={counterpartyName}
-            onStatusChange={setBlockStatus}
-            onReport={handleReportConversation}
-            showReport
-          />
-        </>
-      ) : null}
       <ReportUserModal
         visible={isReportModalVisible}
         reason={reportReason}
@@ -622,7 +382,51 @@ export default function DiscussionRoomScreen() {
         onCancel={() => setIsReportModalVisible(false)}
         onSubmit={handleSubmitReport}
       />
-    </Screen>
+    </SafeAreaView>
+  );
+}
+
+function SafetyModal({
+  visible,
+  authUserId,
+  counterpartyId,
+  counterpartyName,
+  profile,
+  counterpartyProfile,
+  onClose,
+  onReport,
+}: {
+  visible: boolean;
+  authUserId?: string | null;
+  counterpartyId: string | null;
+  counterpartyName: string;
+  profile: User | null;
+  counterpartyProfile: User | null;
+  onClose: () => void;
+  onReport: () => void;
+}) {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={styles.modalSafeArea} edges={['top', 'left', 'right', 'bottom']}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalHeaderTitle}>Safety & Trust</Text>
+          <Pressable onPress={onClose}>
+            <Text style={styles.modalHeaderAction}>Done</Text>
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.modalContent}>
+          <BlockUserControl
+            currentUserId={authUserId}
+            targetUserId={counterpartyId}
+            currentUser={profile}
+            targetUser={counterpartyProfile}
+            targetName={counterpartyName}
+            onReport={onReport}
+            showReport
+          />
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
   );
 }
 
@@ -690,434 +494,141 @@ function ReportUserModal({
   );
 }
 
-function ReadyBadge({ label, ready }: { label: string; ready: boolean }) {
-  return (
-    <View style={[styles.readyBadge, ready ? styles.readyBadgeActive : null]}>
-      <Text style={styles.readyLabel}>{label}</Text>
-      <Text style={styles.readyValue}>{ready ? 'Ready' : 'Pending'}</Text>
-    </View>
-  );
-}
-
-function sortMessages(messages: DiscussionMessage[]) {
-  return [...messages].sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)));
-}
-
-function areDiscussionRoomsEqual(left: DiscussionRoom | null, right: DiscussionRoom | null) {
-  return stableStringify(left) === stableStringify(right);
-}
-
-function areDiscussionMessagesEqual(left: DiscussionMessage[], right: DiscussionMessage[]) {
-  return stableStringify(left) === stableStringify(right);
-}
-
-function stableStringify(value: unknown) {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function formatMessageTime(value: unknown) {
-  try {
-    const date = toDate(value);
-    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  } catch {
-    return 'Now';
-  }
-}
-
-function getMessageDateLabel(value: unknown) {
-  if (!value) {
-    return '';
-  }
-
-  try {
-    const date = toDate(value);
-    const today = startOfDay(new Date());
-    const messageDay = startOfDay(date);
-    const dayDifference = Math.round((today.getTime() - messageDay.getTime()) / 86_400_000);
-
-    if (dayDifference === 0) {
-      return 'Today';
-    }
-    if (dayDifference === 1) {
-      return 'Yesterday';
-    }
-
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-  } catch {
-    return '';
-  }
-}
-
-function toDate(value: unknown) {
-  if (typeof value === 'object' && value !== null && 'toDate' in value) {
-    return (value as { toDate: () => Date }).toDate();
-  }
-  return new Date(String(value));
-}
-
-function startOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function isCounterpartyTyping(room: DiscussionRoom, currentUid: string) {
-  return Object.entries(room.typingBy ?? {}).some(([uid, isTyping]) => uid !== currentUid && isTyping);
-}
-
-function getMessageStatusLabel(message: DiscussionMessage, room: DiscussionRoom, currentUid: string) {
-  const otherUid = currentUid === room.founderId ? room.investorId : room.founderId;
-
-  if (message.senderId !== currentUid) {
-    return message.readBy?.includes(currentUid) ? '✓✓ Read' : 'Sent';
-  }
-
-  if (message.readBy?.includes(otherUid)) {
-    return '✓✓ Read';
-  }
-
-  return message.deliveredTo?.includes(otherUid) ? '✓ Delivered' : 'Sent';
-}
-
-function mimeTypeFromFileName(fileName: string) {
-  const extension = fileName.split('.').pop()?.toLowerCase();
-  switch (extension) {
-    case 'pdf':
-      return 'application/pdf';
-    case 'doc':
-      return 'application/msword';
-    case 'docx':
-      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-    case 'txt':
-      return 'text/plain';
-    default:
-      return 'application/octet-stream';
-  }
-}
-
-function isSupportedDocumentType(contentType: string, fileName: string) {
-  const extension = fileName.split('.').pop()?.toLowerCase();
-  return supportedDocumentTypes.includes(contentType) || ['pdf', 'doc', 'docx', 'txt'].includes(extension ?? '');
-}
-
-function fileNameFromUrl(url: string) {
-  try {
-    const decoded = decodeURIComponent(url);
-    const path = decoded.split('/').pop()?.split('?')[0];
-    return path || 'Investment document';
-  } catch {
-    return 'Investment document';
-  }
-}
-
 const styles = StyleSheet.create({
-  notice: {
-    color: colors.text,
-    lineHeight: 22,
-  },
-  roomTitle: {
-    color: colors.text,
-    fontSize: 26,
-    fontWeight: '900',
-  },
-  grid: {
-    gap: spacing.md,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  chatHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  unreadBadge: {
-    overflow: 'hidden',
-    borderRadius: 999,
-    backgroundColor: 'rgba(177, 18, 38, 0.22)',
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: '900',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  empty: {
-    color: colors.muted,
-    lineHeight: 22,
-  },
-  messageList: {
-    maxHeight: 340,
-  },
-  searchInput: {
-    minHeight: 48,
-    borderWidth: 1,
-    borderColor: 'rgba(216, 201, 163, 0.24)',
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    color: colors.text,
-    backgroundColor: colors.black,
-  },
-  dateSeparator: {
-    alignSelf: 'center',
-    overflow: 'hidden',
-    borderRadius: radii.pill,
-    backgroundColor: 'rgba(216, 201, 163, 0.12)',
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: '900',
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  messageBubble: {
-    gap: spacing.xs,
-    borderWidth: 1,
-    borderColor: 'rgba(216, 201, 163, 0.22)',
-    borderRadius: radii.md,
-    padding: spacing.md,
-    backgroundColor: colors.black,
-    marginBottom: spacing.sm,
-  },
-  ownMessageBubble: {
-    borderColor: 'rgba(200, 162, 74, 0.42)',
-    backgroundColor: 'rgba(200, 162, 74, 0.08)',
-  },
-  systemMessageBubble: {
-    borderColor: 'rgba(64, 156, 255, 0.32)',
-    backgroundColor: 'rgba(64, 156, 255, 0.08)',
-  },
-  messageAuthor: {
-    color: colors.accent,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  messageBody: {
-    color: colors.text,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  messageMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  messageMeta: {
-    color: colors.subtle,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  messageImage: {
-    width: '100%',
-    height: 180,
-    borderRadius: radii.md,
-    backgroundColor: colors.panelMuted,
-  },
-  attachmentText: {
-    color: colors.luxuryGold,
-    fontSize: 13,
-    fontWeight: '800',
-    lineHeight: 20,
-  },
-  documentAttachment: {
-    gap: spacing.xs,
-    borderWidth: 1,
-    borderColor: 'rgba(200, 162, 74, 0.34)',
-    borderRadius: radii.md,
-    padding: spacing.md,
-    backgroundColor: 'rgba(200, 162, 74, 0.08)',
-  },
-  documentName: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  attachmentActions: {
-    gap: spacing.sm,
-  },
-  pendingAttachment: {
-    gap: spacing.sm,
-    borderWidth: 1,
-    borderColor: 'rgba(216, 201, 163, 0.22)',
-    borderRadius: radii.md,
-    padding: spacing.md,
-    backgroundColor: colors.black,
-  },
-  pendingImage: {
-    width: '100%',
-    height: 180,
-    borderRadius: radii.md,
-    backgroundColor: colors.panelMuted,
-  },
-  pendingDocument: {
-    gap: spacing.sm,
-    borderWidth: 1,
-    borderColor: 'rgba(216, 201, 163, 0.22)',
-    borderRadius: radii.md,
-    padding: spacing.md,
-    backgroundColor: colors.black,
-  },
-  pendingLabel: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  uploadProgress: {
-    color: colors.luxuryGold,
-    fontSize: 13,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-  typingText: {
-    color: colors.luxuryGold,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  moderationWarning: {
-    color: colors.danger,
-    fontSize: 14,
-    fontWeight: '900',
-    lineHeight: 20,
-  },
-  blockedNotice: {
-    borderWidth: 1,
-    borderColor: 'rgba(177, 18, 38, 0.36)',
-    borderRadius: radii.md,
-    padding: spacing.md,
-    backgroundColor: 'rgba(177, 18, 38, 0.12)',
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '900',
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  input: {
-    minHeight: 92,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    color: colors.text,
-    backgroundColor: colors.black,
-    textAlignVertical: 'top',
-  },
-  readyRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  readyBadge: {
+  safeArea: {
+    backgroundColor: colors.background,
     flex: 1,
-    gap: spacing.xs,
-    borderWidth: 1,
-    borderColor: 'rgba(216, 201, 163, 0.26)',
-    borderRadius: radii.md,
-    padding: spacing.md,
-    backgroundColor: colors.black,
   },
-  readyBadgeActive: {
-    borderColor: colors.success,
+  keyboardAvoiding: {
+    flex: 1,
   },
-  readyLabel: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '800',
+  dealRoom: {
+    flex: 1,
   },
-  readyValue: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '900',
+  workflowZone: {
+    flexShrink: 0,
   },
-  actions: {
-    gap: spacing.sm,
+  chatPanel: {
+    flex: 1,
+    minHeight: 0,
   },
-  readyPanel: {
-    gap: spacing.md,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    backgroundColor: 'rgba(46, 125, 50, 0.16)',
-  },
-  readyCopy: {
-    color: colors.text,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  waitingCopy: {
-    color: colors.warning,
-    fontSize: 15,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  modalBackdrop: {
+  centeredState: {
     flex: 1,
     justifyContent: 'center',
     padding: spacing.lg,
-    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+  },
+  noticeBanner: {
+    alignItems: 'center',
+    backgroundColor: colors.panel,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  noticeText: {
+    color: colors.text,
+    flex: 1,
+    lineHeight: 20,
+  },
+  noticeDismiss: {
+    color: colors.accent,
+    fontWeight: '700',
+  },
+  modalSafeArea: {
+    backgroundColor: colors.background,
+    flex: 1,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    borderBottomColor: 'rgba(216, 201, 163, 0.18)',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  modalHeaderTitle: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  modalHeaderAction: {
+    color: colors.accent,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalContent: {
+    padding: spacing.md,
+  },
+  modalBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: spacing.lg,
   },
   modalCard: {
-    gap: spacing.md,
-    borderWidth: 1,
-    borderColor: 'rgba(216, 201, 163, 0.26)',
-    borderRadius: radii.lg,
-    padding: spacing.lg,
     backgroundColor: colors.panel,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.lg,
+    width: '100%',
   },
   modalTitle: {
     color: colors.text,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '900',
   },
   modalSubtitle: {
     color: colors.muted,
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 21,
+    lineHeight: 22,
   },
   reasonList: {
     gap: spacing.sm,
   },
   reasonOption: {
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    borderWidth: 1,
     borderColor: 'rgba(216, 201, 163, 0.22)',
     borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
     padding: spacing.md,
-    backgroundColor: colors.black,
   },
   reasonOptionActive: {
-    borderColor: colors.luxuryGold,
-    backgroundColor: 'rgba(200, 162, 74, 0.12)',
+    backgroundColor: 'rgba(200, 162, 74, 0.08)',
+    borderColor: colors.accent,
   },
   radioDot: {
-    width: 14,
-    height: 14,
-    borderWidth: 1,
     borderColor: colors.muted,
-    borderRadius: 7,
+    borderRadius: 999,
+    borderWidth: 2,
+    height: 18,
+    width: 18,
   },
   radioDotActive: {
-    borderColor: colors.luxuryGold,
-    backgroundColor: colors.luxuryGold,
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   reasonText: {
     color: colors.text,
-    fontSize: 14,
-    fontWeight: '800',
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
   },
   reportTextArea: {
-    minHeight: 110,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    color: colors.text,
     backgroundColor: colors.black,
+    borderColor: 'rgba(216, 201, 163, 0.24)',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    color: colors.text,
+    minHeight: 120,
+    padding: spacing.md,
     textAlignVertical: 'top',
   },
   modalActions: {

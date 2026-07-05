@@ -15,6 +15,7 @@ import type { InvestmentInterest, Match } from '@/types/FundingRequest';
 import type { DiscussionRoom, InvestmentAgreement, InvestmentOpportunity, StartupInterest, V5Investment } from '@/types/InvestmentFlow';
 import {
   buildDealPipelines,
+  getPipelineDiscussionRoomId,
   getPipelineStageMeta,
   pipelineSteps,
   splitPipelinesByActivity,
@@ -457,31 +458,33 @@ function PipelineAction({
   onAcceptInterest: (interest: InvestmentInterest) => void;
   onOpenMatch: (match: Match) => void;
 }) {
-  if (founderMode && pipeline.interest && !pipeline.room) {
+  const chatRoomId = getPipelineDiscussionRoomId(pipeline);
+
+  if (founderMode && pipeline.interest && !chatRoomId && !pipeline.match) {
     return (
       <PrimaryButton
-        label="Accept Interest & Start Discussion"
+        label="Accept Interest & Start Investment Chat"
         onPress={() => onAcceptInterest(pipeline.interest as InvestmentInterest)}
       />
     );
   }
 
-  if (pipeline.room && !pipeline.agreement) {
-    return <PrimaryButton label="Open Discussion Room" onPress={() => router.push(`/discussion-room/${pipeline.room?.id}`)} />;
-  }
-
-  if (pipeline.agreement) {
-    const isFundingStage = ['awaiting_funding', 'funding_arranged', 'completed'].includes(pipeline.agreement.status);
+  if (chatRoomId) {
     return (
       <PrimaryButton
-        label={isFundingStage ? 'Open Funding Instructions' : 'Open Agreement'}
-        onPress={() => router.push(isFundingStage ? `/payment/${pipeline.agreement?.id}` : `/agreement/${pipeline.agreement?.id}`)}
+        label="Open Deal Room"
+        onPress={() => router.push(`/discussion-room/${chatRoomId}`)}
       />
     );
   }
 
   if (pipeline.match) {
-    return <PrimaryButton label="Open Match" onPress={() => onOpenMatch(pipeline.match as Match)} />;
+    return (
+      <PrimaryButton
+        label="Open Deal Room"
+        onPress={() => onOpenMatch(pipeline.match as Match)}
+      />
+    );
   }
 
   return <Text style={styles.meta}>Waiting for the next deal step.</Text>;
@@ -571,6 +574,9 @@ const styles = StyleSheet.create({
   },
   pipelineCard: {
     gap: spacing.md,
+  },
+  pipelineActions: {
+    gap: spacing.sm,
   },
   pipelineTitleBlock: {
     flex: 1,

@@ -22,6 +22,8 @@ import {
   logTractionFlowStep,
   logTractionInvestmentWrite,
 } from '@/utils/tractionPortfolio';
+import { investmentChatService, normalizeChatMessage } from '@/services/investmentChatService';
+import type { ChatAttachment } from '@/types/InvestmentChat';
 
 export const defaultInvestmentAmount = 22;
 export const defaultInvestorAllocation = 1;
@@ -388,123 +390,65 @@ export const investmentFlowService = {
       blockStatus?: BlockStatus;
     } = {},
   ) {
-    const moderation = moderateChatMessage(body);
-    if (!moderation.allowed) {
-      await firestoreAdapter.create<Omit<ModerationFlag, 'id'>>('moderationFlags', {
-        userId: sender.id,
-        discussionRoomId: room.id,
-        messagePreview: body.slice(0, 180),
-        categories: moderation.flags,
-        status: 'open',
-        createdAt: now(),
+    const attachments: ChatAttachment[] = [];
+    if (options.imageUrl) {
+      attachments.push({
+        id: `image-${Date.now()}`,
+        name: 'Image',
+        url: options.imageUrl,
+        mimeType: 'image/jpeg',
+        kind: 'image',
       });
-      throw new AppError('This message violates PromptFund Community Guidelines.', 'moderation/blocked-message');
+    }
+    if (options.documentUrl) {
+      attachments.push({
+        id: `document-${Date.now()}`,
+        name: options.documentName ?? 'Document',
+        url: options.documentUrl,
+        mimeType: 'application/pdf',
+        kind: 'document',
+      });
     }
 
-    const recipientId = sender.id === room.founderId ? room.investorId : room.founderId;
-    const isBlocked = options.blockStatus
-      ? options.blockStatus.blockedByMe || options.blockStatus.blockedMe
-      : await userService.isBlockedBetween(sender.id, recipientId);
-    if (isBlocked) {
-      throw new AppError('You cannot message this user because one of you has blocked the other.', 'chat/blocked-user');
-    }
-    const createdAt = now();
-    const message = omitUndefinedFields<DiscussionMessage>({
-      id: `message-${Date.now()}`,
-      discussionRoomId: room.id,
-      senderId: sender.id,
-      senderName: displayName(sender),
-      body,
-      createdAt,
-      type: options.type ?? 'user',
-      status: 'delivered',
-      imageUrl: options.imageUrl,
-      documentUrl: options.documentUrl,
-      documentName: options.documentName,
-      linkUrl: options.linkUrl,
-      deliveredTo: [recipientId],
-      readBy: [sender.id],
-    });
-
-    await firestoreAdapter.create<Omit<DiscussionMessage, 'id'>>('discussionMessages', {
-      discussionRoomId: room.id,
-      senderId: message.senderId,
-      senderName: message.senderName,
-      body: message.body,
-      createdAt: message.createdAt,
-      type: message.type,
-      status: message.status,
-      imageUrl: message.imageUrl,
-      documentUrl: message.documentUrl,
-      documentName: message.documentName,
-      linkUrl: message.linkUrl,
-      deliveredTo: message.deliveredTo,
-      readBy: message.readBy,
-    });
-
-    notificationService.createNotification({
-      userId: recipientId,
-      title: 'New message',
-      body: `${message.senderName}: ${body.slice(0, 120)}`,
-      type: 'message',
-      data: {
+    if (options.type === 'system') {
+      const moderation = moderateChatMessage(body);
+      if (!moderation.allowed) {
+        throw new AppError('This message violates PromptFund Community Guidelines.', 'moderation/blocked-message');
+      }
+      const createdAt = now();
+      await firestoreAdapter.create('discussionMessages', {
         discussionRoomId: room.id,
-      },
-    }).catch((error) => console.info('[PromptFund Notifications] message notification failed', error));
+        senderId: 'system',
+        senderName: 'PromptFund System',
+        body,
+        createdAt,
+        type: 'system',
+        status: 'sent',
+      });
+      return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
+        lastMessage: body,
+        lastMessageAt: createdAt,
+        updatedAt: now(),
+      });
+    }
 
-    const unreadCounts = {
-      ...(room.unreadCounts ?? {}),
-      [recipientId]: (room.unreadCounts?.[recipientId] ?? 0) + 1,
-      [sender.id]: 0,
-    };
-    return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
-      messages: [...(room.messages ?? []), message],
-      lastMessage: body,
-      lastMessageAt: createdAt,
-      lastMessageSenderId: sender.id,
-      unreadCounts,
-      readReceipts: {
-        ...(room.readReceipts ?? {}),
-        [sender.id]: createdAt,
-      },
+    return investmentChatService.sendMessage({
+      room,
+      sender,
+      text: body,
+      attachments,
+      blockStatus: options.blockStatus,
     });
   },
 
   async markDiscussionRead(room: DiscussionRoom, userId: string) {
-    const readAt = now();
-    const messages = (room.messages ?? []).map((message) => {
-      if (message.senderId === userId || message.readBy?.includes(userId)) {
-        return message;
-      }
-
-      return {
-        ...message,
-        status: 'read' as const,
-        deliveredTo: Array.from(new Set([...(message.deliveredTo ?? []), userId])),
-        readBy: Array.from(new Set([...(message.readBy ?? []), userId])),
-      };
-    });
-
-    return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
-      messages,
-      readReceipts: {
-        ...(room.readReceipts ?? {}),
-        [userId]: readAt,
-      },
-      unreadCounts: {
-        ...(room.unreadCounts ?? {}),
-        [userId]: 0,
-      },
-    });
+    const messages = await this.listMessagesByDiscussionRoom(room.id);
+    const chatMessages = messages.map((message) => normalizeChatMessage(message.id, message as unknown as Record<string, unknown>));
+    return investmentChatService.markMessagesRead(room, userId, chatMessages);
   },
 
   async setTyping(room: DiscussionRoom, userId: string, isTyping: boolean) {
-    return firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, {
-      typingBy: {
-        ...(room.typingBy ?? {}),
-        [userId]: isTyping,
-      },
-    });
+    return investmentChatService.setTyping(room, userId, isTyping);
   },
 
   async setReady(room: DiscussionRoom, role: 'founder' | 'investor') {
@@ -539,6 +483,29 @@ export const investmentFlowService = {
 
   async getAgreement(agreementId: string): Promise<InvestmentAgreement | null> {
     return firestoreAdapter.getById<InvestmentAgreement>('agreements', agreementId);
+  },
+
+  async resolveDiscussionRoomId(investment: Pick<V5Investment, 'discussionRoomId' | 'agreementId' | 'opportunityId' | 'founderId'>): Promise<string | null> {
+    if (investment.discussionRoomId) {
+      return investment.discussionRoomId;
+    }
+
+    if (investment.agreementId) {
+      const agreement = await this.getAgreement(investment.agreementId);
+      if (agreement?.discussionRoomId) {
+        return agreement.discussionRoomId;
+      }
+    }
+
+    if (investment.opportunityId && investment.founderId) {
+      const rooms = await this.listDiscussionRoomsByFounder(investment.founderId);
+      const room = rooms.find((item) => item.opportunityId === investment.opportunityId);
+      if (room) {
+        return room.id;
+      }
+    }
+
+    return null;
   },
 
   async generateAgreement(room: DiscussionRoom) {
@@ -955,6 +922,16 @@ export const investmentFlowService = {
       eventType: 'funding_instructions_opened',
       label: 'Funding Instructions Opened',
     });
+  },
+
+  async acknowledgeFundingInstructions(agreement: InvestmentAgreement, actorId: string) {
+    const acknowledgedAt = now();
+    const updated = await firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, {
+      fundingInstructionsAcknowledgedAt: acknowledgedAt,
+      updatedAt: acknowledgedAt,
+    });
+    await this.recordFundingInstructionsOpened(updated, actorId);
+    return updated;
   },
 
   async confirmFundingArrangement(agreement: InvestmentAgreement) {

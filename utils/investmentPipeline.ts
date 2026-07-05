@@ -28,7 +28,7 @@ type DealPipelineDraft = Partial<Omit<DealPipeline, 'completedSteps' | 'currentS
 export const pipelineSteps: Array<{ key: PipelineStepKey; label: string; badgeColor: string; badgeIcon: string }> = [
   { key: 'interest', label: 'Interest Received', badgeColor: '#C8A24A', badgeIcon: '●' },
   { key: 'match', label: 'Match Created', badgeColor: '#409CFF', badgeIcon: '●' },
-  { key: 'discussion', label: 'Discussion Started', badgeColor: '#8D5CF6', badgeIcon: '●' },
+  { key: 'discussion', label: 'Investment Chat Started', badgeColor: '#8D5CF6', badgeIcon: '●' },
   { key: 'agreement', label: 'Agreement Signed', badgeColor: '#D77A22', badgeIcon: '●' },
   { key: 'funding_instructions', label: 'Funding Instructions', badgeColor: '#C8A24A', badgeIcon: '●' },
   { key: 'funding_confirmed', label: 'Funding Confirmed', badgeColor: '#409CFF', badgeIcon: '●' },
@@ -62,6 +62,12 @@ export function splitPipelinesByActivity(pipelines: DealPipeline[]) {
     activePipelines: pipelines.filter((pipeline) => !pipeline.completedSteps.completed),
     archivedPipelines: pipelines.filter((pipeline) => pipeline.completedSteps.completed),
   };
+}
+
+export function getPipelineDiscussionRoomId(pipeline: Pick<DealPipeline, 'room' | 'agreement' | 'investment'>) {
+  return pipeline.room?.id
+    ?? pipeline.agreement?.discussionRoomId
+    ?? pipeline.investment?.discussionRoomId;
 }
 
 export function buildDealPipelines({
@@ -152,11 +158,10 @@ export function buildDealPipelines({
   });
 }
 
-function getCompletedPipelineSteps(pipeline: Partial<DealPipeline>) {
+export function getCompletedPipelineSteps(pipeline: Partial<DealPipeline>) {
   const investment = pipeline.investment;
   const hasInvestment = Boolean(investment);
   const isFundingConfirmed = investment?.status === 'funding_confirmed'
-    || pipeline.agreement?.status === 'funding_arranged'
     || pipeline.agreement?.status === 'completed';
   const isDealCompleted = investment?.status === 'completed' || pipeline.agreement?.status === 'completed';
   const agreementSigned = hasInvestment
@@ -168,15 +173,51 @@ function getCompletedPipelineSteps(pipeline: Partial<DealPipeline>) {
   return {
     interest: Boolean(pipeline.interest || pipeline.match || pipeline.room || pipeline.agreement || hasInvestment),
     match: Boolean(pipeline.match || pipeline.room || pipeline.agreement || hasInvestment),
-    discussion: Boolean(pipeline.room || pipeline.agreement || hasInvestment),
+    discussion: Boolean(
+      (pipeline.room?.founderReady && pipeline.room?.investorReady)
+      || pipeline.agreement
+      || hasInvestment
+    ),
     agreement: agreementSigned,
     funding_instructions: Boolean(
-      hasInvestment
-      || pipeline.agreement?.status === 'awaiting_funding'
+      pipeline.agreement?.fundingInstructionsAcknowledgedAt
+      || hasInvestment
       || pipeline.agreement?.status === 'funding_arranged'
       || pipeline.agreement?.status === 'completed',
     ),
     funding_confirmed: Boolean(isFundingConfirmed),
     completed: Boolean(isDealCompleted),
+  };
+}
+
+export function buildDealPipelineFromEntities({
+  room,
+  agreement,
+  investment,
+  opportunity,
+}: {
+  room?: DiscussionRoom;
+  agreement?: InvestmentAgreement;
+  investment?: V5Investment;
+  opportunity?: InvestmentOpportunity;
+}): DealPipeline {
+  const draft: Partial<DealPipeline> = {
+    id: room?.opportunityId ?? agreement?.opportunityId ?? investment?.opportunityId ?? 'deal',
+    opportunity,
+    room,
+    agreement,
+    investment,
+  };
+  const completedSteps = getCompletedPipelineSteps(draft);
+  const currentStep: DealPipeline['currentStep'] = pipelineSteps.find((step) => !completedSteps[step.key])?.key ?? 'completed';
+
+  return {
+    id: draft.id as string,
+    opportunity,
+    room,
+    agreement,
+    investment,
+    completedSteps,
+    currentStep,
   };
 }

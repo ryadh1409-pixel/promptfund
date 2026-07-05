@@ -170,7 +170,7 @@ export default function PaymentScreen() {
               <Text style={styles.copy}>No contact information has been shared yet.</Text>
             )}
             {agreement.discussionRoomId ? (
-              <PrimaryButton label="Continue Discussion" variant="secondary" onPress={() => router.push(`/discussion-room/${agreement.discussionRoomId}`)} />
+              <PrimaryButton label="Continue to Investment Chat" variant="secondary" onPress={() => router.push(`/discussion-room/${agreement.discussionRoomId}`)} />
             ) : null}
           </Card>
 

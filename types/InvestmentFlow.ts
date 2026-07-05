@@ -74,6 +74,8 @@ export type DiscussionRoom = {
   lastMessageAt?: string;
   lastMessageSenderId?: string;
   typingBy?: Record<string, boolean>;
+  presence?: Record<string, { isOnline?: boolean; lastSeenAt?: string }>;
+  pinnedMessageIds?: string[];
   readReceipts?: Record<string, string>;
   unreadCounts?: Record<string, number>;
   mutedBy?: Record<string, boolean>;
@@ -109,6 +111,7 @@ export type InvestmentAgreement = {
   investorAccepted: boolean;
   status: InvestmentFlowStatus;
   fundingArrangedAt?: string;
+  fundingInstructionsAcknowledgedAt?: string;
   completedAt?: string;
   investorSentAt?: string;
   fundedAt?: string;

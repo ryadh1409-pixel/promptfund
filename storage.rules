@@ -46,6 +46,23 @@ service firebase.storage {
       allow write: if isSignedIn() && request.auth.uid == userId;
     }
 
+    function isDiscussionRoomParticipant(roomId) {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/discussionRooms/$(roomId))
+        && (
+          firestore.get(/databases/(default)/documents/discussionRooms/$(roomId)).data.founderId == request.auth.uid
+          || firestore.get(/databases/(default)/documents/discussionRooms/$(roomId)).data.investorId == request.auth.uid
+          || isAdmin()
+        );
+    }
+
+    match /discussion-attachments/{roomId}/{userId}/{fileName} {
+      allow read: if isDiscussionRoomParticipant(roomId);
+      allow write: if isSignedIn()
+        && request.auth.uid == userId
+        && isDiscussionRoomParticipant(roomId);
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

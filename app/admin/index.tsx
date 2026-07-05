@@ -2,6 +2,7 @@ import { Redirect, router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { AdminInvestmentChats } from '@/components/admin/AdminInvestmentChats';
 import { Card, LoadingState, PrimaryButton, Screen, StatCard, ui } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -10,11 +11,13 @@ import type { AgreementRoom } from '@/types/Agreement';
 import type { InvestmentInterest, Match } from '@/types/FundingRequest';
 import type { Project } from '@/types/Project';
 import type { LegalDocumentVersions, ModerationFlag, SupportTicket, SupportTicketStatus, User, UserReport, ActivityTimelineEvent } from '@/types/User';
+import type { ChatMessage } from '@/types/InvestmentChat';
 import type { DiscussionRoom, InvestmentAgreement, InvestmentOpportunity, StartupInterest, V5Investment } from '@/types/InvestmentFlow';
 import { formatCurrency } from '@/utils/format';
 import { getRoleBadgeLabel } from '@/utils/roles';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
-import { buildDealPipelines, getPipelineStageMeta } from '@/utils/investmentPipeline';
+import { normalizeChatMessage } from '@/services/investmentChatService';
+import { buildDealPipelines, getPipelineDiscussionRoomId, getPipelineStageMeta } from '@/utils/investmentPipeline';
 import { safeDate, safePercent } from '@/utils/safeFormat';
 
 type AdminData = {
@@ -50,6 +53,7 @@ export default function AdminDashboardScreen() {
   const [announcementBody, setAnnouncementBody] = useState('');
   const [legalVersionDraft, setLegalVersionDraft] = useState<LegalDocumentVersions | null>(null);
   const [supportReplyDrafts, setSupportReplyDrafts] = useState<Record<string, string>>({});
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   useEffect(() => {
     async function loadAdminData() {
@@ -61,7 +65,9 @@ export default function AdminDashboardScreen() {
       try {
         setError(null);
         const nextData = await adminService.getDashboardData();
+        const rawMessages = await adminService.listDiscussionMessages();
         setData(nextData);
+        setChatMessages(rawMessages.map((message) => normalizeChatMessage(message.id, message as unknown as Record<string, unknown>)));
         setLegalVersionDraft(nextData.legalVersions);
       } catch (loadError) {
         setError(getFriendlyErrorMessage(loadError));
@@ -204,6 +210,15 @@ export default function AdminDashboardScreen() {
     }
   }
 
+  async function handleDeleteChatMessage(messageId: string) {
+    try {
+      await adminService.deleteMessage(messageId);
+      setChatMessages((current) => current.filter((message) => message.id !== messageId));
+    } catch (deleteError) {
+      setError(getFriendlyErrorMessage(deleteError));
+    }
+  }
+
   return (
     <Screen eyebrow="Admin" title="PromptFund Admin Dashboard" subtitle="Private operations console for trusted administrators.">
       {isLoading || !data ? <LoadingState label="Loading admin dashboard" /> : null}
@@ -247,7 +262,12 @@ export default function AdminDashboardScreen() {
                 onFreeze={() => handleStartupStatus(item.pipeline.id, 'frozen')}
                 onSuspend={() => handleStartupStatus(item.pipeline.id, 'suspended')}
                 onRestore={() => handleStartupStatus(item.pipeline.id, 'active')}
-                onOpenDiscussion={() => item.pipeline.room ? router.push(`/discussion-room/${item.pipeline.room.id}`) : undefined}
+                onOpenDiscussion={() => {
+                  const roomId = getPipelineDiscussionRoomId(item.pipeline);
+                  if (roomId) {
+                    router.push(`/discussion-room/${roomId}`);
+                  }
+                }}
                 onBlockFounder={() => item.pipeline.opportunity?.founderId ? handleUserStatus(item.pipeline.opportunity.founderId, 'banned') : undefined}
                 onBlockInvestor={() => item.pipeline.room?.investorId ? handleUserStatus(item.pipeline.room.investorId, 'banned') : undefined}
                 onDelete={() => handleDeleteStartup(item.pipeline.id)}
@@ -255,6 +275,12 @@ export default function AdminDashboardScreen() {
               />
             ))}
           </AdminSection>
+
+          <AdminInvestmentChats
+            rooms={data.discussionRooms}
+            messages={chatMessages}
+            onDeleteMessage={handleDeleteChatMessage}
+          />
 
           <AdminSection title="Reports">
             {data.reports.slice(0, 10).map((report) => (
@@ -542,7 +568,7 @@ function AdminStartupCard({
       ) : null}
       <View style={ui.wrap}>
         <PrimaryButton label="View Deal" variant="secondary" onPress={onOpenDiscussion} />
-        <PrimaryButton label="Open Discussion Room" variant="secondary" onPress={onOpenDiscussion} />
+        <PrimaryButton label="Open Deal Room" variant="secondary" onPress={onOpenDiscussion} />
         <PrimaryButton label="Archive Startup" variant="secondary" onPress={onArchive} />
         <PrimaryButton label="Freeze Startup" variant="secondary" onPress={onFreeze} />
         <PrimaryButton label="Suspend Startup" variant="secondary" onPress={onSuspend} />
