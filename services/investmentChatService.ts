@@ -24,6 +24,7 @@ import type { DiscussionRoom } from '@/types/InvestmentFlow';
 import type { ChatAttachment, ChatMessage, ChatReaction, ChatSenderRole } from '@/types/InvestmentChat';
 import type { User } from '@/types/User';
 import { moderateChatMessage } from '@/utils/chatModeration';
+import { buildOutgoingMessageFields, logChatUploadStep, resolveIncomingMessageType } from '@/utils/chatUpload';
 
 const PAGE_SIZE = 40;
 
@@ -45,12 +46,18 @@ function resolveSenderRole(room: DiscussionRoom, senderId: string): ChatSenderRo
   return 'system';
 }
 
+function readMessageText(data: Record<string, unknown>) {
+  const fromText = typeof data.text === 'string' ? data.text.trim() : '';
+  const fromBody = typeof data.body === 'string' ? data.body.trim() : '';
+  return fromText || fromBody || '';
+}
+
 export function normalizeChatMessage(id: string, data: Record<string, unknown>): ChatMessage {
   const attachments = Array.isArray(data.attachments) ? data.attachments as ChatAttachment[] : [];
-  const legacyImage = typeof data.imageUrl === 'string' ? data.imageUrl : undefined;
-  const legacyDocumentUrl = typeof data.documentUrl === 'string' ? data.documentUrl : undefined;
+  const legacyImage = typeof data.imageUrl === 'string' && data.imageUrl.trim() ? data.imageUrl : undefined;
+  const legacyDocumentUrl = typeof data.documentUrl === 'string' && data.documentUrl.trim() ? data.documentUrl : undefined;
   const legacyDocumentName = typeof data.documentName === 'string' ? data.documentName : undefined;
-  const text = String(data.text ?? data.body ?? '');
+  const text = readMessageText(data);
   const roomId = String(data.roomId ?? data.discussionRoomId ?? '');
 
   const normalizedAttachments = [...attachments];
@@ -73,6 +80,16 @@ export function normalizeChatMessage(id: string, data: Record<string, unknown>):
     });
   }
 
+  const messageType = resolveIncomingMessageType(data, normalizedAttachments);
+  const attachmentUrl = typeof data.attachmentUrl === 'string' && data.attachmentUrl.trim()
+    ? data.attachmentUrl
+    : messageType === 'text' || messageType === 'system'
+      ? undefined
+      : normalizedAttachments[0]?.url;
+  const thumbnailUrl = typeof data.thumbnailUrl === 'string' && data.thumbnailUrl.trim()
+    ? data.thumbnailUrl
+    : (normalizedAttachments[0]?.kind === 'image' ? normalizedAttachments[0]?.url : undefined);
+
   return {
     id,
     roomId,
@@ -94,7 +111,9 @@ export function normalizeChatMessage(id: string, data: Record<string, unknown>):
       ? data.reactions as Record<string, string[]>
       : undefined,
     isPinned: data.isPinned === true,
-    type: data.type === 'system' ? 'system' : 'user',
+    type: messageType,
+    attachmentUrl,
+    thumbnailUrl,
     imageUrl: legacyImage,
     documentUrl: legacyDocumentUrl,
     documentName: legacyDocumentName,
@@ -135,6 +154,11 @@ export const investmentChatService = {
       (snapshot) => {
         const messages = snapshot.docs
           .map((item) => normalizeChatMessage(item.id, item.data() as Record<string, unknown>));
+        logChatUploadStep('6. Realtime listener received messages', {
+          roomId,
+          count: messages.length,
+          latestType: messages.at(-1)?.type,
+        });
         onChange(sortMessagesChronologically(messages));
       },
       (error) => onError?.(error),
@@ -190,24 +214,35 @@ export const investmentChatService = {
 
     const createdAt = now();
     const senderRole = resolveSenderRole(room, sender.id);
+    const messageFields = buildOutgoingMessageFields(trimmed, attachments);
     const payload = omitUndefined({
       roomId: room.id,
       discussionRoomId: room.id,
       senderId: sender.id,
       senderRole,
       senderName: displayName(sender),
-      text: trimmed,
-      body: trimmed,
-      attachments,
+      text: messageFields.text,
+      body: messageFields.text,
+      type: messageFields.type,
+      attachmentUrl: messageFields.attachmentUrl,
+      thumbnailUrl: messageFields.thumbnailUrl,
+      attachments: messageFields.attachments,
       createdAt,
       status: 'sent' as const,
       replyTo,
       reactions: {},
       isPinned: false,
-      type: 'user' as const,
+    });
+
+    logChatUploadStep('5. Creating Firestore message document', {
+      roomId: room.id,
+      type: messageFields.type,
+      attachmentUrl: messageFields.attachmentUrl,
+      attachmentCount: attachments.length,
     });
 
     const messageReference = await addDoc(collection(getPromptFundFirestore(), 'discussionMessages'), payload);
+    logChatUploadStep('5. Firestore message created', { messageId: messageReference.id });
 
     await updateDoc(doc(getPromptFundFirestore(), 'discussionRooms', room.id), {
       lastMessage: trimmed || attachments[0]?.name || 'Attachment',

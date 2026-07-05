@@ -345,7 +345,7 @@ export default function DiscussionRoomScreen() {
               room={room}
               embedded
               currentUser={{
-                id: profile.id,
+                id: authUser?.uid ?? profile.id,
                 displayName: profile.displayName,
                 name: profile.name,
                 username: profile.username,

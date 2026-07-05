@@ -1,4 +1,4 @@
-import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii, spacing } from '@/constants/theme';
 import type { ChatAttachment, ChatMessage } from '@/types/InvestmentChat';
@@ -21,6 +21,82 @@ function attachmentKindLabel(kind: ChatAttachment['kind']) {
   return 'Document';
 }
 
+function getMessageDisplayText(message: ChatMessage) {
+  return message.text?.trim() || message.body?.trim() || '';
+}
+
+function getPrimaryAttachment(message: ChatMessage) {
+  if (message.attachmentUrl) {
+    return {
+      url: message.attachmentUrl,
+      thumbnailUrl: message.thumbnailUrl ?? message.attachmentUrl,
+      name: message.attachments?.[0]?.name ?? 'Attachment',
+      mimeType: message.attachments?.[0]?.mimeType ?? 'application/octet-stream',
+      kind: message.type === 'image' ? 'image' as const : message.attachments?.[0]?.kind ?? 'document',
+      sizeBytes: message.attachments?.[0]?.sizeBytes,
+    };
+  }
+
+  return message.attachments?.[0];
+}
+
+function MessageContent({
+  message,
+  onOpenUrl,
+}: {
+  message: ChatMessage;
+  onOpenUrl: (url: string) => void;
+}) {
+  const displayText = getMessageDisplayText(message);
+  const primaryAttachment = getPrimaryAttachment(message);
+  const legacyAttachments = message.attachments ?? [];
+
+  if (message.type === 'image' && primaryAttachment?.url) {
+    const imageUri = 'thumbnailUrl' in primaryAttachment && primaryAttachment.thumbnailUrl
+      ? primaryAttachment.thumbnailUrl
+      : primaryAttachment.url;
+    return (
+      <>
+        <Pressable onPress={() => onOpenUrl(primaryAttachment.url)}>
+          <Image
+            source={{ uri: imageUri }}
+            style={styles.image}
+            resizeMode="cover"
+          />
+        </Pressable>
+        {displayText ? <Text style={styles.body}>{displayText}</Text> : null}
+      </>
+    );
+  }
+
+  if (message.type === 'file' && primaryAttachment) {
+    return (
+      <>
+        <FileAttachmentCard attachment={primaryAttachment} onOpenUrl={onOpenUrl} />
+        {displayText && displayText !== primaryAttachment.name ? (
+          <Text style={styles.body}>{displayText}</Text>
+        ) : null}
+      </>
+    );
+  }
+
+  if (displayText) {
+    return <Text style={styles.body}>{displayText}</Text>;
+  }
+
+  if (legacyAttachments.length > 0) {
+    return legacyAttachments.map((attachment) => (
+      <AttachmentPreview
+        key={attachment.id}
+        attachment={attachment}
+        onOpenUrl={onOpenUrl}
+      />
+    ));
+  }
+
+  return null;
+}
+
 export function MessageBubble({
   message,
   currentUserId,
@@ -31,13 +107,12 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const isOwn = message.senderId === currentUserId;
   const isDeleted = Boolean(message.deletedAt);
-  const isSystem = message.type === 'system';
   const isFounderMessage = message.senderRole === 'founder' || (isOwn && isFounder);
 
-  if (isSystem) {
+  if (message.type === 'system') {
     return (
       <View style={styles.systemWrap}>
-        <Text style={styles.systemText}>{message.text || message.body}</Text>
+        <Text style={styles.systemText}>{getMessageDisplayText(message)}</Text>
       </View>
     );
   }
@@ -62,16 +137,7 @@ export function MessageBubble({
         {isDeleted ? (
           <Text style={styles.deletedText}>This message was deleted.</Text>
         ) : (
-          <>
-            {message.text ? <Text style={styles.body}>{message.text}</Text> : null}
-            {(message.attachments ?? []).map((attachment) => (
-              <AttachmentPreview
-                key={attachment.id}
-                attachment={attachment}
-                onOpenUrl={onOpenUrl}
-              />
-            ))}
-          </>
+          <MessageContent message={message} onOpenUrl={onOpenUrl} />
         )}
         <View style={styles.metaRow}>
           <Text style={styles.meta}>{formatMessageTime(message.createdAt)}</Text>
@@ -100,6 +166,29 @@ export function MessageBubble({
   );
 }
 
+function FileAttachmentCard({
+  attachment,
+  onOpenUrl,
+}: {
+  attachment: {
+    url: string;
+    name: string;
+    mimeType?: string;
+    kind?: ChatAttachment['kind'];
+    sizeBytes?: number;
+  };
+  onOpenUrl: (url: string) => void;
+}) {
+  return (
+    <Pressable style={styles.documentCard} onPress={() => onOpenUrl(attachment.url)}>
+      <Text style={styles.documentKind}>{attachmentKindLabel(attachment.kind ?? 'document')}</Text>
+      <Text style={styles.documentName} numberOfLines={2}>{attachment.name}</Text>
+      {attachment.sizeBytes ? <Text style={styles.documentSize}>{formatFileSize(attachment.sizeBytes)}</Text> : null}
+      <Text style={styles.downloadLabel}>Download</Text>
+    </Pressable>
+  );
+}
+
 function AttachmentPreview({
   attachment,
   onOpenUrl,
@@ -115,14 +204,7 @@ function AttachmentPreview({
     );
   }
 
-  return (
-    <Pressable style={styles.documentCard} onPress={() => onOpenUrl(attachment.url)}>
-      <Text style={styles.documentKind}>{attachmentKindLabel(attachment.kind)}</Text>
-      <Text style={styles.documentName} numberOfLines={2}>{attachment.name}</Text>
-      {attachment.sizeBytes ? <Text style={styles.documentSize}>{formatFileSize(attachment.sizeBytes)}</Text> : null}
-      <Text style={styles.downloadLabel}>Download</Text>
-    </Pressable>
-  );
+  return <FileAttachmentCard attachment={attachment} onOpenUrl={onOpenUrl} />;
 }
 
 const styles = StyleSheet.create({

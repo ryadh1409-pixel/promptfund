@@ -1,3 +1,4 @@
+import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -8,6 +9,7 @@ import {
   uploadDiscussionImageAttachment,
 } from '@/firebase/storage';
 import type { ChatAttachment, ChatAttachmentKind } from '@/types/InvestmentChat';
+import { describeChatUploadError, logChatUploadError, logChatUploadStep } from '@/utils/chatUpload';
 
 export const supportedChatMimeTypes = [
   'application/pdf',
@@ -101,51 +103,71 @@ export function ChatComposer({
     fileName: string;
     mimeType: string;
     sizeBytes?: number;
-  }) => {
+  }): Promise<ChatAttachment> => {
     const kind = attachmentKindFromMime(mimeType, fileName);
-    const upload = kind === 'image' || mimeType.startsWith('image/')
-      ? await uploadDiscussionImageAttachment({ roomId, userId, uri, contentType: mimeType })
-      : await uploadDiscussionDocumentAttachment({ roomId, userId, uri, fileName, contentType: mimeType });
+    logChatUploadStep('1. ImagePicker/DocumentPicker returned asset', { uri, fileName, mimeType, kind });
 
-    const attachment: PendingChatAttachment = {
-      id: `pending-${Date.now()}-${fileName}`,
-      name: fileName,
-      url: upload.downloadUrl,
-      mimeType,
-      sizeBytes,
-      kind,
-      localUri: kind === 'image' ? uri : undefined,
-    };
-    setPendingAttachments((current) => [...current, attachment]);
+    try {
+      const upload = kind === 'image' || mimeType.startsWith('image/')
+        ? await uploadDiscussionImageAttachment({ roomId, userId, uri, contentType: mimeType })
+        : await uploadDiscussionDocumentAttachment({ roomId, userId, uri, fileName, contentType: mimeType });
+
+      const attachment: ChatAttachment = {
+        id: `pending-${Date.now()}-${fileName}`,
+        name: fileName,
+        url: upload.downloadUrl,
+        mimeType,
+        sizeBytes,
+        kind,
+      };
+      logChatUploadStep('4. Attachment document prepared', attachment);
+      return attachment;
+    } catch (error) {
+      logChatUploadError('2-3. Firebase Storage upload', error);
+      throw new Error(describeChatUploadError('Firebase Storage upload', error));
+    }
   }, [roomId, userId]);
 
+  const submitMessage = useCallback(async (text: string, attachments: ChatAttachment[]) => {
+    logChatUploadStep('5. Sending chat message', { attachmentCount: attachments.length, textLength: text.length });
+    await onSend({ text, attachments });
+    logChatUploadStep('5. Chat message send resolved');
+  }, [onSend]);
+
   const handlePickPhoto = useCallback(async () => {
+    const messageText = value;
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        onError('Photo library permission is required.');
-        return;
+        throw new Error('Photo library permission is required.');
       }
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.82 });
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.82,
+      });
       if (result.canceled || result.assets.length === 0) return;
       const asset = result.assets[0];
       setLocalUploading(true);
-      await uploadAsset({
+      const attachment = await uploadAsset({
         uri: asset.uri,
         fileName: asset.fileName ?? `photo-${Date.now()}.jpg`,
         mimeType: asset.mimeType ?? 'image/jpeg',
         sizeBytes: asset.fileSize,
       });
+      await submitMessage(messageText, [attachment]);
+      setPendingAttachments([]);
+      onChangeText('');
     } catch (error) {
-      onError(error instanceof Error ? error.message : 'Unable to attach photo.');
+      const message = error instanceof Error ? error.message : 'Unable to attach photo.';
+      onError(message);
     } finally {
       setLocalUploading(false);
     }
-  }, [onError, uploadAsset]);
+  }, [onChangeText, onError, submitMessage, uploadAsset, value]);
 
   const handleAttachFile = useCallback(async () => {
+    const messageText = value;
     try {
-      const DocumentPicker = await import('expo-document-picker');
       const result = await DocumentPicker.getDocumentAsync({
         copyToCacheDirectory: true,
         multiple: true,
@@ -153,39 +175,50 @@ export function ChatComposer({
       });
       if (result.canceled || result.assets.length === 0) return;
       setLocalUploading(true);
+      const uploaded: ChatAttachment[] = [];
       for (const asset of result.assets) {
         const mimeType = asset.mimeType ?? mimeTypeFromFileName(asset.name);
         if (!isSupportedAttachment(mimeType, asset.name)) {
           onError(`Unsupported file: ${asset.name}`);
           continue;
         }
-        await uploadAsset({
+        const attachment = await uploadAsset({
           uri: asset.uri,
           fileName: asset.name,
           mimeType,
           sizeBytes: asset.size,
         });
+        uploaded.push(attachment);
       }
+      if (uploaded.length === 0) {
+        throw new Error('No supported files were attached.');
+      }
+      await submitMessage(messageText, uploaded);
+      setPendingAttachments([]);
+      onChangeText('');
     } catch (error) {
-      onError(error instanceof Error ? error.message : 'Unable to attach file.');
+      const message = error instanceof Error ? error.message : 'Unable to attach file.';
+      onError(message);
     } finally {
       setLocalUploading(false);
     }
-  }, [onError, uploadAsset]);
+  }, [onChangeText, onError, submitMessage, uploadAsset, value]);
 
   const handleSend = useCallback(async () => {
     if (!canSend) return;
+    const messageText = value;
     try {
       setIsSending(true);
-      await onSend({
-        text: value,
-        attachments: pendingAttachments.map(({ localUri: _localUri, ...attachment }) => attachment),
-      });
+      const attachments = pendingAttachments.map(({ localUri: _localUri, ...attachment }) => attachment);
+      await submitMessage(messageText, attachments);
       setPendingAttachments([]);
+      onChangeText('');
+    } catch (error) {
+      onError(error instanceof Error ? error.message : 'Unable to send message.');
     } finally {
       setIsSending(false);
     }
-  }, [canSend, onSend, pendingAttachments, value]);
+  }, [canSend, onChangeText, onError, pendingAttachments, submitMessage, value]);
 
   return (
     <View style={[styles.footer, { paddingBottom: Math.max(bottomInset, 6) }]}>
@@ -203,18 +236,6 @@ export function ChatComposer({
         onChangeText={onChangeText}
         style={styles.input}
       />
-      <View style={styles.actions}>
-        <ComposerButton label="📎 Attach File" onPress={handleAttachFile} disabled={disabled || uploadBusy} />
-        <ComposerButton label="🖼 Photo" onPress={handlePickPhoto} disabled={disabled || uploadBusy} />
-        <Pressable
-          accessibilityRole="button"
-          disabled={!canSend}
-          onPress={handleSend}
-          style={[styles.sendButton, !canSend ? styles.sendButtonDisabled : null]}
-        >
-          <Text style={styles.sendLabel}>{isSending ? 'Sending...' : 'Send'}</Text>
-        </Pressable>
-      </View>
       {pendingAttachments.length > 0 ? (
         <View style={styles.pendingRow}>
           {pendingAttachments.map((attachment) => (
@@ -232,6 +253,18 @@ export function ChatComposer({
         </View>
       ) : null}
       {uploadBusy ? <Text style={styles.uploading}>Uploading attachment...</Text> : null}
+      <View style={styles.actions}>
+        <ComposerButton label="📎 Attach File" onPress={handleAttachFile} disabled={disabled || uploadBusy} />
+        <ComposerButton label="🖼 Photo" onPress={handlePickPhoto} disabled={disabled || uploadBusy} />
+        <Pressable
+          accessibilityRole="button"
+          disabled={!canSend}
+          onPress={handleSend}
+          style={[styles.sendButton, !canSend ? styles.sendButtonDisabled : null]}
+        >
+          <Text style={styles.sendLabel}>{isSending ? 'Sending...' : 'Send'}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }

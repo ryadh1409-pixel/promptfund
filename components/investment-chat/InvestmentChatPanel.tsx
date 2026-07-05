@@ -22,6 +22,7 @@ import type { DiscussionRoom } from '@/types/InvestmentFlow';
 import type { ChatMessage, ChatReaction } from '@/types/InvestmentChat';
 import { chatReactionOptions } from '@/types/InvestmentChat';
 import type { User } from '@/types/User';
+import { logChatUploadStep } from '@/utils/chatUpload';
 
 import { ChatComposer } from './ChatComposer';
 import { ChatEmptyState } from './ChatEmptyState';
@@ -108,9 +109,17 @@ export function InvestmentChatPanel({
   useEffect(() => {
     if (messages.length > prevMessageCountRef.current) {
       listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      const latest = messages[messages.length - 1];
+      if (latest?.type === 'image' || latest?.attachmentUrl) {
+        logChatUploadStep('7. Image message visible in chat list', {
+          messageId: latest.id,
+          type: latest.type,
+          attachmentUrl: latest.attachmentUrl,
+        });
+      }
     }
     prevMessageCountRef.current = messages.length;
-  }, [messages.length]);
+  }, [messages]);
 
   useEffect(() => {
     const isTyping = draft.trim().length > 0;
@@ -164,6 +173,11 @@ export function InvestmentChatPanel({
     }
     try {
       onNotice(null);
+      logChatUploadStep('5. InvestmentChatPanel sending message', {
+        roomId: room.id,
+        attachmentCount: attachments?.length ?? 0,
+        hasText: text.trim().length > 0,
+      });
       await investmentChatService.sendMessage({
         room,
         sender: currentUser,
@@ -174,7 +188,8 @@ export function InvestmentChatPanel({
       setDraft('');
       listRef.current?.scrollToOffset({ offset: 0, animated: true });
     } catch (error) {
-      onNotice(getFriendlyErrorMessage(error));
+      const message = getFriendlyErrorMessage(error);
+      onNotice(message);
       throw error;
     }
   }, [blockStatus, currentUser, isBlocked, onNotice, room]);
@@ -291,7 +306,6 @@ export function InvestmentChatPanel({
             initialNumToRender={18}
             maxToRenderPerBatch={24}
             windowSize={12}
-            removeClippedSubviews
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             contentContainerStyle={styles.listContent}

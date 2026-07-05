@@ -2,6 +2,8 @@ export type ChatSenderRole = 'founder' | 'investor' | 'admin' | 'system';
 
 export type ChatMessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
 
+export type ChatMessageContentType = 'text' | 'image' | 'file' | 'system';
+
 export type ChatAttachmentKind = 'image' | 'document' | 'video' | 'voice';
 
 export type ChatAttachment = {
@@ -31,7 +33,9 @@ export type ChatMessage = {
   replyTo?: string;
   reactions?: Record<string, string[]>;
   isPinned?: boolean;
-  type?: 'user' | 'system';
+  type?: ChatMessageContentType;
+  attachmentUrl?: string;
+  thumbnailUrl?: string;
   /** @deprecated legacy single image */
   imageUrl?: string;
   /** @deprecated legacy single document */

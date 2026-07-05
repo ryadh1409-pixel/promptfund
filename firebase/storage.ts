@@ -1,9 +1,13 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { deleteObject, getStorage, ref } from 'firebase/storage';
 
+import { doc, getDoc } from 'firebase/firestore';
+
 import { requireCurrentFirebaseUser } from './auth';
 import { firebaseConfig, getFirebaseApp } from './config';
+import { firestoreCollections, getPromptFundFirestore } from './firestore';
 import { withFriendlyErrors } from '@/services/errorHandler';
+import { logChatUploadError, logChatUploadStep } from '@/utils/chatUpload';
 
 export type AgreementArtifactKind = 'video' | 'audio' | 'transcript' | 'summary' | 'contract';
 
@@ -38,7 +42,7 @@ async function getCurrentUserIdToken() {
 }
 
 function mediaUploadUrl(path: string) {
-  return `https://firebasestorage.googleapis.com/v0/b/${firebaseConfig.storageBucket}/o?name=${encodeURIComponent(path)}`;
+  return `https://firebasestorage.googleapis.com/v0/b/${firebaseConfig.storageBucket}/o?uploadType=media&name=${encodeURIComponent(path)}`;
 }
 
 function getFirebaseDownloadUrl(path: string, metadata: FirebaseStorageRestMetadata) {
@@ -58,18 +62,37 @@ function getFirebaseDownloadUrl(path: string, metadata: FirebaseStorageRestMetad
   )}?alt=media`;
 }
 
-async function uploadUriWithStorageRest({
+async function ensureUploadableUri(uri: string, fileName: string) {
+  if (uri.startsWith('file://')) {
+    const info = await FileSystem.getInfoAsync(uri);
+    if (info.exists) {
+      return uri;
+    }
+  }
+
+  const extension = fileName.includes('.') ? fileName.split('.').pop() : 'bin';
+  const destination = `${FileSystem.cacheDirectory}chat-upload-${Date.now()}.${extension}`;
+  logChatUploadStep('2a. Copying asset to cache', { sourceUri: uri, destination });
+  await FileSystem.copyAsync({ from: uri, to: destination });
+  return destination;
+}
+
+export async function uploadUriWithStorageRest({
   path,
   uri,
   contentType,
+  fileName = 'attachment',
 }: {
   path: string;
   uri: string;
   contentType: string;
+  fileName?: string;
 }) {
+  logChatUploadStep('2. Uploading to Firebase Storage', { path, contentType, uri });
+  const uploadableUri = await ensureUploadableUri(uri, fileName);
   const idToken = await getCurrentUserIdToken();
 
-  const response = await FileSystem.uploadAsync(mediaUploadUrl(path), uri, {
+  const response = await FileSystem.uploadAsync(mediaUploadUrl(path), uploadableUri, {
     headers: {
       Authorization: `Bearer ${idToken}`,
       'Content-Type': contentType,
@@ -79,10 +102,14 @@ async function uploadUriWithStorageRest({
   });
 
   if (response.status < 200 || response.status >= 300) {
-    throw new Error(`Firebase Storage upload failed: ${response.status} ${response.body}`);
+    const error = new Error(`Firebase Storage upload failed: ${response.status} ${response.body}`);
+    logChatUploadError('2. Uploading to Firebase Storage', error);
+    throw error;
   }
 
   const metadata = JSON.parse(response.body) as FirebaseStorageRestMetadata;
+  const downloadUrl = getFirebaseDownloadUrl(path, metadata);
+  logChatUploadStep('3. downloadURL returned', { path, downloadUrl });
 
   return {
     path,
@@ -93,7 +120,7 @@ async function uploadUriWithStorageRest({
       size: Number(metadata.size ?? 0),
       contentType: metadata.contentType ?? contentType,
     },
-    downloadUrl: getFirebaseDownloadUrl(path, metadata),
+    downloadUrl,
   };
 }
 
@@ -198,6 +225,28 @@ export function getDiscussionAttachmentPath({
   return `discussion-attachments/${roomId}/${userId}/${Date.now()}-${sanitizeStorageName(fileName)}`;
 }
 
+async function assertDiscussionRoomUploadAccess(roomId: string, uploaderId: string) {
+  const snapshot = await getDoc(doc(getPromptFundFirestore(), firestoreCollections.discussionRooms, roomId));
+  if (!snapshot.exists()) {
+    throw new Error(`Discussion room not found for upload (roomId=${roomId}).`);
+  }
+
+  const room = snapshot.data() as { founderId?: string; investorId?: string };
+  const isParticipant = room.founderId === uploaderId || room.investorId === uploaderId;
+  if (!isParticipant) {
+    throw new Error(
+      `Permission denied: user ${uploaderId} is not the founder or investor for discussion room ${roomId}.`,
+    );
+  }
+
+  logChatUploadStep('2b. Discussion room participant verified', {
+    roomId,
+    uploaderId,
+    founderId: room.founderId,
+    investorId: room.investorId,
+  });
+}
+
 export function getSupportScreenshotPath({
   ticketId,
   userId,
@@ -263,16 +312,24 @@ export async function uploadDiscussionImageAttachment({
   uri: string;
   contentType?: string;
 }) {
+  const authUser = await requireCurrentFirebaseUser();
+  const uploaderId = authUser.uid;
+  if (userId !== uploaderId) {
+    logChatUploadStep('Upload userId mismatch; using auth uid for storage path', { userId, uploaderId, roomId });
+  }
+  const fileName = `photo.${extensionForContentType(contentType)}`;
   const path = getDiscussionAttachmentPath({
     roomId,
-    userId,
-    fileName: `photo.${extensionForContentType(contentType)}`,
+    userId: uploaderId,
+    fileName,
   });
+  await assertDiscussionRoomUploadAccess(roomId, uploaderId);
 
   return uploadUriWithStorageRest({
     path,
     uri,
     contentType,
+    fileName,
   });
 }
 
@@ -289,16 +346,23 @@ export async function uploadDiscussionDocumentAttachment({
   fileName: string;
   contentType: string;
 }) {
+  const authUser = await requireCurrentFirebaseUser();
+  const uploaderId = authUser.uid;
+  if (userId !== uploaderId) {
+    logChatUploadStep('Upload userId mismatch; using auth uid for storage path', { userId, uploaderId, roomId });
+  }
   const path = getDiscussionAttachmentPath({
     roomId,
-    userId,
+    userId: uploaderId,
     fileName,
   });
+  await assertDiscussionRoomUploadAccess(roomId, uploaderId);
 
   return uploadUriWithStorageRest({
     path,
     uri,
     contentType,
+    fileName,
   });
 }
 

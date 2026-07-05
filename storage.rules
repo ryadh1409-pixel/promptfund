@@ -12,6 +12,26 @@ service firebase.storage {
         && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    function discussionRoom(roomId) {
+      return firestore.get(/databases/(default)/documents/discussionRooms/$(roomId));
+    }
+
+    function isDiscussionRoomParticipant(roomId) {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/discussionRooms/$(roomId))
+        && (
+          discussionRoom(roomId).data.founderId == request.auth.uid
+          || discussionRoom(roomId).data.investorId == request.auth.uid
+          || isAdmin()
+        );
+    }
+
+    function canWriteDiscussionAttachment(roomId, userId) {
+      return isSignedIn()
+        && request.auth.uid == userId
+        && isDiscussionRoomParticipant(roomId);
+    }
+
     function agreementRoom(agreementId) {
       return firestore.get(/databases/(default)/documents/agreementRooms/$(agreementId));
     }
@@ -46,21 +66,14 @@ service firebase.storage {
       allow write: if isSignedIn() && request.auth.uid == userId;
     }
 
-    function isDiscussionRoomParticipant(roomId) {
-      return isSignedIn()
-        && firestore.exists(/databases/(default)/documents/discussionRooms/$(roomId))
-        && (
-          firestore.get(/databases/(default)/documents/discussionRooms/$(roomId)).data.founderId == request.auth.uid
-          || firestore.get(/databases/(default)/documents/discussionRooms/$(roomId)).data.investorId == request.auth.uid
-          || isAdmin()
-        );
-    }
-
+    // discussion-attachments/{roomId}/{userId}/{fileName}
+    // roomId must match discussionRooms/{roomId} in Firestore.
+    // userId must match request.auth.uid (uploader owns their folder).
     match /discussion-attachments/{roomId}/{userId}/{fileName} {
       allow read: if isDiscussionRoomParticipant(roomId);
-      allow write: if isSignedIn()
-        && request.auth.uid == userId
-        && isDiscussionRoomParticipant(roomId);
+      allow create: if canWriteDiscussionAttachment(roomId, userId);
+      allow update: if canWriteDiscussionAttachment(roomId, userId);
+      allow delete: if false;
     }
 
     match /{allPaths=**} {
