@@ -232,23 +232,3 @@ function formatContactLines(founderProfile: User | null, agreement: InvestmentAg
     founderProfile.website ? `Website: ${founderProfile.website}` : null,
   ].filter((line): line is string => Boolean(line));
 }
-
-export function getStepperSymbol(completed: boolean, isCurrent: boolean) {
-  if (completed) return '✓';
-  if (isCurrent) return '●';
-  return '○';
-}
-
-export function getStepperItems(pipeline: DealPipeline) {
-  return pipelineSteps.map((step) => {
-    const { completed, isCurrent } = getPipelineStepDisplayState(pipeline, step.key);
-
-    return {
-      key: step.key,
-      label: step.label,
-      completed,
-      isCurrent,
-      symbol: getStepperSymbol(completed, isCurrent),
-    };
-  });
-}

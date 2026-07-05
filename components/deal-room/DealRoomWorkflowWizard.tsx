@@ -67,6 +67,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingBottom: 4,
     paddingHorizontal: spacing.sm,
+    paddingTop: 2,
   },
   completedBlock: {
     gap: 2,

@@ -15,7 +15,6 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DealRoomHeader } from '@/components/deal-room/DealRoomHeader';
-import { DealRoomProgressStepper } from '@/components/deal-room/DealRoomProgressStepper';
 import { DealRoomWorkflowWizard } from '@/components/deal-room/DealRoomWorkflowWizard';
 import { InvestmentChatPanel } from '@/components/investment-chat/InvestmentChatPanel';
 import { BlockUserControl } from '@/components/safety/BlockUserControl';
@@ -333,7 +332,6 @@ export default function DiscussionRoomScreen() {
           <View style={styles.dealRoom}>
             <View style={styles.workflowZone}>
               <DealRoomHeader startupName={room.startupName} onSafetyPress={() => setIsSafetyVisible(true)} />
-              <DealRoomProgressStepper pipeline={pipeline} />
               <DealRoomWorkflowWizard
                 steps={workflowSteps}
                 isSaving={isWorkflowSaving}
