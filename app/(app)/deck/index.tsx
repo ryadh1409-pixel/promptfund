@@ -22,6 +22,7 @@ import {
   type DealPipeline,
   type OpportunityMap,
 } from '@/utils/investmentPipeline';
+import { getPipelineStepDisplayState } from '@/utils/dealRoom';
 import { getActiveRole } from '@/utils/roles';
 import { safeCurrency, safePercent } from '@/utils/safeFormat';
 
@@ -408,8 +409,7 @@ const DealPipelineCard = memo(function DealPipelineCard({
 
       <View style={styles.timeline}>
         {pipelineSteps.map((step, index) => {
-          const isCompleted = pipeline.completedSteps[step.key];
-          const isCurrent = pipeline.currentStep === step.key;
+          const { completed: isCompleted, isCurrent } = getPipelineStepDisplayState(pipeline, step.key);
 
           return (
             <View key={step.key} style={styles.timelineRow}>

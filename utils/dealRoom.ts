@@ -3,6 +3,21 @@ import type { User } from '@/types/User';
 import type { DealPipeline, PipelineStepKey } from '@/utils/investmentPipeline';
 import { pipelineSteps } from '@/utils/investmentPipeline';
 
+export function areAllPriorPipelineStepsComplete(pipeline: DealPipeline) {
+  return pipelineSteps
+    .slice(0, -1)
+    .every((prior) => pipeline.completedSteps[prior.key]);
+}
+
+export function getPipelineStepDisplayState(pipeline: DealPipeline, stepKey: PipelineStepKey) {
+  const allPriorComplete = areAllPriorPipelineStepsComplete(pipeline);
+  const completed = pipeline.completedSteps[stepKey]
+    || (stepKey === 'completed' && allPriorComplete);
+  const isCurrent = !completed && pipeline.currentStep === stepKey;
+
+  return { completed, isCurrent };
+}
+
 export type WorkflowAction =
   | 'mark_ready'
   | 'sign_agreement'
@@ -35,11 +50,20 @@ export function getWorkflowSteps({
   participantRole: 'founder' | 'investor' | null;
   founderProfile: User | null;
 }): WorkflowStepView[] {
-  const currentKey = pipeline.currentStep === 'completed' ? 'completed' : pipeline.currentStep;
+  const allPriorComplete = areAllPriorPipelineStepsComplete(pipeline);
 
   return pipelineSteps.map((step) => {
-    const completed = pipeline.completedSteps[step.key];
-    const isActive = step.key === currentKey;
+    const completed = pipeline.completedSteps[step.key]
+      || (step.key === 'completed' && allPriorComplete);
+
+    if (step.key === 'completed') {
+      return completed
+        ? { key: step.key, label: step.label, status: 'completed' }
+        : { key: step.key, label: step.label, status: 'upcoming' };
+    }
+
+    const currentKey = pipeline.currentStep === 'completed' ? null : pipeline.currentStep;
+    const isActive = currentKey !== null && step.key === currentKey;
     const status: WorkflowStepView['status'] = completed
       ? 'completed'
       : isActive
@@ -216,11 +240,15 @@ export function getStepperSymbol(completed: boolean, isCurrent: boolean) {
 }
 
 export function getStepperItems(pipeline: DealPipeline) {
-  return pipelineSteps.map((step) => ({
-    key: step.key,
-    label: step.label,
-    completed: pipeline.completedSteps[step.key],
-    isCurrent: pipeline.currentStep === step.key,
-    symbol: getStepperSymbol(pipeline.completedSteps[step.key], pipeline.currentStep === step.key),
-  }));
+  return pipelineSteps.map((step) => {
+    const { completed, isCurrent } = getPipelineStepDisplayState(pipeline, step.key);
+
+    return {
+      key: step.key,
+      label: step.label,
+      completed,
+      isCurrent,
+      symbol: getStepperSymbol(completed, isCurrent),
+    };
+  });
 }
