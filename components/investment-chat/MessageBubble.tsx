@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
   },
   meta: {
     color: colors.subtle,
-    fontSize: 11,
+    fontSize: 10,
   },
   status: {
     color: colors.accent,
@@ -277,9 +277,9 @@ const styles = StyleSheet.create({
   },
   image: {
     borderRadius: radii.sm,
-    height: 180,
+    height: 205,
     marginTop: spacing.xs,
-    width: 220,
+    width: 252,
   },
   documentCard: {
     backgroundColor: colors.panel,

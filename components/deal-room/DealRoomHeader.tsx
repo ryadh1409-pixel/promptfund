@@ -30,13 +30,11 @@ export function DealRoomHeader({ startupName, onSafetyPress }: DealRoomHeaderPro
 const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
-    borderBottomColor: 'rgba(216, 201, 163, 0.12)',
-    borderBottomWidth: 1,
     flexDirection: 'row',
     gap: spacing.xs,
-    paddingBottom: 6,
+    paddingBottom: 4,
     paddingHorizontal: spacing.sm,
-    paddingTop: 2,
+    paddingTop: 0,
   },
   backButton: {
     paddingVertical: 2,
@@ -59,8 +57,9 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: 17,
+    fontSize: 20,
     fontWeight: '800',
+    lineHeight: 24,
   },
   settingsButton: {
     alignItems: 'center',

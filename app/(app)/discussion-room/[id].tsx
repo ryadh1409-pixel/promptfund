@@ -505,9 +505,14 @@ const styles = StyleSheet.create({
   },
   workflowZone: {
     flexShrink: 0,
+    gap: spacing.xs,
+    paddingBottom: spacing.sm,
   },
   chatPanel: {
+    borderTopColor: 'rgba(216, 201, 163, 0.14)',
+    borderTopWidth: 1,
     flex: 1,
+    marginTop: spacing.xs,
     minHeight: 0,
   },
   centeredState: {

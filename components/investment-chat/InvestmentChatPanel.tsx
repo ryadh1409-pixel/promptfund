@@ -281,17 +281,17 @@ export function InvestmentChatPanel({
   }, [currentUser.id, handleLongPress, handleOpenUrl, onNotice, participantRole]);
 
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, embedded ? styles.containerEmbedded : null, style]}>
       {embedded ? (
         <View style={styles.embeddedHeader}>
-          <Text style={styles.embeddedTitle}>Chat</Text>
+          <Text style={styles.embeddedTitle}>Investment Chat</Text>
           {unreadCount > 0 ? <Text style={styles.embeddedUnread}>{unreadCount} unread</Text> : null}
         </View>
       ) : (
         <ChatHeader unreadCount={unreadCount} onSettingsPress={onSettingsPress} />
       )}
 
-      <View style={styles.messagesArea}>
+      <View style={[styles.messagesArea, embedded ? styles.messagesAreaEmbedded : null]}>
         {listData.length === 0 ? (
           <ChatEmptyState />
         ) : (
@@ -323,16 +323,19 @@ export function InvestmentChatPanel({
       {blockStatus.blockedMe ? <Text style={styles.blocked}>This user has blocked you.</Text> : null}
 
       {canParticipate ? (
-        <ChatComposer
-          roomId={room.id}
-          userId={currentUser.id}
-          value={draft}
-          bottomInset={bottomInset}
-          disabled={isBlocked}
-          onChangeText={setDraft}
-          onSend={handleSend}
-          onError={onNotice}
-        />
+        <View style={embedded ? styles.composerWrap : null}>
+          <ChatComposer
+            roomId={room.id}
+            userId={currentUser.id}
+            value={draft}
+            bottomInset={bottomInset}
+            disabled={isBlocked}
+            embedded={embedded}
+            onChangeText={setDraft}
+            onSend={handleSend}
+            onError={onNotice}
+          />
+        </View>
       ) : null}
 
       <Modal visible={isEditModalVisible} transparent animationType="fade">
@@ -366,19 +369,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     flex: 1,
   },
+  containerEmbedded: {
+    backgroundColor: colors.panelMuted,
+  },
   embeddedHeader: {
     alignItems: 'center',
-    borderBottomColor: 'rgba(216, 201, 163, 0.1)',
+    backgroundColor: colors.panel,
+    borderBottomColor: 'rgba(216, 201, 163, 0.16)',
     borderBottomWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   embeddedTitle: {
     color: colors.text,
-    fontSize: 13,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '700',
   },
   embeddedUnread: {
     color: colors.accent,
@@ -390,9 +397,18 @@ const styles = StyleSheet.create({
     minHeight: 0,
     paddingHorizontal: spacing.sm,
   },
+  messagesAreaEmbedded: {
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.md,
+  },
+  composerWrap: {
+    backgroundColor: colors.panel,
+    paddingTop: spacing.sm,
+  },
   listContent: {
     gap: 4,
-    paddingVertical: 6,
+    paddingBottom: 4,
+    paddingTop: 8,
   },
   dateWrap: {
     alignItems: 'center',

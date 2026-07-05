@@ -35,6 +35,7 @@ type ChatComposerProps = {
   value: string;
   disabled?: boolean;
   isUploading?: boolean;
+  embedded?: boolean;
   bottomInset?: number;
   onChangeText: (value: string) => void;
   onSend: (payload: { text: string; attachments: ChatAttachment[] }) => Promise<void>;
@@ -74,6 +75,7 @@ export function ChatComposer({
   value,
   disabled = false,
   isUploading = false,
+  embedded = false,
   bottomInset = 0,
   onChangeText,
   onSend,
@@ -221,7 +223,11 @@ export function ChatComposer({
   }, [canSend, onChangeText, onError, pendingAttachments, submitMessage, value]);
 
   return (
-    <View style={[styles.footer, { paddingBottom: Math.max(bottomInset, 6) }]}>
+    <View style={[
+      styles.footer,
+      embedded ? styles.footerEmbedded : null,
+      { paddingBottom: Math.max(bottomInset, embedded ? 8 : 6) },
+    ]}>
       <Text style={styles.compliance}>
         Messages are encrypted in transit. Authorized PromptFund administrators may review conversations for fraud prevention, compliance and dispute resolution.
       </Text>
@@ -294,9 +300,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.panel,
     borderTopColor: 'rgba(216, 201, 163, 0.22)',
     borderTopWidth: 1,
-    gap: 6,
+    gap: 8,
     paddingHorizontal: spacing.sm,
-    paddingTop: 6,
+    paddingTop: 8,
+  },
+  footerEmbedded: {
+    borderTopColor: 'rgba(216, 201, 163, 0.16)',
+    gap: 10,
+    paddingHorizontal: spacing.md,
+    paddingTop: 14,
   },
   compliance: {
     color: colors.subtle,
