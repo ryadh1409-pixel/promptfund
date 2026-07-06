@@ -42,17 +42,20 @@ export const userService = {
 
     try {
       console.info('[PromptFund UserService] createUser start', { uid: userId, path });
-      const user = await firestoreAdapter.setWithId<Omit<User, 'id'>>('users', userId, {
-        ...input,
+      const { stack, ...profileFields } = input;
+      const payload = {
+        ...profileFields,
         displayName: input.displayName ?? input.name,
         username: input.username ?? input.handle,
         status: input.status ?? 'active',
         verified: input.verified ?? false,
         memberSince: input.memberSince ?? new Date().toISOString(),
         trustScore: input.trustScore ?? 50,
-      });
+        ...(stack !== undefined ? { stack } : {}),
+      } as Omit<User, 'id'>;
+      const user = await firestoreAdapter.setWithId<Omit<User, 'id'>>('users', userId, payload);
       console.info('[PromptFund UserService] createUser success', { uid: userId, path });
-      return user;
+      return { ...user, stack: user.stack ?? [] };
     } catch (error) {
       console.error('[PromptFund UserService] createUser failure', { uid: userId, path, error });
       throw error;

@@ -41,8 +41,9 @@ export type User = {
   updatedAt?: string;
 };
 
-export type CreateUserInput = Omit<User, 'id' | 'trustScore'> & {
+export type CreateUserInput = Omit<User, 'id' | 'trustScore' | 'stack'> & {
   trustScore?: number;
+  stack?: string[];
 };
 
 export type UpdateUserInput = Partial<Omit<User, 'id'>>;

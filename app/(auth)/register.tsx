@@ -16,7 +16,6 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [bio, setBio] = useState('');
   const [location, setLocation] = useState('');
-  const [stack, setStack] = useState('');
   const [profilePhotoUri, setProfilePhotoUri] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [isImagePickerUnavailable, setIsImagePickerUnavailable] = useState(false);
@@ -108,10 +107,6 @@ export default function RegisterScreen() {
       profilePhotoUri: profilePhotoUri ?? undefined,
       bio: bio.trim(),
       location: location.trim(),
-      stack: stack
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean),
     });
   }
 
@@ -190,13 +185,6 @@ export default function RegisterScreen() {
               style={[styles.input, styles.textArea]}
               value={bio}
               onChangeText={setBio}
-            />
-            <TextInput
-              placeholder="Stack, interests, or sectors, separated by commas"
-              placeholderTextColor={colors.subtle}
-              style={styles.input}
-              value={stack}
-              onChangeText={setStack}
             />
         </>
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
