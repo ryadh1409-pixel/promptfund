@@ -1,8 +1,8 @@
-import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, Platform, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { colors, radii, spacing } from '@/constants/theme';
+import { spacing } from '@/constants/theme';
 import type { UserRole } from '@/types/User';
-import { getRoleBadgeLabel } from '@/utils/roles';
+import { getRoleTitle } from '@/utils/roles';
 
 type IdentityCardProps = {
   fullName: string;
@@ -17,27 +17,43 @@ type IdentityCardProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-function formatMemberSince(value: string | undefined) {
-  if (!value) {
-    return 'Member Since Recently';
-  }
+const CARD = {
+  background: '#F8F5EE',
+  border: '#A62323',
+  text: '#1F1F1F',
+  secondary: '#666666',
+  suit: '#A62323',
+};
 
-  return `Member Since ${new Intl.DateTimeFormat('en', {
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(value))}`;
+const serifFont = Platform.select({
+  ios: 'Georgia',
+  android: 'serif',
+  default: 'Georgia',
+});
+
+function CornerMark({ compact }: { compact: boolean }) {
+  return (
+    <View style={styles.cornerMark}>
+      <Text style={[styles.cornerRank, compact ? styles.cornerRankCompact : null]}>A</Text>
+      <Text style={[styles.cornerSuit, compact ? styles.cornerSuitCompact : null]}>♥</Text>
+    </View>
+  );
 }
 
-function getRoleTitle(role: UserRole) {
-  if (role === 'entrepreneur') {
-    return 'ENTREPRENEUR';
-  }
+function CardOrnament({ compact }: { compact: boolean }) {
+  return (
+    <View style={[styles.ornament, compact ? styles.ornamentCompact : null]}>
+      <View style={styles.ornamentLine} />
+      <Text style={[styles.ornamentHeart, compact ? styles.ornamentHeartCompact : null]}>♥</Text>
+      <View style={styles.ornamentLine} />
+    </View>
+  );
+}
 
-  if (role === 'angel_investor') {
-    return 'ANGEL INVESTOR';
-  }
-
-  return 'ADMIN';
+function formatUsername(username: string) {
+  const trimmed = username.trim();
+  if (!trimmed) return '';
+  return trimmed.startsWith('@') ? trimmed : `@${trimmed}`;
 }
 
 export function IdentityCard({
@@ -47,153 +63,250 @@ export function IdentityCard({
   avatar,
   photoURL,
   location,
-  bio,
-  memberSince,
   compact = false,
   style,
 }: IdentityCardProps) {
-  const roleTone = role === 'entrepreneur' ? styles.blueBadge : styles.goldBadge;
+  const avatarSize = compact ? 72 : 108;
+  const roleLabel = getRoleTitle(role);
 
   return (
     <View style={[styles.card, compact ? styles.compactCard : null, style]}>
-      <View style={styles.topAccent} />
-      <View style={styles.header}>
-        {photoURL ? (
-          <Image source={{ uri: photoURL }} style={compact ? styles.avatarCompact : styles.avatar} />
-        ) : (
-          <View style={[compact ? styles.avatarCompact : styles.avatar, styles.avatarFallback]}>
-            <Text style={styles.avatarText}>{avatar}</Text>
-          </View>
-        )}
-        <View style={styles.identity}>
-          <Text style={styles.roleTitle}>{getRoleTitle(role)}</Text>
-          <Text style={styles.name}>{fullName}</Text>
-          <Text style={styles.username}>Username: {username}</Text>
+      <View style={styles.textureOverlay} pointerEvents="none" />
+
+      <View style={styles.topCorner}>
+        <CornerMark compact={compact} />
+      </View>
+      <View style={styles.bottomCorner}>
+        <CornerMark compact={compact} />
+      </View>
+
+      <View style={[styles.content, compact ? styles.contentCompact : null]}>
+        <CardOrnament compact={compact} />
+
+        <View style={[styles.centerBlock, compact ? styles.centerBlockCompact : null]}>
+          {photoURL ? (
+            <Image
+              source={{ uri: photoURL }}
+              style={[
+                styles.avatar,
+                {
+                  width: avatarSize,
+                  height: avatarSize,
+                  borderRadius: avatarSize / 2,
+                },
+              ]}
+            />
+          ) : (
+            <View
+              style={[
+                styles.avatar,
+                styles.avatarFallback,
+                {
+                  width: avatarSize,
+                  height: avatarSize,
+                  borderRadius: avatarSize / 2,
+                },
+              ]}
+            >
+              <Text style={[styles.avatarText, compact ? styles.avatarTextCompact : null]}>{avatar}</Text>
+            </View>
+          )}
+
+          <Text style={[styles.name, compact ? styles.nameCompact : null]} numberOfLines={2}>
+            {fullName}
+          </Text>
+
+          {username ? (
+            <Text style={[styles.username, compact ? styles.usernameCompact : null]} numberOfLines={1}>
+              {formatUsername(username)}
+            </Text>
+          ) : null}
+
+          {location ? (
+            <Text style={[styles.location, compact ? styles.locationCompact : null]} numberOfLines={1}>
+              {location}
+            </Text>
+          ) : null}
+
+          <Text style={[styles.role, compact ? styles.roleCompact : null]} numberOfLines={1}>
+            {roleLabel}
+          </Text>
         </View>
+
+        <CardOrnament compact={compact} />
       </View>
-      <View style={[styles.badge, roleTone]}>
-        <Text style={styles.badgeText}>{getRoleBadgeLabel(role)}</Text>
-      </View>
-      {location ? <Text style={styles.location}>{location}</Text> : null}
-      {bio ? <Text style={styles.bio}>{bio}</Text> : null}
-      <Text style={styles.memberSince}>{formatMemberSince(memberSince)}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    overflow: 'hidden',
-    gap: spacing.md,
-    borderWidth: 1,
-    borderColor: 'rgba(200, 162, 74, 0.46)',
+    alignSelf: 'center',
+    aspectRatio: 0.714,
+    backgroundColor: CARD.background,
+    borderColor: CARD.border,
     borderRadius: 30,
-    backgroundColor: '#090909',
-    padding: spacing.xl,
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.34,
-    shadowRadius: 28,
-    elevation: 10,
+    borderWidth: 1.5,
+    maxWidth: 340,
+    overflow: 'hidden',
+    padding: spacing.lg,
+    width: '100%',
   },
   compactCard: {
-    padding: spacing.lg,
+    maxWidth: 280,
+    padding: spacing.md,
   },
-  topAccent: {
+  textureOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    opacity: 0.35,
+  },
+  topCorner: {
+    left: spacing.md,
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 88,
-    backgroundColor: 'rgba(200, 162, 74, 0.12)',
+    top: spacing.sm,
+    zIndex: 2,
   },
-  header: {
+  bottomCorner: {
+    bottom: spacing.sm,
+    position: 'absolute',
+    right: spacing.md,
+    transform: [{ rotate: '180deg' }],
+    zIndex: 2,
+  },
+  cornerMark: {
+    alignItems: 'center',
+    gap: 1,
+  },
+  cornerRank: {
+    color: CARD.suit,
+    fontFamily: serifFont,
+    fontSize: 28,
+    fontWeight: '700',
+    lineHeight: 30,
+  },
+  cornerRankCompact: {
+    fontSize: 22,
+    lineHeight: 24,
+  },
+  cornerSuit: {
+    color: CARD.suit,
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  cornerSuitCompact: {
+    fontSize: 14,
+    lineHeight: 14,
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  contentCompact: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.sm,
+  },
+  ornament: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: 10,
+    paddingHorizontal: spacing.md,
+  },
+  ornamentCompact: {
+    gap: 8,
+    paddingHorizontal: spacing.sm,
+  },
+  ornamentLine: {
+    backgroundColor: 'rgba(166, 35, 35, 0.22)',
+    flex: 1,
+    height: 1,
+  },
+  ornamentHeart: {
+    color: CARD.suit,
+    fontSize: 11,
+    lineHeight: 12,
+  },
+  ornamentHeartCompact: {
+    fontSize: 9,
+    lineHeight: 10,
+  },
+  centerBlock: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 10,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  centerBlockCompact: {
+    gap: 7,
+    paddingVertical: spacing.xs,
   },
   avatar: {
-    width: 104,
-    height: 104,
-    borderWidth: 2,
-    borderColor: colors.luxuryGold,
-    borderRadius: 52,
-  },
-  avatarCompact: {
-    width: 72,
-    height: 72,
-    borderWidth: 1,
-    borderColor: colors.luxuryGold,
-    borderRadius: 36,
+    borderColor: CARD.border,
+    borderWidth: 1.5,
   },
   avatarFallback: {
     alignItems: 'center',
+    backgroundColor: 'rgba(166, 35, 35, 0.08)',
     justifyContent: 'center',
-    backgroundColor: '#121212',
   },
   avatarText: {
-    color: colors.luxuryGold,
+    color: CARD.suit,
+    fontFamily: serifFont,
+    fontSize: 34,
+    fontWeight: '700',
+  },
+  avatarTextCompact: {
     fontSize: 24,
-    fontWeight: '900',
-  },
-  identity: {
-    flex: 1,
-    gap: 5,
-  },
-  roleTitle: {
-    color: colors.luxuryGold,
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1.6,
   },
   name: {
-    color: colors.text,
-    fontSize: 26,
-    fontWeight: '900',
-    letterSpacing: -0.5,
+    color: CARD.text,
+    fontFamily: serifFont,
+    fontSize: 30,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    lineHeight: 36,
+    textAlign: 'center',
+  },
+  nameCompact: {
+    fontSize: 24,
+    lineHeight: 28,
   },
   username: {
-    color: colors.muted,
-    fontSize: 14,
-    fontWeight: '800',
+    color: CARD.secondary,
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+    textAlign: 'center',
   },
-  badge: {
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  goldBadge: {
-    borderColor: 'rgba(200, 162, 74, 0.56)',
-    backgroundColor: 'rgba(200, 162, 74, 0.16)',
-  },
-  blueBadge: {
-    borderColor: 'rgba(64, 156, 255, 0.56)',
-    backgroundColor: 'rgba(64, 156, 255, 0.16)',
-  },
-  badgeText: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+  usernameCompact: {
+    fontSize: 13,
   },
   location: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '800',
+    color: CARD.secondary,
+    fontSize: 14,
+    fontWeight: '400',
+    textAlign: 'center',
   },
-  bio: {
-    color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  memberSince: {
-    color: colors.subtle,
+  locationCompact: {
     fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 0.8,
+  },
+  role: {
+    color: CARD.text,
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 1.1,
+    marginTop: 4,
+    textAlign: 'center',
     textTransform: 'uppercase',
+  },
+  roleCompact: {
+    fontSize: 11,
+    letterSpacing: 0.9,
+    marginTop: 2,
   },
 });

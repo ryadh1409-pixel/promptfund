@@ -37,7 +37,7 @@ export default function UserProfileScreen() {
       title={profile.displayName ?? profile.name}
       subtitle={isEntrepreneur ? 'Founder identity, startup controls, and investor readiness.' : 'Professional investment identity and account controls.'}
     >
-      <Card style={styles.heroCard}>
+      <View style={styles.cardStage}>
         <IdentityCard
           fullName={profile.displayName ?? profile.name}
           username={profile.username ?? profile.handle}
@@ -48,10 +48,10 @@ export default function UserProfileScreen() {
           bio={profile.bio || 'PromptFund member building a verified investment record.'}
           memberSince={profile.memberSince}
         />
-        <View style={ui.wrap}>
-          <PrimaryLink href="/profile/edit" label="Edit profile" />
-        </View>
-      </Card>
+      </View>
+      <View style={ui.wrap}>
+        <PrimaryLink href="/profile/edit" label="Edit profile" />
+      </View>
       <Card>
         <Text style={styles.sectionTitle}>Change Role</Text>
         <Text style={styles.settingsCopy}>Current role: {activeRole === 'founder' ? 'Founder' : 'Angel Investor'}</Text>
@@ -158,8 +158,9 @@ function SupportSection() {
 }
 
 const styles = StyleSheet.create({
-  heroCard: {
-    borderColor: 'rgba(200, 162, 74, 0.42)',
+  cardStage: {
+    alignItems: 'center',
+    width: '100%',
   },
   sectionTitle: {
     color: colors.text,
