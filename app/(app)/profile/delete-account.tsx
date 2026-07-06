@@ -9,6 +9,45 @@ import { firebaseAuth } from '@/firebase/auth';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { userService } from '@/services/userService';
 
+function getFirebaseErrorDetails(error: unknown) {
+  if (error && typeof error === 'object') {
+    const record = error as { code?: string; message?: string };
+    return {
+      code: record.code ?? 'unknown',
+      message: record.message ?? String(error),
+    };
+  }
+
+  return {
+    code: 'unknown',
+    message: String(error),
+  };
+}
+
+async function runDeleteAccountOperation<T>(
+  operation: string,
+  path: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  console.info('[PromptFund DeleteAccount]', { operation, path, status: 'start' });
+  try {
+    const result = await fn();
+    console.info('[PromptFund DeleteAccount]', { operation, path, status: 'success', success: true });
+    return result;
+  } catch (error) {
+    const { code, message } = getFirebaseErrorDetails(error);
+    console.error('[PromptFund DeleteAccount]', {
+      operation,
+      path,
+      status: 'error',
+      success: false,
+      errorCode: code,
+      errorMessage: message,
+    });
+    throw error;
+  }
+}
+
 export default function DeleteAccountScreen() {
   const router = useRouter();
   const { authUser } = useAuth();
@@ -27,9 +66,17 @@ export default function DeleteAccountScreen() {
     setError(null);
 
     try {
-      await firebaseAuth.reauthenticate({ email: email.trim(), password });
-      await userService.deleteProfile(authUser.uid);
-      await firebaseAuth.deleteCurrentUser();
+      await runDeleteAccountOperation(
+        'reauthenticateWithCredential',
+        `auth://${email.trim()}`,
+        () => firebaseAuth.reauthenticate({ email: email.trim(), password }),
+      );
+      await userService.deleteAccount(authUser.uid);
+      await runDeleteAccountOperation(
+        'deleteUser',
+        `auth://${authUser.uid}`,
+        () => firebaseAuth.deleteCurrentUser(),
+      );
       router.replace('/register');
     } catch (deleteError) {
       setError(getFriendlyErrorMessage(deleteError));

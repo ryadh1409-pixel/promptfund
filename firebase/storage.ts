@@ -389,12 +389,44 @@ export async function uploadSupportScreenshot({
 }
 
 export async function deleteUserProfilePhoto(userId: string) {
+  const path = getUserProfilePhotoPath(userId);
+  console.info('[PromptFund DeleteAccount]', { operation: 'deleteObject', path: `storage://${path}`, status: 'start' });
   try {
     await withFriendlyErrors(async () => {
-      await deleteObject(ref(getPromptFundStorage(), getUserProfilePhotoPath(userId)));
+      await deleteObject(ref(getPromptFundStorage(), path));
+    });
+    console.info('[PromptFund DeleteAccount]', {
+      operation: 'deleteObject',
+      path: `storage://${path}`,
+      status: 'success',
+      success: true,
     });
   } catch (error) {
-    // Missing profile photos should not block account deletion.
-    console.info('[PromptFund Storage] profile photo delete skipped', { userId, error });
+    const code = error && typeof error === 'object' && 'code' in error
+      ? String((error as { code: string }).code)
+      : 'unknown';
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (code === 'storage/object-not-found') {
+      console.info('[PromptFund DeleteAccount]', {
+        operation: 'deleteObject',
+        path: `storage://${path}`,
+        status: 'skipped',
+        success: true,
+        errorCode: code,
+        errorMessage: message,
+      });
+      return;
+    }
+
+    console.error('[PromptFund DeleteAccount]', {
+      operation: 'deleteObject',
+      path: `storage://${path}`,
+      status: 'error',
+      success: false,
+      errorCode: code,
+      errorMessage: message,
+    });
+    throw error;
   }
 }

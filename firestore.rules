@@ -364,7 +364,7 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.auth.uid == userId;
       allow update: if isAdmin() || (request.auth != null && request.auth.uid == userId);
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
 
     match /projects/{projectId} {

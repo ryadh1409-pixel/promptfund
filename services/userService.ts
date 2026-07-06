@@ -28,6 +28,45 @@ function blockRole(profile: Pick<User, 'activeRole' | 'roles' | 'role'>): 'Found
   return getRoleTitle(profile.activeRole ?? profile.roles?.[0] ?? profile.role) === 'Founder' ? 'Founder' : 'Angel Investor';
 }
 
+function getFirebaseErrorDetails(error: unknown) {
+  if (error && typeof error === 'object') {
+    const record = error as { code?: string; message?: string };
+    return {
+      code: record.code ?? 'unknown',
+      message: record.message ?? String(error),
+    };
+  }
+
+  return {
+    code: 'unknown',
+    message: String(error),
+  };
+}
+
+async function runDeleteAccountOperation<T>(
+  operation: string,
+  path: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  console.info('[PromptFund DeleteAccount]', { operation, path, status: 'start' });
+  try {
+    const result = await fn();
+    console.info('[PromptFund DeleteAccount]', { operation, path, status: 'success', success: true });
+    return result;
+  } catch (error) {
+    const { code, message } = getFirebaseErrorDetails(error);
+    console.error('[PromptFund DeleteAccount]', {
+      operation,
+      path,
+      status: 'error',
+      success: false,
+      errorCode: code,
+      errorMessage: message,
+    });
+    throw error;
+  }
+}
+
 export const userService = {
   async listUsers(): Promise<User[]> {
     return firestoreAdapter.list<User>('users');
@@ -92,9 +131,17 @@ export const userService = {
     return upload.downloadUrl;
   },
 
-  async deleteProfile(userId: string): Promise<void> {
+  async deleteAccount(userId: string): Promise<void> {
     await deleteUserProfilePhoto(userId);
-    await firestoreAdapter.deleteById('users', userId);
+    await runDeleteAccountOperation(
+      'deleteDoc',
+      `users/${userId}`,
+      () => firestoreAdapter.deleteById('users', userId),
+    );
+  },
+
+  async deleteProfile(userId: string): Promise<void> {
+    await this.deleteAccount(userId);
   },
 
   async blockUser({
