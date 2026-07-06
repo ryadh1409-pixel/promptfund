@@ -1,5 +1,11 @@
-import { Image, Platform, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import {
+  PLAYING_CARD_THEME,
+  PlayingCardFrame,
+  PlayingCardOrnament,
+  playingCardSerifFont,
+} from '@/components/cards/PlayingCardDecor';
 import { spacing } from '@/constants/theme';
 import type { UserRole } from '@/types/User';
 import { getRoleTitle } from '@/utils/roles';
@@ -16,39 +22,6 @@ type IdentityCardProps = {
   compact?: boolean;
   style?: StyleProp<ViewStyle>;
 };
-
-const CARD = {
-  background: '#F8F5EE',
-  border: '#A62323',
-  text: '#1F1F1F',
-  secondary: '#666666',
-  suit: '#A62323',
-};
-
-const serifFont = Platform.select({
-  ios: 'Georgia',
-  android: 'serif',
-  default: 'Georgia',
-});
-
-function CornerMark({ compact }: { compact: boolean }) {
-  return (
-    <View style={styles.cornerMark}>
-      <Text style={[styles.cornerRank, compact ? styles.cornerRankCompact : null]}>A</Text>
-      <Text style={[styles.cornerSuit, compact ? styles.cornerSuitCompact : null]}>♥</Text>
-    </View>
-  );
-}
-
-function CardOrnament({ compact }: { compact: boolean }) {
-  return (
-    <View style={[styles.ornament, compact ? styles.ornamentCompact : null]}>
-      <View style={styles.ornamentLine} />
-      <Text style={[styles.ornamentHeart, compact ? styles.ornamentHeartCompact : null]}>♥</Text>
-      <View style={styles.ornamentLine} />
-    </View>
-  );
-}
 
 function formatUsername(username: string) {
   const trimmed = username.trim();
@@ -70,18 +43,9 @@ export function IdentityCard({
   const roleLabel = getRoleTitle(role);
 
   return (
-    <View style={[styles.card, compact ? styles.compactCard : null, style]}>
-      <View style={styles.textureOverlay} pointerEvents="none" />
-
-      <View style={styles.topCorner}>
-        <CornerMark compact={compact} />
-      </View>
-      <View style={styles.bottomCorner}>
-        <CornerMark compact={compact} />
-      </View>
-
+    <PlayingCardFrame compact={compact} style={[styles.card, compact ? styles.compactCard : null, style]}>
       <View style={[styles.content, compact ? styles.contentCompact : null]}>
-        <CardOrnament compact={compact} />
+        <PlayingCardOrnament compact={compact} />
 
         <View style={[styles.centerBlock, compact ? styles.centerBlockCompact : null]}>
           {photoURL ? (
@@ -133,9 +97,9 @@ export function IdentityCard({
           </Text>
         </View>
 
-        <CardOrnament compact={compact} />
+        <PlayingCardOrnament compact={compact} />
       </View>
-    </View>
+    </PlayingCardFrame>
   );
 }
 
@@ -143,61 +107,13 @@ const styles = StyleSheet.create({
   card: {
     alignSelf: 'center',
     aspectRatio: 0.714,
-    backgroundColor: CARD.background,
-    borderColor: CARD.border,
-    borderRadius: 30,
-    borderWidth: 1.5,
     maxWidth: 340,
-    overflow: 'hidden',
     padding: spacing.lg,
     width: '100%',
   },
   compactCard: {
     maxWidth: 280,
     padding: spacing.md,
-  },
-  textureOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
-    opacity: 0.35,
-  },
-  topCorner: {
-    left: spacing.md,
-    position: 'absolute',
-    top: spacing.sm,
-    zIndex: 2,
-  },
-  bottomCorner: {
-    bottom: spacing.sm,
-    position: 'absolute',
-    right: spacing.md,
-    transform: [{ rotate: '180deg' }],
-    zIndex: 2,
-  },
-  cornerMark: {
-    alignItems: 'center',
-    gap: 1,
-  },
-  cornerRank: {
-    color: CARD.suit,
-    fontFamily: serifFont,
-    fontSize: 28,
-    fontWeight: '700',
-    lineHeight: 30,
-  },
-  cornerRankCompact: {
-    fontSize: 22,
-    lineHeight: 24,
-  },
-  cornerSuit: {
-    color: CARD.suit,
-    fontSize: 18,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
-  cornerSuitCompact: {
-    fontSize: 14,
-    lineHeight: 14,
   },
   content: {
     flex: 1,
@@ -208,30 +124,6 @@ const styles = StyleSheet.create({
   contentCompact: {
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
-  },
-  ornament: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: spacing.md,
-  },
-  ornamentCompact: {
-    gap: 8,
-    paddingHorizontal: spacing.sm,
-  },
-  ornamentLine: {
-    backgroundColor: 'rgba(166, 35, 35, 0.22)',
-    flex: 1,
-    height: 1,
-  },
-  ornamentHeart: {
-    color: CARD.suit,
-    fontSize: 11,
-    lineHeight: 12,
-  },
-  ornamentHeartCompact: {
-    fontSize: 9,
-    lineHeight: 10,
   },
   centerBlock: {
     alignItems: 'center',
@@ -246,7 +138,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   avatar: {
-    borderColor: CARD.border,
+    borderColor: PLAYING_CARD_THEME.border,
     borderWidth: 1.5,
   },
   avatarFallback: {
@@ -255,8 +147,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarText: {
-    color: CARD.suit,
-    fontFamily: serifFont,
+    color: PLAYING_CARD_THEME.suit,
+    fontFamily: playingCardSerifFont,
     fontSize: 34,
     fontWeight: '700',
   },
@@ -264,8 +156,8 @@ const styles = StyleSheet.create({
     fontSize: 24,
   },
   name: {
-    color: CARD.text,
-    fontFamily: serifFont,
+    color: PLAYING_CARD_THEME.text,
+    fontFamily: playingCardSerifFont,
     fontSize: 30,
     fontWeight: '700',
     letterSpacing: 0.2,
@@ -277,7 +169,7 @@ const styles = StyleSheet.create({
     lineHeight: 28,
   },
   username: {
-    color: CARD.secondary,
+    color: PLAYING_CARD_THEME.secondary,
     fontSize: 15,
     fontWeight: '500',
     letterSpacing: 0.2,
@@ -287,7 +179,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   location: {
-    color: CARD.secondary,
+    color: PLAYING_CARD_THEME.secondary,
     fontSize: 14,
     fontWeight: '400',
     textAlign: 'center',
@@ -296,7 +188,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   role: {
-    color: CARD.text,
+    color: PLAYING_CARD_THEME.text,
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 1.1,

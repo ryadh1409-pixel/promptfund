@@ -1,6 +1,9 @@
 import { memo } from 'react';
 import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import {
+  PlayingCardFrame,
+} from '@/components/cards/PlayingCardDecor';
 import { colors, radii, spacing } from '@/constants/theme';
 import type { Project, StartupCardRank } from '@/types/Project';
 import { safeCurrency } from '@/utils/safeFormat';
@@ -135,14 +138,13 @@ export const StartupPlayingCard = memo(function StartupPlayingCard({
 }) {
   const rank = card.rank ?? 'J';
   const suit = rank === 'A' || rank === 'Q' ? '♥' : '♠';
-  const suitColor = suit === '♥' ? colors.pokerRed : colors.pokerBlack;
   const startupName = card.startupName ?? card.title;
   const founderName = card.founderName ?? 'Founder';
   const shortDescription = card.shortDescription ?? card.description ?? card.shortPitch ?? card.tagline ?? 'Startup opportunity';
   const fundingGoal = card.fundingNeeded ?? card.goalAmount;
 
   return (
-    <View style={[styles.card, compact ? styles.compactCard : null, style]}>
+    <PlayingCardFrame compact={compact} style={[styles.card, compact ? styles.compactCard : null, style]}>
       <View style={styles.innerBorder}>
         {showBack ? (
           <View style={styles.backContent}>
@@ -182,36 +184,15 @@ export const StartupPlayingCard = memo(function StartupPlayingCard({
           </>
         )}
       </View>
-      <View style={styles.cornerAccent}>
-        <Corner rank={rank} suit={suit} color={suitColor} />
-      </View>
-    </View>
+    </PlayingCardFrame>
   );
 });
-
-function Corner({ rank, suit, color }: { rank: string; suit: string; color: string }) {
-  return (
-    <View style={styles.corner}>
-      <Text style={[styles.cornerRank, { color }]}>{rank}</Text>
-      <Text style={[styles.cornerSuit, { color }]}>{suit}</Text>
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   card: {
     width: '100%',
     aspectRatio: 0.714,
-    borderWidth: 1,
-    borderColor: colors.luxuryGold,
-    borderRadius: 28,
-    backgroundColor: colors.cardIvory,
     padding: spacing.md,
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.28,
-    shadowRadius: 24,
-    elevation: 10,
   },
   compactCard: {
     aspectRatio: 0.714,
@@ -221,33 +202,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'space-between',
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(200, 162, 74, 0.48)',
-    borderRadius: radii.lg,
     padding: spacing.md,
-  },
-  corner: {
-    position: 'absolute',
-    left: spacing.md,
-    top: spacing.sm,
-    zIndex: 3,
-    alignItems: 'center',
-  },
-  cornerRank: {
-    fontSize: 26,
-    fontWeight: '900',
-    lineHeight: 28,
-  },
-  cornerSuit: {
-    fontSize: 18,
-    fontWeight: '900',
-    lineHeight: 18,
-  },
-  cornerAccent: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    transform: [{ rotate: '180deg' }],
   },
   cardHeader: {
     alignItems: 'center',
