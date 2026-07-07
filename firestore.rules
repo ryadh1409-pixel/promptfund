@@ -8,6 +8,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
     }
 
@@ -476,7 +477,14 @@ service cloud.firestore {
           request.resource.data.investorId == request.auth.uid
           || request.resource.data.founderId == request.auth.uid
         );
-      allow read: if isAdmin() || isDiscussionRoomParticipant(roomId);
+      allow read: if isAdmin()
+        || (
+          isSignedIn()
+          && (
+            resource.data.founderId == request.auth.uid
+            || resource.data.investorId == request.auth.uid
+          )
+        );
       allow update: if isDiscussionRoomParticipant(roomId);
       allow delete: if isAdmin();
     }
