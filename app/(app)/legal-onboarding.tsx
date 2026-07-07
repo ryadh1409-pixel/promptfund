@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { LegalDocumentView } from '@/components/legal/LegalDocumentView';
 import { Card, LoadingState, PrimaryButton, Screen } from '@/components/ui/Primitives';
@@ -21,6 +21,31 @@ const onboardingSteps = [
   'Accept',
 ] as const;
 
+function WelcomeOnboardingBody() {
+  return (
+    <Card style={styles.heroCard}>
+      <Text style={styles.heroParagraph}>
+        PromptFund is a networking platform that connects startup founders with angel investors.
+      </Text>
+      <Text style={styles.heroParagraph}>
+        Founders may seek a small initial investment, such as <Text style={styles.heroAccent}>USD $22</Text>, to cover the subscription cost of an AI development tool that helps them build applications, write prompts, and accelerate product development.
+      </Text>
+      <Text style={styles.heroParagraph}>
+        An angel investor may voluntarily provide this funding in exchange for an initial proposed <Text style={styles.heroAccent}>1% equity</Text> interest, subject entirely to private negotiation and mutual agreement between both parties. The proposed percentage is only a starting point and may be negotiated, modified, or rejected by either party.
+      </Text>
+      <Text style={styles.heroParagraph}>
+        PromptFund is not a broker, financial institution, investment advisor, crowdfunding platform, or legal representative. PromptFund does not participate in negotiations, investment decisions, contracts, equity allocation, due diligence, or dispute resolution.
+      </Text>
+      <Text style={styles.heroParagraph}>
+        All funding, payments, equity agreements, contracts, ownership transfers, and financial transactions occur entirely <Text style={styles.heroAccent}>outside the PromptFund platform</Text> and are solely the responsibility of the founder and the investor.
+      </Text>
+      <Text style={styles.heroParagraphLast}>
+        By continuing, you acknowledge that PromptFund merely facilitates introductions between founders and investors and accepts no legal, financial, tax, regulatory, or contractual liability arising from any interaction or agreement between users.
+      </Text>
+    </Card>
+  );
+}
+
 export default function LegalOnboardingScreen() {
   const { authUser, legalVersions, profile, refreshLegalVersions, refreshProfile } = useAuth();
   const [stepIndex, setStepIndex] = useState(0);
@@ -34,14 +59,7 @@ export default function LegalOnboardingScreen() {
 
   const body = useMemo(() => {
     if (step === 'Welcome') {
-      return (
-        <Card style={styles.heroCard}>
-          <Text style={styles.heroTitle}>Welcome to PromptFund</Text>
-          <Text style={styles.heroCopy}>
-            PromptFund connects founders and angel investors through professional startup cards, private investment discussions, and post-investment collaboration tools.
-          </Text>
-        </Card>
-      );
+      return <WelcomeOnboardingBody />;
     }
     if (step === 'Terms') return <LegalDocumentView document={legalDocuments.terms} showUnderstandButton={false} />;
     if (step === 'Privacy') return <LegalDocumentView document={legalDocuments.privacy} showUnderstandButton={false} />;
@@ -103,15 +121,13 @@ export default function LegalOnboardingScreen() {
   }
 
   return (
-    <Screen eyebrow="Legal Onboarding" title={step === 'Welcome' ? 'Welcome' : String(step)} subtitle={`Step ${progressLabel}`}>
+    <Screen eyebrow="Legal Onboarding" title={step === 'Welcome' ? 'Welcome to PromptFund' : String(step)} subtitle={`Step ${progressLabel}`}>
       {notice ? (
         <Card>
           <Text style={styles.notice}>{notice}</Text>
         </Card>
       ) : null}
-      <ScrollView style={styles.documentScroll} nestedScrollEnabled>
-        {body}
-      </ScrollView>
+      <View style={styles.documentBody}>{body}</View>
       <View style={styles.actions}>
         {canGoBack ? <PrimaryButton label="Back" variant="secondary" onPress={() => setStepIndex((current) => Math.max(current - 1, 0))} disabled={isSaving} /> : null}
         <PrimaryButton
@@ -125,11 +141,31 @@ export default function LegalOnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
-  documentScroll: {
-    maxHeight: 520,
+  documentBody: {
+    gap: spacing.md,
   },
   heroCard: {
-    gap: spacing.md,
+    gap: spacing.lg,
+    paddingVertical: spacing.lg,
+  },
+  heroParagraph: {
+    color: colors.muted,
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: 0.15,
+    lineHeight: 26,
+    marginBottom: spacing.sm,
+  },
+  heroParagraphLast: {
+    color: colors.muted,
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: 0.15,
+    lineHeight: 26,
+  },
+  heroAccent: {
+    color: colors.luxuryGold,
+    fontWeight: '700',
   },
   heroTitle: {
     color: colors.text,
