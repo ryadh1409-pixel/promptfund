@@ -2,9 +2,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,11 +10,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DealRoomHeader } from '@/components/deal-room/DealRoomHeader';
 import { DealRoomWorkflowWizard } from '@/components/deal-room/DealRoomWorkflowWizard';
 import { InvestmentChatPanel } from '@/components/investment-chat/InvestmentChatPanel';
+import { AppScreen } from '@/components/layout/AppScreen';
 import { BlockUserControl } from '@/components/safety/BlockUserControl';
 import { LoadingState, PrimaryButton } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
@@ -301,63 +300,57 @@ export default function DiscussionRoomScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
-        style={styles.keyboardAvoiding}
-      >
-        {isLoading ? (
-          <View style={styles.centeredState}>
-            <LoadingState label="Loading Deal Room" />
-          </View>
-        ) : null}
+    <AppScreen keyboardAvoiding horizontalPadding={false} style={styles.safeArea}>
+      {isLoading ? (
+        <View style={styles.centeredState}>
+          <LoadingState label="Loading Deal Room" />
+        </View>
+      ) : null}
 
-        {notice ? (
-          <View style={styles.noticeBanner}>
-            <Text style={styles.noticeText}>{notice}</Text>
-            <Pressable onPress={() => setNotice(null)}>
-              <Text style={styles.noticeDismiss}>Dismiss</Text>
-            </Pressable>
-          </View>
-        ) : null}
+      {notice ? (
+        <View style={styles.noticeBanner}>
+          <Text style={styles.noticeText}>{notice}</Text>
+          <Pressable onPress={() => setNotice(null)}>
+            <Text style={styles.noticeDismiss}>Dismiss</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
-        {!isLoading && !room ? (
-          <View style={styles.centeredState}>
-            <Text style={styles.noticeText}>Deal Room not found.</Text>
-          </View>
-        ) : null}
+      {!isLoading && !room ? (
+        <View style={styles.centeredState}>
+          <Text style={styles.noticeText}>Deal Room not found.</Text>
+        </View>
+      ) : null}
 
-        {room && profile ? (
-          <View style={styles.dealRoom}>
-            <View style={styles.workflowZone}>
-              <DealRoomHeader startupName={room.startupName} onSafetyPress={() => setIsSafetyVisible(true)} />
-              <DealRoomWorkflowWizard
-                steps={workflowSteps}
-                isSaving={isWorkflowSaving}
-                onAction={handleWorkflowAction}
-              />
-            </View>
-
-            <InvestmentChatPanel
-              room={room}
-              embedded
-              currentUser={{
-                id: authUser?.uid ?? profile.id,
-                displayName: profile.displayName,
-                name: profile.name,
-                username: profile.username,
-                handle: profile.handle,
-              }}
-              participantRole={participantRole}
-              blockStatus={blockStatus}
-              bottomInset={insets.bottom}
-              onNotice={setNotice}
-              style={styles.chatPanel}
+      {room && profile ? (
+        <View style={styles.dealRoom}>
+          <View style={styles.workflowZone}>
+            <DealRoomHeader startupName={room.startupName} onSafetyPress={() => setIsSafetyVisible(true)} />
+            <DealRoomWorkflowWizard
+              steps={workflowSteps}
+              isSaving={isWorkflowSaving}
+              onAction={handleWorkflowAction}
             />
           </View>
-        ) : null}
-      </KeyboardAvoidingView>
+
+          <InvestmentChatPanel
+            room={room}
+            embedded
+            currentUser={{
+              id: authUser?.uid ?? profile.id,
+              displayName: profile.displayName,
+              name: profile.name,
+              username: profile.username,
+              handle: profile.handle,
+            }}
+            participantRole={participantRole}
+            blockStatus={blockStatus}
+            bottomInset={insets.bottom}
+            onNotice={setNotice}
+            style={styles.chatPanel}
+          />
+        </View>
+      ) : null}
 
       <SafetyModal
         visible={isSafetyVisible}
@@ -380,7 +373,7 @@ export default function DiscussionRoomScreen() {
         onCancel={() => setIsReportModalVisible(false)}
         onSubmit={handleSubmitReport}
       />
-    </SafeAreaView>
+    </AppScreen>
   );
 }
 
@@ -405,7 +398,7 @@ function SafetyModal({
 }) {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={styles.modalSafeArea} edges={['top', 'left', 'right', 'bottom']}>
+      <AppScreen edges={['top', 'left', 'right', 'bottom']} horizontalPadding={false} style={styles.modalSafeArea}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalHeaderTitle}>Safety & Trust</Text>
           <Pressable onPress={onClose}>
@@ -423,7 +416,7 @@ function SafetyModal({
             showReport
           />
         </ScrollView>
-      </SafeAreaView>
+      </AppScreen>
     </Modal>
   );
 }
@@ -495,10 +488,6 @@ function ReportUserModal({
 const styles = StyleSheet.create({
   safeArea: {
     backgroundColor: colors.background,
-    flex: 1,
-  },
-  keyboardAvoiding: {
-    flex: 1,
   },
   dealRoom: {
     flex: 1,

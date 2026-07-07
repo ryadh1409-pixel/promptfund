@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -11,6 +10,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import { AppScreen } from '@/components/layout/AppScreen';
 import { colors, radii, spacing } from '@/constants/theme';
 
 type ScreenProps = {
@@ -22,13 +22,13 @@ type ScreenProps = {
 
 export function Screen({ eyebrow, title, subtitle, children }: ScreenProps) {
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.screenContent}>
+    <AppScreen scroll horizontalPadding={false} contentContainerStyle={styles.screenContent}>
       <BrandMark />
       {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
       <Text style={styles.title}>{title}</Text>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       {children}
-    </ScrollView>
+    </AppScreen>
   );
 }
 
@@ -195,10 +195,6 @@ export const ui = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
   screenContent: {
     gap: spacing.md,
     padding: spacing.lg,
