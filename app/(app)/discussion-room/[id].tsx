@@ -353,7 +353,6 @@ export default function DiscussionRoomScreen() {
             onNotice={setNotice}
             onReportUser={() => setIsReportModalVisible(true)}
             onConversationDeleted={() => router.back()}
-            onBlocked={() => router.back()}
             style={styles.chatPanel}
           />
         </View>

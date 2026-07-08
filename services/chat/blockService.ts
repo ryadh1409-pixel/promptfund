@@ -1,4 +1,4 @@
-import { doc, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, setDoc } from 'firebase/firestore';
 
 import { blockDocumentId, blockedUserSubcollectionPath } from '@/firebase/chatSafety';
 import { firestoreCollections, getPromptFundFirestore } from '@/firebase/firestore';
@@ -47,11 +47,7 @@ export const chatBlockService = {
 
   async unblockUser(blockerUid: string, blockedUid: string): Promise<void> {
     await userService.unblockUser(blockerUid, blockedUid);
-    await setDoc(
-      doc(getPromptFundFirestore(), blockedUserSubcollectionPath(blockerUid), blockedUid),
-      { removedAt: new Date().toISOString() },
-      { merge: true },
-    );
+    await deleteDoc(doc(getPromptFundFirestore(), blockedUserSubcollectionPath(blockerUid), blockedUid));
   },
 
   getBlockStatus(currentUid: string, targetUid: string): Promise<BlockStatus> {
@@ -60,6 +56,11 @@ export const chatBlockService = {
 
   isBlockedBetween(firstUid: string, secondUid: string): Promise<boolean> {
     return userService.isBlockedBetween(firstUid, secondUid);
+  },
+
+  async isUserBlocked(currentUid: string, targetUid: string): Promise<boolean> {
+    const status = await userService.getBlockStatus(currentUid, targetUid);
+    return status.blockedByMe;
   },
 
   subscribeBlockStatus(

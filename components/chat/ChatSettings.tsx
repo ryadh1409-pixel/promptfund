@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -13,6 +13,7 @@ import { colors, radii, spacing } from '@/constants/theme';
 import { chatBlockService } from '@/services/chat/blockService';
 import { chatMuteService } from '@/services/chat/muteService';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
+import type { BlockStatus } from '@/services/userService';
 import type { DiscussionRoom } from '@/types/InvestmentFlow';
 import type { ChatMessage } from '@/types/InvestmentChat';
 import type { ChatMuteDuration, ChatToastPayload } from '@/types/ChatSafety';
@@ -52,6 +53,10 @@ export function ChatSettings({
 }: ChatSettingsProps) {
   const [isWorking, setIsWorking] = useState(false);
   const [sharedFilesVisible, setSharedFilesVisible] = useState(false);
+  const [blockStatus, setBlockStatus] = useState<BlockStatus>({
+    blockedByMe: false,
+    blockedMe: false,
+  });
 
   const sharedFiles = useMemo(
     () => messages.filter((message) => !message.deleted && !message.deletedAt && (
@@ -63,13 +68,27 @@ export function ChatSettings({
   );
 
   const isMuted = chatMuteService.isConversationMuted(room, currentUser.id);
+  const isBlockedByMe = blockStatus.blockedByMe;
+
+  useEffect(() => {
+    if (!counterparty || !currentUser.id) {
+      setBlockStatus({ blockedByMe: false, blockedMe: false });
+      return undefined;
+    }
+
+    return chatBlockService.subscribeBlockStatus(
+      currentUser.id,
+      counterparty.id,
+      (nextStatus) => setBlockStatus(nextStatus),
+      (error) => onToast({ type: 'error', message: getFriendlyErrorMessage(error) }),
+    );
+  }, [counterparty, currentUser.id, onToast]);
 
   async function runAction(action: () => Promise<void>, successMessage: string) {
     try {
       setIsWorking(true);
       await action();
       onToast({ type: 'success', message: successMessage });
-      onClose();
     } catch (error) {
       onToast({ type: 'error', message: getFriendlyErrorMessage(error) });
     } finally {
@@ -113,6 +132,49 @@ export function ChatSettings({
     }
   }
 
+  function confirmUnblock() {
+    if (!counterparty) return;
+    Alert.alert(
+      'Unblock this user?',
+      'You will be able to exchange messages again.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unblock',
+          onPress: () => {
+            void runAction(
+              async () => {
+                await chatBlockService.unblockUser(currentUser.id, counterparty.id);
+              },
+              'User unblocked.',
+            );
+          },
+        },
+      ],
+    );
+  }
+
+  function confirmUnmute() {
+    Alert.alert(
+      'Turn notifications back on for this conversation?',
+      'Notifications will resume immediately.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unmute',
+          onPress: () => {
+            void runAction(
+              async () => {
+                await chatMuteService.unmuteConversation(room.id, currentUser.id);
+              },
+              'Conversation unmuted.',
+            );
+          },
+        },
+      ],
+    );
+  }
+
   const settingsActions = [
     {
       label: 'Report User',
@@ -122,10 +184,16 @@ export function ChatSettings({
       },
     },
     {
-      label: 'Block User',
-      destructive: true,
+      label: isBlockedByMe ? 'Unblock User' : 'Block User',
+      destructive: !isBlockedByMe,
+      hidden: !counterparty,
       onPress: () => {
         if (!counterparty) return;
+        if (isBlockedByMe) {
+          confirmUnblock();
+          return;
+        }
+
         void runAction(async () => {
           await chatBlockService.blockUser({ blocker: currentUser, blocked: counterparty });
           onBlocked?.();
@@ -136,10 +204,7 @@ export function ChatSettings({
       label: isMuted ? 'Unmute Conversation' : 'Mute Conversation',
       onPress: () => {
         if (isMuted) {
-          void runAction(
-            () => chatMuteService.unmuteConversation(room.id, currentUser.id),
-            'Conversation unmuted.',
-          );
+          confirmUnmute();
           return;
         }
         openMutePicker();
@@ -172,7 +237,7 @@ export function ChatSettings({
         );
       },
     },
-  ];
+  ].filter((action) => !action.hidden);
 
   return (
     <>
@@ -185,6 +250,7 @@ export function ChatSettings({
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.content}>
+            {isWorking ? <Text style={styles.workingLabel}>Applying changes...</Text> : null}
             {settingsActions.map((action) => (
               <Pressable
                 key={action.label}
@@ -294,6 +360,11 @@ const styles = StyleSheet.create({
   emptyCopy: {
     color: colors.muted,
     fontSize: 15,
+    textAlign: 'center',
+  },
+  workingLabel: {
+    color: colors.muted,
+    fontSize: 13,
     textAlign: 'center',
   },
   fileRow: {
