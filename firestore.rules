@@ -173,6 +173,23 @@ service cloud.firestore {
         && request.resource.data.body == '';
     }
 
+    function participantUpdatesDeliveryStateOnly() {
+      return isSignedIn()
+        && resource != null
+        && isDiscussionRoomParticipant(resource.data.discussionRoomId)
+        && resource.data.senderId != request.auth.uid
+        && request.resource.data.senderId == resource.data.senderId
+        && request.resource.data.discussionRoomId == resource.data.discussionRoomId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'deliveredAt',
+          'readAt',
+          'updatedAt'
+        ])
+        && request.resource.data.status in ['delivered', 'read']
+        && resource.data.status in ['sent', 'delivered', 'read'];
+    }
+
     function reportIdBelongsToSignedInReporter(reportId) {
       return isSignedIn() && reportId.matches('^.*_' + request.auth.uid + '$');
     }
@@ -570,6 +587,7 @@ service cloud.firestore {
         );
       allow update: if isAdmin()
         || senderSoftDeletesOwnMessage()
+        || participantUpdatesDeliveryStateOnly()
         || (
           isSignedIn()
           && resource.data.senderId == request.auth.uid
