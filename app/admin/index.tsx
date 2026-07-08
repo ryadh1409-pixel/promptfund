@@ -283,6 +283,10 @@ export default function AdminDashboardScreen() {
           />
 
           <AdminSection title="Reports">
+            <Card>
+              <Text style={styles.itemMeta}>Review per-message chat reports, approve, dismiss, suspend, or ban users.</Text>
+              <PrimaryButton label="Open Chat Reports" onPress={() => router.push('/admin/reports')} />
+            </Card>
             {data.reports.slice(0, 10).map((report) => (
               <Card key={report.id}>
                 <Text style={styles.itemTitle}>{report.reason}</Text>

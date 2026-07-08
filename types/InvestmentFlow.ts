@@ -79,7 +79,9 @@ export type DiscussionRoom = {
   readReceipts?: Record<string, string>;
   unreadCounts?: Record<string, number>;
   mutedBy?: Record<string, boolean>;
+  mutedUntil?: Record<string, string | null>;
   leftBy?: Record<string, boolean>;
+  hiddenFor?: Record<string, boolean>;
   agreementId?: string;
   createdAt?: string;
   updatedAt?: string;

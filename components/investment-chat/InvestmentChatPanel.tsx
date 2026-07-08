@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Linking,
   Modal,
@@ -14,15 +13,19 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import { ChatSettings, ChatSettingsButton } from '@/components/chat/ChatSettings';
+import { ChatLoadingOverlay, ChatToastBanner, useMessageActions } from '@/hooks/chat/useMessageActions';
 import { colors, radii, spacing } from '@/constants/theme';
+import { chatMessageService } from '@/services/chat/messageService';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { investmentChatService } from '@/services/investmentChatService';
 import type { BlockStatus } from '@/services/userService';
 import type { DiscussionRoom } from '@/types/InvestmentFlow';
 import type { ChatMessage, ChatReaction } from '@/types/InvestmentChat';
-import { chatReactionOptions } from '@/types/InvestmentChat';
+import type { ChatToastPayload } from '@/types/ChatSafety';
 import type { User } from '@/types/User';
 import { logChatUploadStep } from '@/utils/chatUpload';
+import type { LocalChatAttachmentInput } from '@/utils/chatAttachments';
 
 import { ChatComposer } from './ChatComposer';
 import { ChatEmptyState } from './ChatEmptyState';
@@ -36,12 +39,16 @@ import {
 
 type InvestmentChatPanelProps = {
   room: DiscussionRoom;
-  currentUser: Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle'>;
+  currentUser: Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle' | 'activeRole' | 'roles' | 'role'>;
+  counterparty?: Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle' | 'activeRole' | 'roles' | 'role' | 'photoURL'> | null;
   participantRole: 'founder' | 'investor' | null;
   blockStatus: BlockStatus;
   bottomInset?: number;
   onNotice: (message: string | null) => void;
   onSettingsPress?: () => void;
+  onReportUser?: () => void;
+  onConversationDeleted?: () => void;
+  onBlocked?: () => void;
   embedded?: boolean;
   style?: StyleProp<ViewStyle>;
 };
@@ -49,11 +56,15 @@ type InvestmentChatPanelProps = {
 export function InvestmentChatPanel({
   room,
   currentUser,
+  counterparty = null,
   participantRole,
   blockStatus,
   bottomInset = 0,
   onNotice,
   onSettingsPress,
+  onReportUser,
+  onConversationDeleted,
+  onBlocked,
   embedded = false,
   style,
 }: InvestmentChatPanelProps) {
@@ -65,6 +76,8 @@ export function InvestmentChatPanel({
   const [selectedMessage, setSelectedMessage] = useState<ChatMessage | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [isSettingsVisible, setIsSettingsVisible] = useState(false);
+  const [toast, setToast] = useState<ChatToastPayload | null>(null);
   const listRef = useRef<FlatList<ChatListItem> | null>(null);
   const lastTypingRef = useRef<boolean | null>(null);
   const deliveredRef = useRef<string>('');
@@ -74,6 +87,29 @@ export function InvestmentChatPanel({
   const isBlocked = blockStatus.blockedByMe || blockStatus.blockedMe;
   const canParticipate = participantRole !== null;
   const typingLabel = getCounterpartyTypingLabel(room, currentUser.id);
+
+  const handleToast = useCallback((payload: ChatToastPayload) => {
+    setToast(payload);
+    if (payload.type === 'error') {
+      onNotice(payload.message);
+    } else {
+      onNotice(null);
+    }
+    setTimeout(() => setToast(null), 3200);
+  }, [onNotice]);
+
+  const {
+    openMessageActions,
+    reportDialog,
+    androidActionSheet,
+    isReporting,
+  } = useMessageActions({
+    roomId: room.id,
+    currentUser,
+    counterparty,
+    onToast: handleToast,
+    onBlocked,
+  });
 
   const allMessages = useMemo(
     () => [...olderMessages, ...messages].filter((message, index, array) => array.findIndex((item) => item.id === message.id) === index),
@@ -166,82 +202,27 @@ export function InvestmentChatPanel({
     }
   }, [onNotice]);
 
-  const handleSend = useCallback(async ({ text, attachments }: { text: string; attachments: ChatMessage['attachments'] }) => {
-    if (isBlocked) {
-      onNotice('You cannot message this user because one of you has blocked the other.');
-      return;
-    }
+  const handleSend = useCallback(async ({ text, localAttachments }: { text: string; localAttachments: LocalChatAttachmentInput[] }) => {
     try {
       onNotice(null);
-      logChatUploadStep('5. InvestmentChatPanel sending message', {
+      await chatMessageService.sendMessage({
         roomId: room.id,
-        attachmentCount: attachments?.length ?? 0,
-        hasText: text.trim().length > 0,
-      });
-      await investmentChatService.sendMessage({
-        room,
         sender: currentUser,
         text,
-        attachments: attachments ?? [],
-        blockStatus,
+        localAttachments,
       });
       setDraft('');
       listRef.current?.scrollToOffset({ offset: 0, animated: true });
     } catch (error) {
       const message = getFriendlyErrorMessage(error);
-      onNotice(message);
+      handleToast({ type: 'error', message });
       throw error;
     }
-  }, [blockStatus, currentUser, isBlocked, onNotice, room]);
+  }, [currentUser, handleToast, onNotice, room.id]);
 
   const handleLongPress = useCallback((message: ChatMessage) => {
-    if (message.deletedAt || message.type === 'system') return;
-    setSelectedMessage(message);
-    Alert.alert('Message actions', undefined, [
-      {
-        text: 'React',
-        onPress: () => {
-          Alert.alert('Add reaction', undefined, chatReactionOptions.map((reaction) => ({
-            text: reaction,
-            onPress: () => {
-              investmentChatService.toggleReaction(message, currentUser.id, reaction as ChatReaction).catch((error) => {
-                onNotice(getFriendlyErrorMessage(error));
-              });
-            },
-          })));
-        },
-      },
-      ...(message.senderId === currentUser.id ? [{
-        text: 'Edit',
-        onPress: () => {
-          setEditDraft(message.text);
-          setIsEditModalVisible(true);
-        },
-      }] : []),
-      {
-        text: message.isPinned ? 'Unpin' : 'Pin',
-        onPress: () => {
-          investmentChatService.setPinned(room, message, !message.isPinned).catch((error) => {
-            onNotice(getFriendlyErrorMessage(error));
-          });
-        },
-      },
-      {
-        text: message.senderId === currentUser.id ? 'Delete' : 'Report to Admin',
-        style: 'destructive' as const,
-        onPress: () => {
-          if (message.senderId === currentUser.id) {
-            investmentChatService.deleteMessage(message, currentUser.id).catch((error) => {
-              onNotice(getFriendlyErrorMessage(error));
-            });
-            return;
-          }
-          onNotice('Use chat settings to report this conversation.');
-        },
-      },
-      { text: 'Cancel', style: 'cancel' as const },
-    ]);
-  }, [currentUser.id, onNotice, room]);
+    openMessageActions(message);
+  }, [openMessageActions]);
 
   const handleSaveEdit = useCallback(async () => {
     if (!selectedMessage) return;
@@ -254,6 +235,14 @@ export function InvestmentChatPanel({
       onNotice(getFriendlyErrorMessage(error));
     }
   }, [currentUser.id, editDraft, onNotice, selectedMessage]);
+
+  const openSettings = useCallback(() => {
+    if (onSettingsPress) {
+      onSettingsPress();
+      return;
+    }
+    setIsSettingsVisible(true);
+  }, [onSettingsPress]);
 
   const renderItem = useCallback(({ item }: { item: ChatListItem }) => {
     if (item.type === 'date') {
@@ -284,14 +273,18 @@ export function InvestmentChatPanel({
     <View style={[styles.container, embedded ? styles.containerEmbedded : null, style]}>
       {embedded ? (
         <View style={styles.embeddedHeader}>
-          <Text style={styles.embeddedTitle}>Investment Chat</Text>
-          {unreadCount > 0 ? <Text style={styles.embeddedUnread}>{unreadCount} unread</Text> : null}
+          <View style={styles.embeddedHeaderCopy}>
+            <Text style={styles.embeddedTitle}>Investment Chat</Text>
+            {unreadCount > 0 ? <Text style={styles.embeddedUnread}>{unreadCount} unread</Text> : null}
+          </View>
+          <ChatSettingsButton onPress={openSettings} />
         </View>
       ) : (
-        <ChatHeader unreadCount={unreadCount} onSettingsPress={onSettingsPress} />
+        <ChatHeader unreadCount={unreadCount} onSettingsPress={openSettings} />
       )}
 
       <View style={[styles.messagesArea, embedded ? styles.messagesAreaEmbedded : null]}>
+        <ChatToastBanner toast={toast} />
         {listData.length === 0 ? (
           <ChatEmptyState />
         ) : (
@@ -333,7 +326,7 @@ export function InvestmentChatPanel({
             embedded={embedded}
             onChangeText={setDraft}
             onSend={handleSend}
-            onError={onNotice}
+            onError={(message) => handleToast({ type: 'error', message })}
           />
         </View>
       ) : null}
@@ -360,6 +353,26 @@ export function InvestmentChatPanel({
           </View>
         </View>
       </Modal>
+
+      <ChatSettings
+        visible={isSettingsVisible}
+        room={room}
+        currentUser={currentUser}
+        counterparty={counterparty}
+        messages={allMessages}
+        onClose={() => setIsSettingsVisible(false)}
+        onToast={handleToast}
+        onReportUser={() => {
+          setIsSettingsVisible(false);
+          onReportUser?.();
+        }}
+        onConversationDeleted={onConversationDeleted}
+        onBlocked={onBlocked}
+      />
+
+      {reportDialog}
+      {androidActionSheet}
+      <ChatLoadingOverlay visible={isReporting} label="Submitting report..." />
     </View>
   );
 }
@@ -381,6 +394,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+  },
+  embeddedHeaderCopy: {
+    flex: 1,
+    gap: 2,
   },
   embeddedTitle: {
     color: colors.text,

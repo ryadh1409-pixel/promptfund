@@ -26,7 +26,10 @@ export type ChatMessage = {
   attachments?: ChatAttachment[];
   createdAt: string;
   editedAt?: string;
+  deleted?: boolean;
   deletedAt?: string;
+  hiddenByModeration?: boolean;
+  reportedCount?: number;
   deliveredAt?: string;
   readAt?: string;
   status: ChatMessageStatus;

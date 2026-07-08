@@ -26,6 +26,7 @@ export type User = {
   location: string;
   stack: string[];
   trustScore: number;
+  reportedCount?: number;
   status?: UserStatus;
   verified?: boolean;
   memberSince?: string;

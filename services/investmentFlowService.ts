@@ -23,6 +23,7 @@ import {
   logTractionInvestmentWrite,
 } from '@/utils/tractionPortfolio';
 import { investmentChatService, normalizeChatMessage } from '@/services/investmentChatService';
+import { chatMessageService } from '@/services/chat/messageService';
 import type { ChatAttachment } from '@/types/InvestmentChat';
 
 export const defaultInvestmentAmount = 22;
@@ -432,12 +433,11 @@ export const investmentFlowService = {
       });
     }
 
-    return investmentChatService.sendMessage({
-      room,
+    return chatMessageService.sendMessage({
+      roomId: room.id,
       sender,
       text: body,
       attachments,
-      blockStatus: options.blockStatus,
     });
   },
 

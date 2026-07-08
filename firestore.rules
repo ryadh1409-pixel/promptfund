@@ -130,6 +130,49 @@ service cloud.firestore {
         && request.resource.data.status == 'pending';
     }
 
+    function messageReportDocumentHasExpectedSchema() {
+      return request.resource.data.keys().hasOnly([
+          'reporterId',
+          'reportedUserId',
+          'roomId',
+          'messageId',
+          'reason',
+          'details',
+          'createdAt',
+          'status'
+        ])
+        && request.resource.data.reporterId is string
+        && request.resource.data.reportedUserId is string
+        && request.resource.data.roomId is string
+        && request.resource.data.messageId is string
+        && request.resource.data.reason in [
+          'Harassment',
+          'Hate Speech',
+          'Scam / Fraud',
+          'Spam',
+          'Sexual Content',
+          'Threats',
+          'Other'
+        ]
+        && request.resource.data.details is string
+        && request.resource.data.createdAt is string
+        && request.resource.data.status == 'pending';
+    }
+
+    function messageReportIdBelongsToReporter(reportId) {
+      return isSignedIn() && reportId.matches('^.*_' + request.auth.uid + '$');
+    }
+
+    function senderSoftDeletesOwnMessage() {
+      return isSignedIn()
+        && resource != null
+        && resource.data.senderId == request.auth.uid
+        && request.resource.data.senderId == resource.data.senderId
+        && request.resource.data.deleted == true
+        && request.resource.data.text == ''
+        && request.resource.data.body == '';
+    }
+
     function reportIdBelongsToSignedInReporter(reportId) {
       return isSignedIn() && reportId.matches('^.*_' + request.auth.uid + '$');
     }
@@ -366,6 +409,21 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == userId;
       allow update: if isAdmin() || (request.auth != null && request.auth.uid == userId);
       allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+
+      match /blocked/{blockedUid} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow create, update: if isSignedIn()
+          && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly([
+            'blockedUid',
+            'blockedName',
+            'blockedRole',
+            'blockedPhotoURL',
+            'createdAt',
+            'removedAt'
+          ]);
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
     }
 
     match /projects/{projectId} {
@@ -511,6 +569,7 @@ service cloud.firestore {
           )
         );
       allow update: if isAdmin()
+        || senderSoftDeletesOwnMessage()
         || (
           isSignedIn()
           && resource.data.senderId == request.auth.uid
@@ -742,6 +801,23 @@ service cloud.firestore {
           && (
             reportIdBelongsToSignedInReporter(reportId)
             || (resource != null && resource.data.reporterUid == request.auth.uid)
+          )
+        );
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /messageReports/{reportId} {
+      allow create: if isSignedIn()
+        && messageReportDocumentHasExpectedSchema()
+        && reportId == request.resource.data.messageId + '_' + request.auth.uid
+        && request.resource.data.reporterId == request.auth.uid;
+      allow read: if isAdmin()
+        || (
+          isSignedIn()
+          && (
+            messageReportIdBelongsToReporter(reportId)
+            || (resource != null && resource.data.reporterId == request.auth.uid)
           )
         );
       allow update: if isAdmin();

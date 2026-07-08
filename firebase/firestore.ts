@@ -41,6 +41,7 @@ export const firestoreCollections = {
   agreementSummaries: 'agreementSummaries',
   agreementCertificates: 'agreementCertificates',
   blockedUsers: 'blockedUsers',
+  messageReports: 'messageReports',
   reports: 'reports',
   userReports: 'userReports',
   moderationFlags: 'moderationFlags',

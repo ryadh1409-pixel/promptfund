@@ -342,11 +342,18 @@ export default function DiscussionRoomScreen() {
               name: profile.name,
               username: profile.username,
               handle: profile.handle,
+              activeRole: profile.activeRole,
+              roles: profile.roles,
+              role: profile.role,
             }}
+            counterparty={counterpartyProfile}
             participantRole={participantRole}
             blockStatus={blockStatus}
             bottomInset={insets.bottom}
             onNotice={setNotice}
+            onReportUser={() => setIsReportModalVisible(true)}
+            onConversationDeleted={() => router.back()}
+            onBlocked={() => router.back()}
             style={styles.chatPanel}
           />
         </View>

@@ -3,6 +3,9 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radii, spacing } from '@/constants/theme';
 import type { ChatAttachment, ChatMessage } from '@/types/InvestmentChat';
 
+import { DeletedMessage } from '@/components/chat/DeletedMessage';
+import { shouldRenderMessage } from '@/utils/chatMessageVisibility';
+
 import { formatFileSize, formatMessageTime, getMessageStatusLabel } from './chatUtils';
 
 type MessageBubbleProps = {
@@ -106,7 +109,11 @@ export function MessageBubble({
   onToggleReaction,
 }: MessageBubbleProps) {
   const isOwn = message.senderId === currentUserId;
-  const isDeleted = Boolean(message.deletedAt);
+  const isDeleted = Boolean(message.deleted || message.deletedAt);
+
+  if (!shouldRenderMessage(message)) {
+    return null;
+  }
   const isFounderMessage = message.senderRole === 'founder' || (isOwn && isFounder);
 
   if (message.type === 'system') {
@@ -135,7 +142,7 @@ export function MessageBubble({
         {message.isPinned ? <Text style={styles.pinnedLabel}>Pinned</Text> : null}
         {!isOwn ? <Text style={styles.author}>{message.senderName}</Text> : null}
         {isDeleted ? (
-          <Text style={styles.deletedText}>This message was deleted.</Text>
+          <DeletedMessage />
         ) : (
           <MessageContent message={message} onOpenUrl={onOpenUrl} />
         )}
