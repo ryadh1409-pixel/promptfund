@@ -3,6 +3,7 @@ import {
   doc,
   getDocs,
   limit,
+  type QueryDocumentSnapshot,
   onSnapshot,
   orderBy,
   query,
@@ -11,7 +12,6 @@ import {
   updateDoc,
   where,
   type DocumentSnapshot,
-  type QueryDocumentSnapshot,
   type Unsubscribe,
 } from 'firebase/firestore';
 
@@ -38,6 +38,52 @@ function sortMessagesChronologically(messages: ChatMessage[]) {
   return [...messages].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 }
 
+function messageFingerprint(message: ChatMessage) {
+  return [
+    message.id,
+    message.editedAt ?? '',
+    message.deletedAt ?? '',
+    message.status ?? '',
+    message.text ?? '',
+    message.body ?? '',
+    JSON.stringify(message.reactions ?? {}),
+  ].join('|');
+}
+
+function areMessageListsEqual(left: ChatMessage[], right: ChatMessage[]) {
+  if (left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i += 1) {
+    if (messageFingerprint(left[i]) !== messageFingerprint(right[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function upsertMessage(
+  source: ChatMessage[],
+  incoming: ChatMessage,
+): ChatMessage[] {
+  const index = source.findIndex((item) => item.id === incoming.id);
+  if (index === -1) {
+    return sortMessagesChronologically([...source, incoming]);
+  }
+
+  const existing = source[index];
+  if (messageFingerprint(existing) === messageFingerprint(incoming)) {
+    return source;
+  }
+
+  const next = [...source];
+  next[index] = incoming;
+  return sortMessagesChronologically(next);
+}
+
+function removeMessage(source: ChatMessage[], messageId: string): ChatMessage[] {
+  const next = source.filter((item) => item.id !== messageId);
+  return next.length === source.length ? source : next;
+}
+
 export const investmentChatService = {
   subscribeToRoom(roomId: string, onChange: (room: DiscussionRoom | null) => void, onError?: (error: unknown) => void): Unsubscribe {
     const reference = doc(getPromptFundFirestore(), 'discussionRooms', roomId);
@@ -62,17 +108,109 @@ export const investmentChatService = {
       limit(PAGE_SIZE),
     );
 
+    let currentMessages: ChatMessage[] = [];
+    let hasInitialized = false;
+    let previousHasPendingWrites = false;
+    let previousFromCache = false;
+
     return onSnapshot(
       messagesQuery,
       (snapshot) => {
-        const messages = snapshot.docs
-          .map((item) => normalizeChatMessage(item.id, item.data() as Record<string, unknown>));
-        logChatUploadStep('6. Realtime listener received messages', {
-          roomId,
-          count: messages.length,
-          latestType: messages.at(-1)?.type,
-        });
-        onChange(sortMessagesChronologically(messages));
+        const docChanges = snapshot.docChanges();
+        const hasPendingWrites = snapshot.metadata.hasPendingWrites;
+        const fromCache = snapshot.metadata.fromCache;
+
+        // Initial snapshot: build once from full docs.
+        if (!hasInitialized) {
+          const initialMessages = sortMessagesChronologically(
+            snapshot.docs.map((item) => normalizeChatMessage(item.id, item.data() as Record<string, unknown>)),
+          );
+          currentMessages = initialMessages;
+          hasInitialized = true;
+          onChange(initialMessages);
+
+          logChatUploadStep('Chat listener initial snapshot', {
+            roomId,
+            hasPendingWrites,
+            fromCache,
+            docChangesCount: docChanges.length,
+            messageCount: initialMessages.length,
+          });
+          previousHasPendingWrites = hasPendingWrites;
+          previousFromCache = fromCache;
+          return;
+        }
+
+        let nextMessages = currentMessages;
+        let addedCount = 0;
+        let modifiedCount = 0;
+        let removedCount = 0;
+
+        for (const change of docChanges) {
+          const nextMessage = normalizeChatMessage(
+            change.doc.id,
+            change.doc.data() as Record<string, unknown>,
+          );
+
+          if (change.type === 'added') {
+            const updated = upsertMessage(nextMessages, nextMessage);
+            if (updated !== nextMessages) {
+              nextMessages = updated;
+              addedCount += 1;
+            }
+            continue;
+          }
+
+          if (change.type === 'modified') {
+            const updated = upsertMessage(nextMessages, nextMessage);
+            if (updated !== nextMessages) {
+              nextMessages = updated;
+              modifiedCount += 1;
+            }
+            continue;
+          }
+
+          if (change.type === 'removed') {
+            const updated = removeMessage(nextMessages, change.doc.id);
+            if (updated !== nextMessages) {
+              nextMessages = updated;
+              removedCount += 1;
+            }
+          }
+        }
+
+        const metadataChanged = hasPendingWrites !== previousHasPendingWrites || fromCache !== previousFromCache;
+        const changesCount = addedCount + modifiedCount + removedCount;
+
+        if (!areMessageListsEqual(currentMessages, nextMessages)) {
+          currentMessages = nextMessages;
+          onChange(nextMessages);
+        }
+
+        if (changesCount > 0 || metadataChanged) {
+          logChatUploadStep('Chat listener update', {
+            roomId,
+            hasPendingWrites,
+            fromCache,
+            docChangesCount: docChanges.length,
+            addedCount,
+            modifiedCount,
+            removedCount,
+          });
+        }
+
+        if (addedCount > 0) {
+          logChatUploadStep('New Message', { roomId, count: addedCount });
+        }
+        if (modifiedCount > 0) {
+          logChatUploadStep('Message Modified', { roomId, count: modifiedCount });
+        }
+        if (removedCount > 0) {
+          logChatUploadStep('Message Removed', { roomId, count: removedCount });
+        }
+
+        previousHasPendingWrites = hasPendingWrites;
+        previousFromCache = fromCache;
       },
       (error) => onError?.(error),
     );

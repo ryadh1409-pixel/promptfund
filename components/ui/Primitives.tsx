@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 import { AppScreen } from '@/components/layout/AppScreen';
+import { ScreenHeader } from '@/components/layout/ScreenHeader';
 import { colors, radii, spacing } from '@/constants/theme';
 
 type ScreenProps = {
@@ -18,14 +19,27 @@ type ScreenProps = {
   title: string;
   subtitle?: string;
   children: ReactNode;
+  leftAction?: ReactNode;
+  rightAction?: ReactNode;
 };
 
-export function Screen({ eyebrow, title, subtitle, children }: ScreenProps) {
+export function Screen({
+  eyebrow,
+  title,
+  subtitle,
+  children,
+  leftAction,
+  rightAction,
+}: ScreenProps) {
   return (
     <AppScreen scroll horizontalPadding={false} contentContainerStyle={styles.screenContent}>
       <BrandMark />
-      {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-      <Text style={styles.title}>{title}</Text>
+      <ScreenHeader
+        subtitle={eyebrow}
+        title={title}
+        leftAction={leftAction}
+        rightAction={rightAction}
+      />
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       {children}
     </AppScreen>
@@ -251,12 +265,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1.8,
     textTransform: 'uppercase',
-  },
-  title: {
-    color: colors.ivory,
-    fontSize: 34,
-    fontWeight: '900',
-    letterSpacing: -1,
   },
   subtitle: {
     color: colors.muted,

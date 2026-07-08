@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -9,8 +9,9 @@ import {
   View,
 } from 'react-native';
 
+import { AppScreen } from '@/components/layout/AppScreen';
+import { ScreenHeader, ScreenHeaderIconButton, ScreenHeaderTextButton } from '@/components/layout/ScreenHeader';
 import { colors, radii, spacing } from '@/constants/theme';
-import { chatBlockService } from '@/services/chat/blockService';
 import { chatMuteService } from '@/services/chat/muteService';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import type { BlockStatus } from '@/services/userService';
@@ -30,7 +31,12 @@ type ChatSettingsProps = {
   onToast: (payload: ChatToastPayload) => void;
   onReportUser: () => void;
   onConversationDeleted?: () => void;
-  onBlocked?: () => void;
+  blockStatus: BlockStatus;
+  isMuted: boolean;
+  onBlockUser: () => Promise<void>;
+  onUnblockUser: () => Promise<void>;
+  onMuteConversation: (duration: ChatMuteDuration) => Promise<void>;
+  onUnmuteConversation: () => Promise<void>;
 };
 
 const muteOptions: Array<{ label: string; value: ChatMuteDuration }> = [
@@ -49,14 +55,15 @@ export function ChatSettings({
   onToast,
   onReportUser,
   onConversationDeleted,
-  onBlocked,
+  blockStatus,
+  isMuted,
+  onBlockUser,
+  onUnblockUser,
+  onMuteConversation,
+  onUnmuteConversation,
 }: ChatSettingsProps) {
   const [isWorking, setIsWorking] = useState(false);
   const [sharedFilesVisible, setSharedFilesVisible] = useState(false);
-  const [blockStatus, setBlockStatus] = useState<BlockStatus>({
-    blockedByMe: false,
-    blockedMe: false,
-  });
 
   const sharedFiles = useMemo(
     () => messages.filter((message) => !message.deleted && !message.deletedAt && (
@@ -67,22 +74,7 @@ export function ChatSettings({
     [messages],
   );
 
-  const isMuted = chatMuteService.isConversationMuted(room, currentUser.id);
   const isBlockedByMe = blockStatus.blockedByMe;
-
-  useEffect(() => {
-    if (!counterparty || !currentUser.id) {
-      setBlockStatus({ blockedByMe: false, blockedMe: false });
-      return undefined;
-    }
-
-    return chatBlockService.subscribeBlockStatus(
-      currentUser.id,
-      counterparty.id,
-      (nextStatus) => setBlockStatus(nextStatus),
-      (error) => onToast({ type: 'error', message: getFriendlyErrorMessage(error) }),
-    );
-  }, [counterparty, currentUser.id, onToast]);
 
   async function runAction(action: () => Promise<void>, successMessage: string) {
     try {
@@ -103,7 +95,7 @@ export function ChatSettings({
         label: option.label,
         onPress: () => {
           void runAction(
-            () => chatMuteService.muteConversation(room.id, currentUser.id, option.value),
+            () => onMuteConversation(option.value),
             option.value === 'forever'
               ? 'Conversation muted forever.'
               : `Conversation muted for ${option.label.replace('Mute for ', '')}.`,
@@ -121,7 +113,7 @@ export function ChatSettings({
             text: option.label,
             onPress: () => {
               void runAction(
-                () => chatMuteService.muteConversation(room.id, currentUser.id, option.value),
+                () => onMuteConversation(option.value),
                 'Conversation muted.',
               );
             },
@@ -143,9 +135,7 @@ export function ChatSettings({
           text: 'Unblock',
           onPress: () => {
             void runAction(
-              async () => {
-                await chatBlockService.unblockUser(currentUser.id, counterparty.id);
-              },
+              onUnblockUser,
               'User unblocked.',
             );
           },
@@ -164,9 +154,7 @@ export function ChatSettings({
           text: 'Unmute',
           onPress: () => {
             void runAction(
-              async () => {
-                await chatMuteService.unmuteConversation(room.id, currentUser.id);
-              },
+              onUnmuteConversation,
               'Conversation unmuted.',
             );
           },
@@ -195,8 +183,7 @@ export function ChatSettings({
         }
 
         void runAction(async () => {
-          await chatBlockService.blockUser({ blocker: currentUser, blocked: counterparty });
-          onBlocked?.();
+          await onBlockUser();
         }, 'User blocked.');
       },
     },
@@ -242,14 +229,12 @@ export function ChatSettings({
   return (
     <>
       <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Chat Settings</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close chat settings" onPress={onClose}>
-              <Text style={styles.close}>Done</Text>
-            </Pressable>
-          </View>
-          <ScrollView contentContainerStyle={styles.content}>
+        <AppScreen horizontalPadding={false} contentContainerStyle={styles.modalBody}>
+          <ScreenHeader
+            title="Chat Settings"
+            rightAction={<ScreenHeaderTextButton label="Done" onPress={onClose} />}
+          />
+          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             {isWorking ? <Text style={styles.workingLabel}>Applying changes...</Text> : null}
             {settingsActions.map((action) => (
               <Pressable
@@ -266,18 +251,16 @@ export function ChatSettings({
               </Pressable>
             ))}
           </ScrollView>
-        </View>
+        </AppScreen>
       </Modal>
 
       <Modal visible={sharedFilesVisible} animationType="slide" onRequestClose={() => setSharedFilesVisible(false)}>
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Shared Files</Text>
-            <Pressable accessibilityRole="button" onPress={() => setSharedFilesVisible(false)}>
-              <Text style={styles.close}>Done</Text>
-            </Pressable>
-          </View>
-          <ScrollView contentContainerStyle={styles.content}>
+        <AppScreen horizontalPadding={false} contentContainerStyle={styles.modalBody}>
+          <ScreenHeader
+            title="Shared Files"
+            rightAction={<ScreenHeaderTextButton label="Done" onPress={() => setSharedFilesVisible(false)} />}
+          />
+          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             {sharedFiles.length === 0 ? (
               <Text style={styles.emptyCopy}>No shared files yet.</Text>
             ) : (
@@ -291,7 +274,7 @@ export function ChatSettings({
               ))
             )}
           </ScrollView>
-        </View>
+        </AppScreen>
       </Modal>
     </>
   );
@@ -303,44 +286,22 @@ export function ChatSettingsButton({
   onPress: () => void;
 }) {
   return (
-    <Pressable
-      accessibilityRole="button"
+    <ScreenHeaderIconButton
+      icon="⚙"
       accessibilityLabel="Open chat settings"
       onPress={onPress}
-      style={styles.settingsButton}
-    >
-      <Text style={styles.settingsIcon}>⚙</Text>
-    </Pressable>
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: colors.background,
+  modalBody: {
     flex: 1,
-  },
-  header: {
-    alignItems: 'center',
-    borderBottomColor: 'rgba(216, 201, 163, 0.18)',
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  headerTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  close: {
-    color: colors.accent,
-    fontSize: 16,
-    fontWeight: '700',
   },
   content: {
     gap: spacing.sm,
     padding: spacing.lg,
+    paddingBottom: spacing.xl,
   },
   actionRow: {
     backgroundColor: colors.panel,
@@ -383,20 +344,5 @@ const styles = StyleSheet.create({
   fileMeta: {
     color: colors.muted,
     fontSize: 12,
-  },
-  settingsButton: {
-    alignItems: 'center',
-    backgroundColor: colors.panelMuted,
-    borderColor: colors.border,
-    borderRadius: 999,
-    borderWidth: 1,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  settingsIcon: {
-    color: colors.accent,
-    fontSize: 18,
-    lineHeight: 20,
   },
 });

@@ -43,6 +43,9 @@ function getFirebaseErrorDetails(error: unknown) {
   };
 }
 
+const userProfileCache = new Map<string, User | null>();
+const userProfileInFlight = new Map<string, Promise<User | null>>();
+
 async function runDeleteAccountOperation<T>(
   operation: string,
   path: string,
@@ -73,7 +76,27 @@ export const userService = {
   },
 
   async getUserById(userId: string): Promise<User | null> {
-    return firestoreAdapter.getById<User>('users', userId);
+    if (userProfileCache.has(userId)) {
+      return userProfileCache.get(userId) ?? null;
+    }
+
+    const inFlight = userProfileInFlight.get(userId);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = firestoreAdapter.getById<User>('users', userId)
+      .then((user) => {
+        userProfileCache.set(userId, user);
+        userProfileInFlight.delete(userId);
+        return user;
+      })
+      .catch((error) => {
+        userProfileInFlight.delete(userId);
+        throw error;
+      });
+    userProfileInFlight.set(userId, request);
+    return request;
   },
 
   async createUser(userId: string, input: CreateUserInput): Promise<User> {
@@ -93,6 +116,7 @@ export const userService = {
         ...(stack !== undefined ? { stack } : {}),
       } as Omit<User, 'id'>;
       const user = await firestoreAdapter.setWithId<Omit<User, 'id'>>('users', userId, payload);
+      userProfileCache.set(userId, user as User);
       console.info('[PromptFund UserService] createUser success', { uid: userId, path });
       return { ...user, stack: user.stack ?? [] };
     } catch (error) {
@@ -102,7 +126,9 @@ export const userService = {
   },
 
   async updateUser(userId: string, input: UpdateUserInput): Promise<User | null> {
-    return firestoreAdapter.update<User>('users', userId, input);
+    const updated = await firestoreAdapter.update<User>('users', userId, input);
+    userProfileCache.set(userId, updated);
+    return updated;
   },
 
   async updateProfile(
@@ -122,7 +148,9 @@ export const userService = {
       payload.handle = input.username;
     }
 
-    return firestoreAdapter.update<User>('users', userId, payload);
+    const updated = await firestoreAdapter.update<User>('users', userId, payload);
+    userProfileCache.set(userId, updated);
+    return updated;
   },
 
   async uploadProfilePhoto(userId: string, uri: string): Promise<string> {
@@ -138,6 +166,8 @@ export const userService = {
       `users/${userId}`,
       () => firestoreAdapter.deleteById('users', userId),
     );
+    userProfileCache.delete(userId);
+    userProfileInFlight.delete(userId);
   },
 
   async deleteProfile(userId: string): Promise<void> {

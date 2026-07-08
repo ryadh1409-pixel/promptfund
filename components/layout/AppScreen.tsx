@@ -20,6 +20,7 @@ export type AppScreenProps = {
   keyboardVerticalOffset?: number;
   edges?: Edge[];
   horizontalPadding?: number | false;
+  bottomPadding?: number | false;
   contentContainerStyle?: StyleProp<ViewStyle>;
   style?: StyleProp<ViewStyle>;
   backgroundColor?: string;
@@ -27,7 +28,7 @@ export type AppScreenProps = {
   footer?: ReactNode;
 };
 
-const DEFAULT_EDGES: Edge[] = ['top', 'left', 'right'];
+const DEFAULT_EDGES: Edge[] = ['top', 'left', 'right', 'bottom'];
 
 export function AppScreen({
   children,
@@ -36,23 +37,29 @@ export function AppScreen({
   keyboardVerticalOffset,
   edges = DEFAULT_EDGES,
   horizontalPadding = spacing.lg,
+  bottomPadding = spacing.lg,
   contentContainerStyle,
   style,
   backgroundColor = colors.background,
   statusBarStyle = 'light',
   footer,
 }: AppScreenProps) {
-  const resolvedKeyboardOffset = keyboardVerticalOffset ?? 0;
+  const insets = useSafeAreaInsets();
+  const resolvedKeyboardOffset = keyboardVerticalOffset ?? insets.top;
   const paddingHorizontal = horizontalPadding === false ? 0 : horizontalPadding;
+  const resolvedBottomPadding = bottomPadding === false ? 0 : bottomPadding;
 
   const content = scroll ? (
     <ScrollView
       style={styles.flex}
       contentContainerStyle={[
         paddingHorizontal ? { paddingHorizontal } : null,
+        resolvedBottomPadding ? { paddingBottom: resolvedBottomPadding } : null,
         styles.scrollContent,
         contentContainerStyle,
       ]}
+      contentInsetAdjustmentBehavior="automatic"
+      automaticallyAdjustKeyboardInsets
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
@@ -63,6 +70,7 @@ export function AppScreen({
       style={[
         styles.flex,
         paddingHorizontal ? { paddingHorizontal } : null,
+        resolvedBottomPadding ? { paddingBottom: resolvedBottomPadding } : null,
         contentContainerStyle,
       ]}
     >
@@ -87,7 +95,16 @@ export function AppScreen({
       <StatusBar style={statusBarStyle} />
       <View style={styles.flex}>
         {body}
-        {footer ? <View style={paddingHorizontal ? { paddingHorizontal } : null}>{footer}</View> : null}
+        {footer ? (
+          <View
+            style={[
+              paddingHorizontal ? { paddingHorizontal } : null,
+              { paddingBottom: Math.max(insets.bottom, spacing.sm) },
+            ]}
+          >
+            {footer}
+          </View>
+        ) : null}
       </View>
     </SafeAreaView>
   );

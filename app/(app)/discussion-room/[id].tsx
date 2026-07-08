@@ -1,6 +1,6 @@
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -10,17 +10,16 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DealRoomHeader } from '@/components/deal-room/DealRoomHeader';
 import { DealRoomWorkflowWizard } from '@/components/deal-room/DealRoomWorkflowWizard';
 import { InvestmentChatPanel } from '@/components/investment-chat/InvestmentChatPanel';
-import { AppScreen } from '@/components/layout/AppScreen';
+import { AppScreen, useAppSafeAreaInsets } from '@/components/layout/AppScreen';
+import { ScreenHeader, ScreenHeaderTextButton } from '@/components/layout/ScreenHeader';
 import { BlockUserControl } from '@/components/safety/BlockUserControl';
 import { LoadingState, PrimaryButton } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
-import { useBlockStatus } from '@/hooks/useBlockStatus';
 import { firestoreCollections, getPromptFundFirestore } from '@/firebase/firestore';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { investmentChatService } from '@/services/investmentChatService';
@@ -48,7 +47,7 @@ export default function DiscussionRoomScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { authUser, profile } = useAuth();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const [room, setRoom] = useState<DiscussionRoom | null>(null);
   const [agreement, setAgreement] = useState<InvestmentAgreement | null>(null);
   const [investment, setInvestment] = useState<V5Investment | null>(null);
@@ -143,7 +142,32 @@ export default function DiscussionRoomScreen() {
   const counterpartyName = authUser?.uid && room
     ? authUser.uid === room.founderId ? room.investorName : room.founderName
     : 'this user';
-  const { blockStatus } = useBlockStatus(authUser?.uid, counterpartyId);
+
+  const chatCurrentUser = useMemo((): Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle' | 'activeRole' | 'roles' | 'role'> | null => {
+    if (!profile) return null;
+    return {
+      id: authUser?.uid ?? profile.id,
+      displayName: profile.displayName,
+      name: profile.name,
+      username: profile.username,
+      handle: profile.handle,
+      activeRole: profile.activeRole,
+      roles: profile.roles,
+      role: profile.role,
+    };
+  }, [authUser?.uid, profile]);
+
+  const handleChatNotice = useCallback((message: string | null) => {
+    setNotice(message);
+  }, []);
+
+  const handleOpenReportModal = useCallback(() => {
+    setIsReportModalVisible(true);
+  }, []);
+
+  const handleConversationDeleted = useCallback(() => {
+    router.back();
+  }, [router]);
 
   useEffect(() => {
     if (!counterpartyId) {
@@ -322,7 +346,7 @@ export default function DiscussionRoomScreen() {
         </View>
       ) : null}
 
-      {room && profile ? (
+      {room && profile && chatCurrentUser ? (
         <View style={styles.dealRoom}>
           <View style={styles.workflowZone}>
             <DealRoomHeader startupName={room.startupName} onSafetyPress={() => setIsSafetyVisible(true)} />
@@ -336,23 +360,12 @@ export default function DiscussionRoomScreen() {
           <InvestmentChatPanel
             room={room}
             embedded
-            currentUser={{
-              id: authUser?.uid ?? profile.id,
-              displayName: profile.displayName,
-              name: profile.name,
-              username: profile.username,
-              handle: profile.handle,
-              activeRole: profile.activeRole,
-              roles: profile.roles,
-              role: profile.role,
-            }}
-            counterparty={counterpartyProfile}
+            currentUser={chatCurrentUser}
             participantRole={participantRole}
-            blockStatus={blockStatus}
             bottomInset={insets.bottom}
-            onNotice={setNotice}
-            onReportUser={() => setIsReportModalVisible(true)}
-            onConversationDeleted={() => router.back()}
+            onNotice={handleChatNotice}
+            onReportUser={handleOpenReportModal}
+            onConversationDeleted={handleConversationDeleted}
             style={styles.chatPanel}
           />
         </View>
@@ -404,13 +417,11 @@ function SafetyModal({
 }) {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <AppScreen edges={['top', 'left', 'right', 'bottom']} horizontalPadding={false} style={styles.modalSafeArea}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalHeaderTitle}>Safety & Trust</Text>
-          <Pressable onPress={onClose}>
-            <Text style={styles.modalHeaderAction}>Done</Text>
-          </Pressable>
-        </View>
+      <AppScreen horizontalPadding={false} style={styles.modalSafeArea}>
+        <ScreenHeader
+          title="Safety & Trust"
+          rightAction={<ScreenHeaderTextButton label="Done" onPress={onClose} />}
+        />
         <ScrollView contentContainerStyle={styles.modalContent}>
           <BlockUserControl
             currentUserId={authUserId}
@@ -538,25 +549,6 @@ const styles = StyleSheet.create({
   modalSafeArea: {
     backgroundColor: colors.background,
     flex: 1,
-  },
-  modalHeader: {
-    alignItems: 'center',
-    borderBottomColor: 'rgba(216, 201, 163, 0.18)',
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  modalHeaderTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  modalHeaderAction: {
-    color: colors.accent,
-    fontSize: 16,
-    fontWeight: '700',
   },
   modalContent: {
     padding: spacing.md,

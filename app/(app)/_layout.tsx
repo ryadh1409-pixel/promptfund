@@ -1,8 +1,8 @@
 import { Redirect, Tabs, useSegments } from 'expo-router';
 import { Text, type ColorValue } from 'react-native';
 import { useEffect } from 'react';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAppSafeAreaInsets } from '@/components/layout/AppScreen';
 import { colors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
@@ -14,7 +14,7 @@ export default function AppLayout() {
   const segments = useSegments();
   const currentRoute = String(segments[segments.length - 1] ?? '');
   const unreadNotifications = useUnreadNotifications(authUser?.uid);
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const tabBarHeight = 64 + insets.bottom;
 
   useEffect(() => {

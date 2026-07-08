@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Card, PrimaryButton, Screen } from '@/components/ui/Primitives';
+import { ScreenHeaderBackButton } from '@/components/layout/ScreenHeader';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { chatReportService } from '@/services/chat/reportService';
@@ -73,7 +74,12 @@ export default function AdminReportsScreen() {
   }
 
   return (
-    <Screen eyebrow="Admin" title="Chat Reports" subtitle="Review message reports and take moderation action.">
+    <Screen
+      eyebrow="Admin"
+      title="Chat Reports"
+      subtitle="Review message reports and take moderation action."
+      leftAction={<ScreenHeaderBackButton />}
+    >
       <View style={styles.tabRow}>
         <Pressable
           accessibilityRole="button"

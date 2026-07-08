@@ -1,19 +1,10 @@
-import { useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { PrimaryButton } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
-import { investmentChatService } from '@/services/investmentChatService';
 import type { ChatAttachment, ChatMessage } from '@/types/InvestmentChat';
 import { formatFileSize } from '@/components/investment-chat/chatUtils';
 
-export function DealRoomAttachmentsSection({ roomId }: { roomId: string }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-
-  useEffect(() => {
-    return investmentChatService.subscribeToMessages(roomId, setMessages);
-  }, [roomId]);
-
+export function DealRoomAttachmentsSection({ messages }: { messages: ChatMessage[] }) {
   const attachments = messages.flatMap((message) => (message.attachments ?? []).map((attachment) => ({
     ...attachment,
     messageId: message.id,

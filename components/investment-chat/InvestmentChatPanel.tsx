@@ -14,12 +14,12 @@ import {
 } from 'react-native';
 
 import { ChatSettings, ChatSettingsButton } from '@/components/chat/ChatSettings';
+import { ChatRoomProvider, useChatRoom } from '@/components/chat/ChatRoomProvider';
+import { ScreenHeader } from '@/components/layout/ScreenHeader';
 import { ChatLoadingOverlay, ChatToastBanner, useMessageActions } from '@/hooks/chat/useMessageActions';
 import { colors, radii, spacing } from '@/constants/theme';
-import { chatMessageService } from '@/services/chat/messageService';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { investmentChatService } from '@/services/investmentChatService';
-import type { BlockStatus } from '@/services/userService';
 import type { DiscussionRoom } from '@/types/InvestmentFlow';
 import type { ChatMessage, ChatReaction } from '@/types/InvestmentChat';
 import type { ChatToastPayload } from '@/types/ChatSafety';
@@ -33,22 +33,18 @@ import { ChatHeader } from './ChatHeader';
 import { MessageBubble } from './MessageBubble';
 import {
   buildChatListItems,
-  getCounterpartyTypingLabel,
   type ChatListItem,
 } from './chatUtils';
 
 type InvestmentChatPanelProps = {
   room: DiscussionRoom;
   currentUser: Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle' | 'activeRole' | 'roles' | 'role'>;
-  counterparty?: Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle' | 'activeRole' | 'roles' | 'role' | 'photoURL'> | null;
   participantRole: 'founder' | 'investor' | null;
-  blockStatus: BlockStatus;
   bottomInset?: number;
   onNotice: (message: string | null) => void;
   onSettingsPress?: () => void;
   onReportUser?: () => void;
   onConversationDeleted?: () => void;
-  onBlocked?: () => void;
   embedded?: boolean;
   style?: StyleProp<ViewStyle>;
 };
@@ -56,23 +52,82 @@ type InvestmentChatPanelProps = {
 export function InvestmentChatPanel({
   room,
   currentUser,
-  counterparty = null,
   participantRole,
-  blockStatus,
   bottomInset = 0,
   onNotice,
   onSettingsPress,
   onReportUser,
   onConversationDeleted,
-  onBlocked,
   embedded = false,
   style,
 }: InvestmentChatPanelProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [olderMessages, setOlderMessages] = useState<ChatMessage[]>([]);
+  const handleProviderError = useCallback((message: string) => {
+    onNotice(message);
+  }, [onNotice]);
+
+  return (
+    <ChatRoomProvider
+      roomId={room.id}
+      initialRoom={room}
+      currentUser={currentUser}
+      onError={handleProviderError}
+    >
+      <InvestmentChatPanelContent
+        currentUser={currentUser}
+        participantRole={participantRole}
+        bottomInset={bottomInset}
+        onNotice={onNotice}
+        onSettingsPress={onSettingsPress}
+        onReportUser={onReportUser}
+        onConversationDeleted={onConversationDeleted}
+        embedded={embedded}
+        style={style}
+      />
+    </ChatRoomProvider>
+  );
+}
+
+type InvestmentChatPanelContentProps = {
+  currentUser: Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle' | 'activeRole' | 'roles' | 'role'>;
+  participantRole: 'founder' | 'investor' | null;
+  bottomInset: number;
+  onNotice: (message: string | null) => void;
+  onSettingsPress?: () => void;
+  onReportUser?: () => void;
+  onConversationDeleted?: () => void;
+  embedded: boolean;
+  style?: StyleProp<ViewStyle>;
+};
+
+function InvestmentChatPanelContent({
+  currentUser,
+  participantRole,
+  bottomInset,
+  onNotice,
+  onSettingsPress,
+  onReportUser,
+  onConversationDeleted,
+  embedded,
+  style,
+}: InvestmentChatPanelContentProps) {
+  const {
+    room,
+    messages,
+    allMessages,
+    counterparty,
+    blockStatus,
+    typingLabel,
+    isLoadingOlder,
+    loadOlderMessages,
+    sendMessage,
+    blockCounterparty,
+    unblockCounterparty,
+    isMuted,
+    muteConversation,
+    unmuteConversation,
+  } = useChatRoom();
+
   const [draft, setDraft] = useState('');
-  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
   const [selectedMessage, setSelectedMessage] = useState<ChatMessage | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
@@ -86,7 +141,6 @@ export function InvestmentChatPanel({
   const unreadCount = room.unreadCounts?.[currentUser.id] ?? 0;
   const isBlocked = blockStatus.blockedByMe || blockStatus.blockedMe;
   const canParticipate = participantRole !== null;
-  const typingLabel = getCounterpartyTypingLabel(room, currentUser.id);
 
   const handleToast = useCallback((payload: ChatToastPayload) => {
     setToast(payload);
@@ -108,29 +162,9 @@ export function InvestmentChatPanel({
     currentUser,
     counterparty,
     onToast: handleToast,
-    onBlocked,
   });
 
-  const allMessages = useMemo(
-    () => [...olderMessages, ...messages].filter((message, index, array) => array.findIndex((item) => item.id === message.id) === index),
-    [messages, olderMessages],
-  );
-
   const listData = useMemo(() => [...buildChatListItems(allMessages)].reverse(), [allMessages]);
-
-  useEffect(() => {
-    const unsubscribe = investmentChatService.subscribeToMessages(
-      room.id,
-      (nextMessages) => {
-        setMessages(nextMessages);
-        if (nextMessages.length < 40) {
-          setHasMore(false);
-        }
-      },
-      (error) => onNotice(getFriendlyErrorMessage(error)),
-    );
-    return unsubscribe;
-  }, [onNotice, room.id]);
 
   useEffect(() => {
     if (allMessages.length === 0) return;
@@ -170,29 +204,9 @@ export function InvestmentChatPanel({
     return () => clearTimeout(timeout);
   }, [currentUser.id, draft, room]);
 
-  const handleLoadOlder = useCallback(async () => {
-    if (!hasMore || isLoadingOlder || allMessages.length === 0) return;
-    const oldest = allMessages[0];
-    try {
-      setIsLoadingOlder(true);
-      const batch = await investmentChatService.loadOlderMessages(room.id, oldest);
-      if (batch.length === 0) {
-        setHasMore(false);
-        return;
-      }
-      setOlderMessages((current) => {
-        const merged = [...batch, ...current];
-        return merged.filter((message, index, array) => array.findIndex((item) => item.id === message.id) === index);
-      });
-      if (batch.length < 40) {
-        setHasMore(false);
-      }
-    } catch (error) {
-      onNotice(getFriendlyErrorMessage(error));
-    } finally {
-      setIsLoadingOlder(false);
-    }
-  }, [allMessages, hasMore, isLoadingOlder, onNotice, room.id]);
+  const handleLoadOlder = useCallback(() => loadOlderMessages().catch((error) => {
+    onNotice(getFriendlyErrorMessage(error));
+  }), [loadOlderMessages, onNotice]);
 
   const handleOpenUrl = useCallback(async (url: string) => {
     try {
@@ -205,12 +219,7 @@ export function InvestmentChatPanel({
   const handleSend = useCallback(async ({ text, localAttachments }: { text: string; localAttachments: LocalChatAttachmentInput[] }) => {
     try {
       onNotice(null);
-      await chatMessageService.sendMessage({
-        roomId: room.id,
-        sender: currentUser,
-        text,
-        localAttachments,
-      });
+      await sendMessage(text, localAttachments);
       setDraft('');
       listRef.current?.scrollToOffset({ offset: 0, animated: true });
     } catch (error) {
@@ -218,7 +227,7 @@ export function InvestmentChatPanel({
       handleToast({ type: 'error', message });
       throw error;
     }
-  }, [currentUser, handleToast, onNotice, room.id]);
+  }, [handleToast, onNotice, sendMessage]);
 
   const handleLongPress = useCallback((message: ChatMessage) => {
     openMessageActions(message);
@@ -272,13 +281,11 @@ export function InvestmentChatPanel({
   return (
     <View style={[styles.container, embedded ? styles.containerEmbedded : null, style]}>
       {embedded ? (
-        <View style={styles.embeddedHeader}>
-          <View style={styles.embeddedHeaderCopy}>
-            <Text style={styles.embeddedTitle}>Investment Chat</Text>
-            {unreadCount > 0 ? <Text style={styles.embeddedUnread}>{unreadCount} unread</Text> : null}
-          </View>
-          <ChatSettingsButton onPress={openSettings} />
-        </View>
+        <ScreenHeader
+          title="Investment Chat"
+          subtitle={unreadCount > 0 ? `${unreadCount} unread` : undefined}
+          rightAction={<ChatSettingsButton onPress={openSettings} />}
+        />
       ) : (
         <ChatHeader unreadCount={unreadCount} onSettingsPress={openSettings} />
       )}
@@ -362,12 +369,17 @@ export function InvestmentChatPanel({
         messages={allMessages}
         onClose={() => setIsSettingsVisible(false)}
         onToast={handleToast}
+        blockStatus={blockStatus}
+        isMuted={isMuted}
+        onBlockUser={blockCounterparty}
+        onUnblockUser={unblockCounterparty}
+        onMuteConversation={muteConversation}
+        onUnmuteConversation={unmuteConversation}
         onReportUser={() => {
           setIsSettingsVisible(false);
           onReportUser?.();
         }}
         onConversationDeleted={onConversationDeleted}
-        onBlocked={onBlocked}
       />
 
       {reportDialog}
@@ -384,30 +396,6 @@ const styles = StyleSheet.create({
   },
   containerEmbedded: {
     backgroundColor: colors.panelMuted,
-  },
-  embeddedHeader: {
-    alignItems: 'center',
-    backgroundColor: colors.panel,
-    borderBottomColor: 'rgba(216, 201, 163, 0.16)',
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  embeddedHeaderCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  embeddedTitle: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  embeddedUnread: {
-    color: colors.accent,
-    fontSize: 11,
-    fontWeight: '700',
   },
   messagesArea: {
     flex: 1,
