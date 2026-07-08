@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppScreen } from '@/components/layout/AppScreen';
 import { ScreenHeader, ScreenHeaderIconButton, ScreenHeaderTextButton } from '@/components/layout/ScreenHeader';
@@ -228,53 +229,77 @@ export function ChatSettings({
 
   return (
     <>
-      <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-        <AppScreen horizontalPadding={false} contentContainerStyle={styles.modalBody}>
-          <ScreenHeader
-            title="Chat Settings"
-            rightAction={<ScreenHeaderTextButton label="Done" onPress={onClose} />}
-          />
-          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-            {isWorking ? <Text style={styles.workingLabel}>Applying changes...</Text> : null}
-            {settingsActions.map((action) => (
-              <Pressable
-                key={action.label}
-                accessibilityRole="button"
-                accessibilityLabel={action.label}
-                disabled={isWorking}
-                onPress={action.onPress}
-                style={styles.actionRow}
-              >
-                <Text style={[styles.actionLabel, action.destructive ? styles.destructive : null]}>
-                  {action.label}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </AppScreen>
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        statusBarTranslucent={false}
+        onRequestClose={onClose}
+      >
+        <SafeAreaProvider>
+          <AppScreen horizontalPadding={false} bottomPadding={false} contentContainerStyle={styles.modalBody}>
+            <ScreenHeader
+              title="Chat Settings"
+              rightAction={<ScreenHeaderTextButton label="Done" onPress={onClose} />}
+            />
+            <ScrollView
+              style={styles.scrollBody}
+              contentContainerStyle={styles.content}
+              showsVerticalScrollIndicator={false}
+            >
+              {isWorking ? <Text style={styles.workingLabel}>Applying changes...</Text> : null}
+              {settingsActions.map((action) => (
+                <Pressable
+                  key={action.label}
+                  accessibilityRole="button"
+                  accessibilityLabel={action.label}
+                  disabled={isWorking}
+                  onPress={action.onPress}
+                  style={styles.actionRow}
+                >
+                  <Text style={[styles.actionLabel, action.destructive ? styles.destructive : null]}>
+                    {action.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </AppScreen>
+        </SafeAreaProvider>
       </Modal>
 
-      <Modal visible={sharedFilesVisible} animationType="slide" onRequestClose={() => setSharedFilesVisible(false)}>
-        <AppScreen horizontalPadding={false} contentContainerStyle={styles.modalBody}>
-          <ScreenHeader
-            title="Shared Files"
-            rightAction={<ScreenHeaderTextButton label="Done" onPress={() => setSharedFilesVisible(false)} />}
-          />
-          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-            {sharedFiles.length === 0 ? (
-              <Text style={styles.emptyCopy}>No shared files yet.</Text>
-            ) : (
-              sharedFiles.map((message) => (
-                <View key={message.id} style={styles.fileRow}>
-                  <Text style={styles.fileName}>
-                    {message.attachments?.[0]?.name ?? message.documentName ?? 'Attachment'}
-                  </Text>
-                  <Text style={styles.fileMeta}>{message.senderName}</Text>
-                </View>
-              ))
-            )}
-          </ScrollView>
-        </AppScreen>
+      <Modal
+        visible={sharedFilesVisible}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        statusBarTranslucent={false}
+        onRequestClose={() => setSharedFilesVisible(false)}
+      >
+        <SafeAreaProvider>
+          <AppScreen horizontalPadding={false} bottomPadding={false} contentContainerStyle={styles.modalBody}>
+            <ScreenHeader
+              title="Shared Files"
+              rightAction={<ScreenHeaderTextButton label="Done" onPress={() => setSharedFilesVisible(false)} />}
+            />
+            <ScrollView
+              style={styles.scrollBody}
+              contentContainerStyle={styles.content}
+              showsVerticalScrollIndicator={false}
+            >
+              {sharedFiles.length === 0 ? (
+                <Text style={styles.emptyCopy}>No shared files yet.</Text>
+              ) : (
+                sharedFiles.map((message) => (
+                  <View key={message.id} style={styles.fileRow}>
+                    <Text style={styles.fileName}>
+                      {message.attachments?.[0]?.name ?? message.documentName ?? 'Attachment'}
+                    </Text>
+                    <Text style={styles.fileMeta}>{message.senderName}</Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </AppScreen>
+        </SafeAreaProvider>
       </Modal>
     </>
   );
@@ -298,7 +323,11 @@ const styles = StyleSheet.create({
   modalBody: {
     flex: 1,
   },
+  scrollBody: {
+    flex: 1,
+  },
   content: {
+    flexGrow: 1,
     gap: spacing.sm,
     padding: spacing.lg,
     paddingBottom: spacing.xl,
