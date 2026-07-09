@@ -11,7 +11,7 @@ import {
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppScreen } from '@/components/layout/AppScreen';
-import { ScreenHeader, ScreenHeaderIconButton, ScreenHeaderTextButton } from '@/components/layout/ScreenHeader';
+import { ScreenHeader, ScreenHeaderBackButton, ScreenHeaderIconButton, ScreenHeaderTextButton } from '@/components/layout/ScreenHeader';
 import { colors, radii, spacing } from '@/constants/theme';
 import { chatMuteService } from '@/services/chat/muteService';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
@@ -240,6 +240,7 @@ export function ChatSettings({
           <AppScreen horizontalPadding={false} bottomPadding={false} contentContainerStyle={styles.modalBody}>
             <ScreenHeader
               title="Chat Settings"
+              leftAction={<ScreenHeaderBackButton onPress={onClose} />}
               rightAction={<ScreenHeaderTextButton label="Done" onPress={onClose} />}
             />
             <ScrollView
@@ -278,7 +279,8 @@ export function ChatSettings({
           <AppScreen horizontalPadding={false} bottomPadding={false} contentContainerStyle={styles.modalBody}>
             <ScreenHeader
               title="Shared Files"
-              rightAction={<ScreenHeaderTextButton label="Done" onPress={() => setSharedFilesVisible(false)} />}
+              leftAction={<ScreenHeaderBackButton onPress={() => setSharedFilesVisible(false)} />}
+              rightAction={<ScreenHeaderTextButton label="Done" onPress={onClose} />}
             />
             <ScrollView
               style={styles.scrollBody}
