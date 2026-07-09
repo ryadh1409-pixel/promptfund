@@ -260,9 +260,9 @@ const styles = StyleSheet.create({
   },
   footerEmbedded: {
     borderTopColor: 'rgba(216, 201, 163, 0.16)',
-    gap: 10,
+    gap: 8,
     paddingHorizontal: spacing.md,
-    paddingTop: 14,
+    paddingTop: 10,
   },
   compliance: {
     color: colors.subtle,

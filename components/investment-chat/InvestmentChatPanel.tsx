@@ -15,7 +15,6 @@ import {
 
 import { ChatSettings, ChatSettingsButton } from '@/components/chat/ChatSettings';
 import { ChatRoomProvider, useChatRoom } from '@/components/chat/ChatRoomProvider';
-import { ScreenHeader } from '@/components/layout/ScreenHeader';
 import { ChatLoadingOverlay, ChatToastBanner, useMessageActions } from '@/hooks/chat/useMessageActions';
 import { colors, radii, spacing } from '@/constants/theme';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
@@ -281,11 +280,17 @@ function InvestmentChatPanelContent({
   return (
     <View style={[styles.container, embedded ? styles.containerEmbedded : null, style]}>
       {embedded ? (
-        <ScreenHeader
-          title="Investment Chat"
-          subtitle={unreadCount > 0 ? `${unreadCount} unread` : undefined}
-          rightAction={<ChatSettingsButton onPress={openSettings} />}
-        />
+        <View style={styles.chatSectionHeader}>
+          <View style={styles.chatSectionTitleWrap}>
+            <Text style={styles.chatSectionTitle}>Investment Chat</Text>
+            {unreadCount > 0 ? (
+              <Text style={styles.chatSectionSubtitle}>{unreadCount} unread</Text>
+            ) : null}
+          </View>
+          <View style={styles.chatSectionSettings}>
+            <ChatSettingsButton onPress={openSettings} />
+          </View>
+        </View>
       ) : (
         <ChatHeader unreadCount={unreadCount} onSettingsPress={openSettings} />
       )}
@@ -306,6 +311,7 @@ function InvestmentChatPanelContent({
             initialNumToRender={18}
             maxToRenderPerBatch={24}
             windowSize={12}
+            style={styles.messageList}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             contentContainerStyle={styles.listContent}
@@ -393,9 +399,43 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: colors.background,
     flex: 1,
+    minHeight: 0,
   },
   containerEmbedded: {
     backgroundColor: colors.panelMuted,
+  },
+  chatSectionHeader: {
+    alignItems: 'center',
+    backgroundColor: colors.panelMuted,
+    borderBottomColor: 'rgba(216, 201, 163, 0.14)',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    flexShrink: 0,
+    minHeight: 48,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  chatSectionTitleWrap: {
+    flex: 1,
+    gap: 2,
+    justifyContent: 'center',
+    minWidth: 0,
+    paddingRight: spacing.sm,
+  },
+  chatSectionTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  chatSectionSubtitle: {
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  chatSectionSettings: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   messagesArea: {
     flex: 1,
@@ -406,13 +446,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     paddingHorizontal: spacing.md,
   },
+  messageList: {
+    flex: 1,
+  },
   composerWrap: {
     backgroundColor: colors.panel,
-    paddingTop: spacing.sm,
+    flexShrink: 0,
   },
   listContent: {
+    flexGrow: 1,
     gap: 4,
-    paddingBottom: 4,
+    paddingBottom: 8,
     paddingTop: 8,
   },
   dateWrap: {
@@ -430,6 +474,7 @@ const styles = StyleSheet.create({
   },
   typing: {
     color: colors.accent,
+    flexShrink: 0,
     fontSize: 11,
     fontStyle: 'italic',
     paddingHorizontal: spacing.sm,
@@ -437,6 +482,7 @@ const styles = StyleSheet.create({
   },
   blocked: {
     color: colors.danger,
+    flexShrink: 0,
     fontSize: 12,
     paddingHorizontal: spacing.sm,
     paddingTop: 2,

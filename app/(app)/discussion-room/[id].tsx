@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,9 +13,7 @@ import {
 import { DealRoomHeader } from '@/components/deal-room/DealRoomHeader';
 import { DealRoomWorkflowWizard } from '@/components/deal-room/DealRoomWorkflowWizard';
 import { InvestmentChatPanel } from '@/components/investment-chat/InvestmentChatPanel';
-import { AppScreen, useAppSafeAreaInsets } from '@/components/layout/AppScreen';
-import { ScreenHeader, ScreenHeaderTextButton } from '@/components/layout/ScreenHeader';
-import { BlockUserControl } from '@/components/safety/BlockUserControl';
+import { AppScreen } from '@/components/layout/AppScreen';
 import { LoadingState, PrimaryButton } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -47,16 +44,13 @@ export default function DiscussionRoomScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { authUser, profile } = useAuth();
-  const insets = useAppSafeAreaInsets();
   const [room, setRoom] = useState<DiscussionRoom | null>(null);
   const [agreement, setAgreement] = useState<InvestmentAgreement | null>(null);
   const [investment, setInvestment] = useState<V5Investment | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isWorkflowSaving, setIsWorkflowSaving] = useState(false);
-  const [counterpartyProfile, setCounterpartyProfile] = useState<User | null>(null);
   const [founderProfile, setFounderProfile] = useState<User | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [isSafetyVisible, setIsSafetyVisible] = useState(false);
   const [isReportModalVisible, setIsReportModalVisible] = useState(false);
   const [reportReason, setReportReason] = useState<DiscussionReportReason>('Spam');
   const [reportDetails, setReportDetails] = useState('');
@@ -139,9 +133,6 @@ export default function DiscussionRoomScreen() {
   const counterpartyId = authUser?.uid && room
     ? authUser.uid === room.founderId ? room.investorId : room.founderId
     : null;
-  const counterpartyName = authUser?.uid && room
-    ? authUser.uid === room.founderId ? room.investorName : room.founderName
-    : 'this user';
 
   const chatCurrentUser = useMemo((): Pick<User, 'id' | 'displayName' | 'name' | 'username' | 'handle' | 'activeRole' | 'roles' | 'role'> | null => {
     if (!profile) return null;
@@ -168,18 +159,6 @@ export default function DiscussionRoomScreen() {
   const handleConversationDeleted = useCallback(() => {
     router.back();
   }, [router]);
-
-  useEffect(() => {
-    if (!counterpartyId) {
-      setCounterpartyProfile(null);
-      return undefined;
-    }
-    let isMounted = true;
-    userService.getUserById(counterpartyId)
-      .then((user) => { if (isMounted) setCounterpartyProfile(user); })
-      .catch((error) => setNotice(getFriendlyErrorMessage(error)));
-    return () => { isMounted = false; };
-  }, [counterpartyId]);
 
   useEffect(() => {
     if (!room?.founderId) {
@@ -290,13 +269,6 @@ export default function DiscussionRoomScreen() {
     }
   }
 
-  function handleReportConversation() {
-    setIsSafetyVisible(false);
-    setReportReason('Spam');
-    setReportDetails('');
-    setIsReportModalVisible(true);
-  }
-
   async function handleSubmitReport() {
     if (!room || !authUser?.uid || !counterpartyId || isSubmittingReport) return;
     if (reportReason === 'Other' && !reportDetails.trim()) {
@@ -324,7 +296,13 @@ export default function DiscussionRoomScreen() {
   }
 
   return (
-    <AppScreen keyboardAvoiding horizontalPadding={false} style={styles.safeArea}>
+    <AppScreen
+      keyboardAvoiding
+      horizontalPadding={false}
+      bottomPadding={false}
+      edges={['top', 'left', 'right']}
+      style={styles.safeArea}
+    >
       {isLoading ? (
         <View style={styles.centeredState}>
           <LoadingState label="Loading Deal Room" />
@@ -349,7 +327,7 @@ export default function DiscussionRoomScreen() {
       {room && profile && chatCurrentUser ? (
         <View style={styles.dealRoom}>
           <View style={styles.workflowZone}>
-            <DealRoomHeader startupName={room.startupName} onSafetyPress={() => setIsSafetyVisible(true)} />
+            <DealRoomHeader startupName={room.startupName} />
             <DealRoomWorkflowWizard
               steps={workflowSteps}
               isSaving={isWorkflowSaving}
@@ -362,7 +340,7 @@ export default function DiscussionRoomScreen() {
             embedded
             currentUser={chatCurrentUser}
             participantRole={participantRole}
-            bottomInset={insets.bottom}
+            bottomInset={0}
             onNotice={handleChatNotice}
             onReportUser={handleOpenReportModal}
             onConversationDeleted={handleConversationDeleted}
@@ -370,17 +348,6 @@ export default function DiscussionRoomScreen() {
           />
         </View>
       ) : null}
-
-      <SafetyModal
-        visible={isSafetyVisible}
-        authUserId={authUser?.uid}
-        counterpartyId={counterpartyId}
-        counterpartyName={counterpartyName}
-        profile={profile ?? null}
-        counterpartyProfile={counterpartyProfile}
-        onClose={() => setIsSafetyVisible(false)}
-        onReport={handleReportConversation}
-      />
 
       <ReportUserModal
         visible={isReportModalVisible}
@@ -393,48 +360,6 @@ export default function DiscussionRoomScreen() {
         onSubmit={handleSubmitReport}
       />
     </AppScreen>
-  );
-}
-
-function SafetyModal({
-  visible,
-  authUserId,
-  counterpartyId,
-  counterpartyName,
-  profile,
-  counterpartyProfile,
-  onClose,
-  onReport,
-}: {
-  visible: boolean;
-  authUserId?: string | null;
-  counterpartyId: string | null;
-  counterpartyName: string;
-  profile: User | null;
-  counterpartyProfile: User | null;
-  onClose: () => void;
-  onReport: () => void;
-}) {
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <AppScreen horizontalPadding={false} style={styles.modalSafeArea}>
-        <ScreenHeader
-          title="Safety & Trust"
-          rightAction={<ScreenHeaderTextButton label="Done" onPress={onClose} />}
-        />
-        <ScrollView contentContainerStyle={styles.modalContent}>
-          <BlockUserControl
-            currentUserId={authUserId}
-            targetUserId={counterpartyId}
-            currentUser={profile}
-            targetUser={counterpartyProfile}
-            targetName={counterpartyName}
-            onReport={onReport}
-            showReport
-          />
-        </ScrollView>
-      </AppScreen>
-    </Modal>
   );
 }
 
@@ -508,17 +433,18 @@ const styles = StyleSheet.create({
   },
   dealRoom: {
     flex: 1,
+    minHeight: 0,
   },
   workflowZone: {
+    flexGrow: 0,
     flexShrink: 0,
     gap: spacing.xs,
-    paddingBottom: spacing.sm,
+    paddingBottom: spacing.xs,
   },
   chatPanel: {
     borderTopColor: 'rgba(216, 201, 163, 0.14)',
     borderTopWidth: 1,
     flex: 1,
-    marginTop: spacing.xs,
     minHeight: 0,
   },
   centeredState: {
@@ -545,13 +471,6 @@ const styles = StyleSheet.create({
   noticeDismiss: {
     color: colors.accent,
     fontWeight: '700',
-  },
-  modalSafeArea: {
-    backgroundColor: colors.background,
-    flex: 1,
-  },
-  modalContent: {
-    padding: spacing.md,
   },
   modalBackdrop: {
     alignItems: 'center',

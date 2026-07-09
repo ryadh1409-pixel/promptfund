@@ -67,8 +67,8 @@ export function DealRoomWorkflowWizard({ steps, isSaving, onAction }: DealRoomWo
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 6,
-    paddingHorizontal: spacing.sm,
+    gap: 4,
+    paddingHorizontal: spacing.md,
   },
   sectionTitle: {
     color: colors.muted,
@@ -81,17 +81,18 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(216, 201, 163, 0.18)',
     borderRadius: radii.sm,
     borderWidth: 1,
-    gap: 6,
-    padding: 12,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   completedBlock: {
-    gap: 1,
+    gap: 0,
   },
   completedRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 5,
-    minHeight: 26,
+    minHeight: 22,
     paddingHorizontal: 2,
   },
   completedCheck: {
@@ -113,7 +114,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(200, 162, 74, 0.28)',
     borderRadius: radii.sm - 2,
     borderWidth: 1,
-    gap: 3,
+    gap: 2,
     paddingHorizontal: 8,
     paddingVertical: 6,
   },
@@ -144,10 +145,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     justifyContent: 'center',
     marginTop: 2,
-    minHeight: 30,
+    minHeight: 28,
     minWidth: 108,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
+    paddingVertical: 4,
   },
   buttonDisabled: {
     opacity: 0.7,
