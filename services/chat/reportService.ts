@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -13,7 +14,7 @@ import {
   chatSafetyCollections,
   messageReportDocumentId,
 } from '@/firebase/chatSafety';
-import { firestoreCollections, getPromptFundFirestore } from '@/firebase/firestore';
+import { firestoreAdapter, firestoreCollections, getPromptFundFirestore } from '@/firebase/firestore';
 import { AppError } from '@/services/errorHandler';
 import { userService } from '@/services/userService';
 import type { MessageReport, MessageReportReason, MessageReportStatus } from '@/types/ChatSafety';
@@ -196,5 +197,14 @@ export const chatReportService = {
 
   async suspendUser(userId: string, _adminId: string): Promise<User | null> {
     return userService.updateUser(userId, { status: 'suspended' });
+  },
+
+  async deleteReport(reportId: string) {
+    const reportRef = doc(getPromptFundFirestore(), chatSafetyCollections.messageReports, reportId);
+    await deleteDoc(reportRef);
+  },
+
+  async deleteReportedMessage(messageId: string) {
+    return firestoreAdapter.deleteById('discussionMessages', messageId);
   },
 };

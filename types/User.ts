@@ -79,11 +79,13 @@ export type UserReport = {
   reportedUid: string;
   reason: 'Spam' | 'Fraud' | 'Harassment' | 'Abuse' | 'Scam' | 'Fake Startup' | 'Other' | string;
   details: string;
-  status: 'open' | 'resolved';
+  status: 'open' | 'dismissed' | 'resolved';
   discussionRoomId?: string;
   startupId?: string;
+  messageId?: string;
   createdAt: string;
   resolvedAt?: string;
+  reviewedBy?: string;
 };
 
 export type DiscussionReportReason =
@@ -169,7 +171,9 @@ export type AdminAnnouncement = {
   body: string;
   target: 'everyone' | 'founders' | 'investors' | 'single_user';
   targetUserId?: string;
-  sentBy: string;
+  createdBy: string;
+  sentBy?: string;
+  readBy?: string[];
   createdAt: string;
 };
 

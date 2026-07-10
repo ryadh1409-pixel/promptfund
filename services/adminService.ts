@@ -1,20 +1,26 @@
-import { firestoreAdapter, firestoreCollections, type FirestoreCollectionName } from '@/firebase/firestore';
+import { doc, writeBatch } from 'firebase/firestore';
+
+import { firestoreAdapter, firestoreCollections, getPromptFundFirestore, type FirestoreCollectionName } from '@/firebase/firestore';
 import { projectService } from '@/services/projectService';
 import { userService } from '@/services/userService';
 import { notificationService } from '@/services/notificationService';
-import { legalService } from '@/services/legalService';
 import { supportService } from '@/services/supportService';
 import type { AgreementRoom } from '@/types/Agreement';
-import type { Investment, Match } from '@/types/FundingRequest';
-import type { ActivityTimelineEvent, AdminAnnouncement, LegalDocumentVersions, ModerationFlag, SupportTicket, SupportTicketStatus, User, UserReport, UserStatus } from '@/types/User';
+import type { Match } from '@/types/FundingRequest';
+import type { ActivityTimelineEvent, AdminAnnouncement, ModerationFlag, SupportTicket, SupportTicketStatus, User, UserReport, UserStatus } from '@/types/User';
 import type { DiscussionMessage, DiscussionRoom, InvestmentAgreement, InvestmentOpportunity, StartupInterest, V5Investment } from '@/types/InvestmentFlow';
 import type { Project } from '@/types/Project';
 
 export const adminEmail = 'ryadh1409@gmail.com';
 
-export function isAdminEmail(email: string | null | undefined) {
-  return email?.toLowerCase() === adminEmail;
-}
+export type AdminUserProfileDetail = {
+  user: User;
+  investments: V5Investment[];
+  portfolioCompanies: V5Investment[];
+  reportsSubmitted: UserReport[];
+  reportsReceived: UserReport[];
+  activity: ActivityTimelineEvent[];
+};
 
 async function adminList<T>(collectionName: FirestoreCollectionName) {
   try {
@@ -27,6 +33,10 @@ async function adminList<T>(collectionName: FirestoreCollectionName) {
     });
     throw error;
   }
+}
+
+export function isAdminEmail(email: string | null | undefined) {
+  return email?.toLowerCase() === adminEmail;
 }
 
 export const adminService = {
@@ -44,7 +54,6 @@ export const adminService = {
     const moderationFlags = await adminList<ModerationFlag>('moderationFlags');
     const activityTimeline = await adminList<ActivityTimelineEvent>('activityTimeline');
     const supportTickets = await adminList<SupportTicket>('supportTickets');
-    const legalVersions = await legalService.getCurrentVersions();
 
     return {
       users,
@@ -60,18 +69,49 @@ export const adminService = {
       moderationFlags,
       activityTimeline,
       supportTickets,
-      legalVersions,
       revenue: investments.reduce((sum: number, investment: V5Investment) => sum + (investment.amount ?? 0) * 0.025, 0),
       portfolioVolume: investments.reduce((sum: number, investment: V5Investment) => sum + (investment.amount ?? 0), 0),
     };
   },
 
-  async updateUserStatus(userId: string, status: UserStatus): Promise<User | null> {
-    return userService.updateUser(userId, { status });
+  async getUserProfileDetail(userId: string): Promise<AdminUserProfileDetail | null> {
+    const user = await userService.getUserById(userId);
+    if (!user) {
+      return null;
+    }
+
+    const [
+      founderInvestments,
+      investorInvestments,
+      reportsSubmitted,
+      reportsReceived,
+      activity,
+    ] = await Promise.all([
+      firestoreAdapter.queryByField<V5Investment>('investments', 'founderId', userId),
+      firestoreAdapter.queryByField<V5Investment>('investments', 'investorId', userId),
+      firestoreAdapter.queryByField<UserReport>('userReports', 'reporterUid', userId),
+      firestoreAdapter.queryByField<UserReport>('userReports', 'reportedUid', userId),
+      firestoreAdapter.list<ActivityTimelineEvent>('activityTimeline'),
+    ]);
+
+    const investments = [...founderInvestments, ...investorInvestments]
+      .filter((investment, index, list) => list.findIndex((item) => item.id === investment.id) === index);
+    const portfolioCompanies = investments.filter((investment) => investment.status === 'completed' || investment.status === 'funding_confirmed');
+
+    return {
+      user,
+      investments,
+      portfolioCompanies,
+      reportsSubmitted,
+      reportsReceived,
+      activity: activity
+        .filter((event) => event.actorId === userId)
+        .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt))),
+    };
   },
 
-  async updateLegalVersions(versions: LegalDocumentVersions) {
-    return legalService.updateVersions(versions);
+  async updateUserStatus(userId: string, status: UserStatus): Promise<User | null> {
+    return userService.updateUser(userId, { status });
   },
 
   async replyToSupportTicket(ticketId: string, adminId: string, body: string) {
@@ -85,6 +125,10 @@ export const adminService = {
 
   async updateSupportTicketStatus(ticketId: string, status: SupportTicketStatus) {
     return supportService.updateTicketStatus(ticketId, status);
+  },
+
+  async deleteSupportTicket(ticketId: string) {
+    return supportService.deleteTicket(ticketId);
   },
 
   async deleteUserProfile(userId: string): Promise<void> {
@@ -107,13 +151,27 @@ export const adminService = {
   },
 
   async deleteStartup(startupId: string) {
+    const [interests, matches] = await Promise.all([
+      firestoreAdapter.queryByField<StartupInterest>('interests', 'startupOpportunityId', startupId),
+      firestoreAdapter.queryByField<Match>('matches', 'startupId', startupId),
+    ]);
+
+    const batch = writeBatch(getPromptFundFirestore());
+    interests.forEach((interest) => {
+      batch.delete(doc(getPromptFundFirestore(), firestoreCollections.interests, interest.id));
+    });
+    matches.forEach((match) => {
+      batch.delete(doc(getPromptFundFirestore(), firestoreCollections.matches, match.id));
+    });
+    batch.delete(doc(getPromptFundFirestore(), firestoreCollections.startupOpportunities, startupId));
+    await batch.commit();
+
     await this.recordTimeline({
       startupId,
       actorId: 'admin',
       eventType: 'admin_action',
       label: 'Admin deleted startup',
     });
-    return firestoreAdapter.deleteById('startupOpportunities', startupId);
   },
 
   async blockUser(blockerUid: string, blockedUid: string) {
@@ -139,17 +197,33 @@ export const adminService = {
     return adminList<DiscussionMessage>('discussionMessages');
   },
 
-  async sendAnnouncement(input: Omit<AdminAnnouncement, 'id' | 'createdAt'>) {
+  async sendAnnouncement(input: {
+    title: string;
+    body: string;
+    target?: AdminAnnouncement['target'];
+    createdBy: string;
+  }) {
     const announcement = await firestoreAdapter.create<Omit<AdminAnnouncement, 'id'>>('adminAnnouncements', {
-      ...input,
+      title: input.title,
+      body: input.body,
+      target: input.target ?? 'everyone',
+      createdBy: input.createdBy,
+      sentBy: input.createdBy,
+      readBy: [],
       createdAt: new Date().toISOString(),
     });
     const users = await adminList<User>('users');
     const targets = users.filter((user) => {
-      if (input.target === 'everyone') return true;
-      if (input.target === 'founders') return user.activeRole === 'founder' || user.role === 'founder' || user.role === 'entrepreneur';
-      if (input.target === 'investors') return user.activeRole === 'investor' || user.role === 'investor' || user.role === 'angel_investor';
-      return user.id === input.targetUserId;
+      if (input.target === 'founders') {
+        return user.activeRole === 'founder' || user.role === 'founder' || user.role === 'entrepreneur';
+      }
+      if (input.target === 'investors') {
+        return user.activeRole === 'investor' || user.role === 'investor' || user.role === 'angel_investor';
+      }
+      if (input.target === 'single_user') {
+        return false;
+      }
+      return true;
     });
 
     await Promise.all(targets.map((user) => notificationService.createNotification({
@@ -170,10 +244,27 @@ export const adminService = {
     });
   },
 
-  async resolveReport(reportId: string): Promise<UserReport | null> {
+  async getUserReport(reportId: string) {
+    return firestoreAdapter.getById<UserReport>('userReports', reportId);
+  },
+
+  async dismissReport(reportId: string, reviewedBy: string) {
+    return firestoreAdapter.update<UserReport>('userReports', reportId, {
+      status: 'dismissed',
+      resolvedAt: new Date().toISOString(),
+      reviewedBy,
+    });
+  },
+
+  async resolveReport(reportId: string, reviewedBy: string): Promise<UserReport | null> {
     return firestoreAdapter.update<UserReport>('userReports', reportId, {
       status: 'resolved',
       resolvedAt: new Date().toISOString(),
+      reviewedBy,
     });
+  },
+
+  async deleteReport(reportId: string) {
+    return firestoreAdapter.deleteById('userReports', reportId);
   },
 };

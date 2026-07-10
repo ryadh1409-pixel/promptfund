@@ -2,6 +2,7 @@ import { Redirect, Tabs, useSegments } from 'expo-router';
 import { Text, type ColorValue } from 'react-native';
 import { useEffect } from 'react';
 
+import { AnnouncementGate } from '@/components/announcements/AnnouncementGate';
 import { useAppSafeAreaInsets } from '@/components/layout/AppScreen';
 import { colors } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -44,8 +45,9 @@ export default function AppLayout() {
   }
 
   return (
-    <Tabs
-      screenOptions={{
+    <>
+      <Tabs
+        screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: colors.background },
         tabBarActiveTintColor: colors.accent,
@@ -125,6 +127,8 @@ export default function AppLayout() {
       <Tabs.Screen name="profile/support-ticket/[id]" options={{ href: null }} />
       <Tabs.Screen name="profile/help-center" options={{ href: null }} />
     </Tabs>
+      <AnnouncementGate />
+    </>
   );
 }
 

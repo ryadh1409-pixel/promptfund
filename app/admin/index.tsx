@@ -10,7 +10,7 @@ import { adminService } from '@/services/adminService';
 import type { AgreementRoom } from '@/types/Agreement';
 import type { InvestmentInterest, Match } from '@/types/FundingRequest';
 import type { Project } from '@/types/Project';
-import type { LegalDocumentVersions, ModerationFlag, SupportTicket, SupportTicketStatus, User, UserReport, ActivityTimelineEvent } from '@/types/User';
+import type { ModerationFlag, SupportTicket, User, UserReport, ActivityTimelineEvent } from '@/types/User';
 import type { ChatMessage } from '@/types/InvestmentChat';
 import type { DiscussionRoom, InvestmentAgreement, InvestmentOpportunity, StartupInterest, V5Investment } from '@/types/InvestmentFlow';
 import { formatCurrency } from '@/utils/format';
@@ -33,14 +33,12 @@ type AdminData = {
   reports: UserReport[];
   moderationFlags: ModerationFlag[];
   activityTimeline: ActivityTimelineEvent[];
-  legalVersions: LegalDocumentVersions;
   supportTickets: SupportTicket[];
   revenue: number;
   portfolioVolume: number;
 };
 
 type AdminFilter = 'all' | 'active' | 'completed' | 'reported' | 'blocked' | 'archived';
-const supportStatuses: SupportTicketStatus[] = ['Open', 'In Progress', 'Waiting for User', 'Resolved', 'Closed'];
 
 export default function AdminDashboardScreen() {
   const { authUser, initializing, profile } = useAuth();
@@ -51,8 +49,7 @@ export default function AdminDashboardScreen() {
   const [search, setSearch] = useState('');
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementBody, setAnnouncementBody] = useState('');
-  const [legalVersionDraft, setLegalVersionDraft] = useState<LegalDocumentVersions | null>(null);
-  const [supportReplyDrafts, setSupportReplyDrafts] = useState<Record<string, string>>({});
+  const [announcementNotice, setAnnouncementNotice] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   useEffect(() => {
@@ -68,7 +65,6 @@ export default function AdminDashboardScreen() {
         const rawMessages = await adminService.listDiscussionMessages();
         setData(nextData);
         setChatMessages(rawMessages.map((message) => normalizeChatMessage(message.id, message as unknown as Record<string, unknown>)));
-        setLegalVersionDraft(nextData.legalVersions);
       } catch (loadError) {
         setError(getFriendlyErrorMessage(loadError));
       } finally {
@@ -149,64 +145,18 @@ export default function AdminDashboardScreen() {
 
     try {
       setError(null);
+      setAnnouncementNotice(null);
       await adminService.sendAnnouncement({
         title: announcementTitle.trim(),
         body: announcementBody.trim(),
         target: 'everyone',
-        sentBy: authUser.uid,
+        createdBy: authUser.uid,
       });
       setAnnouncementTitle('');
       setAnnouncementBody('');
+      setAnnouncementNotice('Announcement delivered to all users. Offline users will see it the next time they open the app.');
     } catch (announcementError) {
       setError(getFriendlyErrorMessage(announcementError));
-    }
-  }
-
-  async function handleResolveReport(reportId: string) {
-    try {
-      setError(null);
-      await adminService.resolveReport(reportId);
-      setData(await adminService.getDashboardData());
-    } catch (reportError) {
-      setError(getFriendlyErrorMessage(reportError));
-    }
-  }
-
-  async function handleUpdateLegalVersions() {
-    if (!legalVersionDraft) return;
-
-    try {
-      setError(null);
-      await adminService.updateLegalVersions(legalVersionDraft);
-      const nextData = await adminService.getDashboardData();
-      setData(nextData);
-      setLegalVersionDraft(nextData.legalVersions);
-    } catch (versionError) {
-      setError(getFriendlyErrorMessage(versionError));
-    }
-  }
-
-  async function handleSupportReply(ticketId: string) {
-    const body = supportReplyDrafts[ticketId]?.trim();
-    if (!authUser?.uid || !body) return;
-
-    try {
-      setError(null);
-      await adminService.replyToSupportTicket(ticketId, authUser.uid, body);
-      setSupportReplyDrafts((current) => ({ ...current, [ticketId]: '' }));
-      setData(await adminService.getDashboardData());
-    } catch (replyError) {
-      setError(getSupportErrorMessage(replyError));
-    }
-  }
-
-  async function handleSupportStatus(ticketId: string, status: SupportTicketStatus) {
-    try {
-      setError(null);
-      await adminService.updateSupportTicketStatus(ticketId, status);
-      setData(await adminService.getDashboardData());
-    } catch (statusError) {
-      setError(getSupportErrorMessage(statusError));
     }
   }
 
@@ -292,7 +242,7 @@ export default function AdminDashboardScreen() {
                 <Text style={styles.itemTitle}>{report.reason}</Text>
                 <Text style={styles.itemMeta}>{report.reportedUid} · {report.status} · {safeDate(report.createdAt)}</Text>
                 <Text style={styles.itemMeta}>{report.details}</Text>
-                <PrimaryButton label="Review / Resolve Report" variant="secondary" onPress={() => handleResolveReport(report.id)} />
+                <PrimaryButton label="Review Report" variant="secondary" onPress={() => router.push(`/admin/report/${report.id}`)} />
               </Card>
             ))}
           </AdminSection>
@@ -322,27 +272,8 @@ export default function AdminDashboardScreen() {
                 {ticket.unreadByAdmin ? <Text style={styles.unreadText}>Unread</Text> : null}
                 <Text style={styles.itemMeta}>{ticket.message}</Text>
                 <View style={ui.wrap}>
-                  {supportStatuses.map((status) => (
-                    <Pressable
-                      key={status}
-                      onPress={() => handleSupportStatus(ticket.id, status)}
-                      style={[styles.filterChip, ticket.status === status ? styles.filterChipActive : null]}
-                    >
-                      <Text style={styles.filterText}>{status}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-                <TextInput
-                  placeholder="Reply to this ticket"
-                  placeholderTextColor={colors.subtle}
-                  value={supportReplyDrafts[ticket.id] ?? ''}
-                  onChangeText={(value) => setSupportReplyDrafts((current) => ({ ...current, [ticket.id]: value }))}
-                  multiline
-                  style={[styles.input, styles.textArea]}
-                />
-                <View style={ui.wrap}>
-                  <PrimaryButton label="Open Conversation" variant="secondary" onPress={() => router.push(`/profile/support-ticket/${ticket.id}`)} />
-                  <PrimaryButton label="Send Reply" onPress={() => handleSupportReply(ticket.id)} disabled={!supportReplyDrafts[ticket.id]?.trim()} />
+                  <PrimaryButton label="Manage Ticket" variant="secondary" onPress={() => router.push(`/admin/support-ticket/${ticket.id}`)} />
+                  <PrimaryButton label="View User Profile" variant="secondary" onPress={() => router.push(`/admin/user/${ticket.userId}`)} />
                 </View>
               </Card>
             ))}
@@ -350,49 +281,11 @@ export default function AdminDashboardScreen() {
 
           <AdminSection title="Announcement Center">
             <Card>
+              <Text style={styles.itemMeta}>Announcements are stored in Firestore and shown once per user. Offline users receive them automatically when they next open the app.</Text>
               <TextInput placeholder="Announcement title" placeholderTextColor={colors.subtle} value={announcementTitle} onChangeText={setAnnouncementTitle} style={styles.input} />
               <TextInput placeholder="Announcement body" placeholderTextColor={colors.subtle} value={announcementBody} onChangeText={setAnnouncementBody} multiline style={[styles.input, styles.textArea]} />
               <PrimaryButton label="Send Announcement To Everyone" onPress={handleSendAnnouncement} disabled={!announcementTitle.trim() || !announcementBody.trim()} />
-            </Card>
-          </AdminSection>
-
-          <AdminSection title="Legal Versions">
-            <Card>
-              {legalVersionDraft ? (
-                <>
-                  <TextInput
-                    placeholder="App version"
-                    placeholderTextColor={colors.subtle}
-                    value={legalVersionDraft.appVersion}
-                    onChangeText={(appVersion) => setLegalVersionDraft({ ...legalVersionDraft, appVersion })}
-                    style={styles.input}
-                  />
-                  <TextInput
-                    placeholder="Terms version"
-                    placeholderTextColor={colors.subtle}
-                    value={legalVersionDraft.termsVersion}
-                    onChangeText={(termsVersion) => setLegalVersionDraft({ ...legalVersionDraft, termsVersion })}
-                    style={styles.input}
-                  />
-                  <TextInput
-                    placeholder="Privacy version"
-                    placeholderTextColor={colors.subtle}
-                    value={legalVersionDraft.privacyVersion}
-                    onChangeText={(privacyVersion) => setLegalVersionDraft({ ...legalVersionDraft, privacyVersion })}
-                    style={styles.input}
-                  />
-                  <TextInput
-                    placeholder="Community version"
-                    placeholderTextColor={colors.subtle}
-                    value={legalVersionDraft.communityVersion}
-                    onChangeText={(communityVersion) => setLegalVersionDraft({ ...legalVersionDraft, communityVersion })}
-                    style={styles.input}
-                  />
-                  <PrimaryButton label="Update Legal Versions" onPress={handleUpdateLegalVersions} />
-                </>
-              ) : (
-                <Text style={styles.itemMeta}>Loading legal versions...</Text>
-              )}
+              {announcementNotice ? <Text style={styles.successText}>{announcementNotice}</Text> : null}
             </Card>
           </AdminSection>
 
@@ -402,7 +295,7 @@ export default function AdminDashboardScreen() {
                 <Text style={styles.itemTitle}>{user.displayName ?? user.name}</Text>
                 <Text style={styles.itemMeta}>{user.username ?? user.handle} · {user.status ?? 'active'} · {getRoleBadgeLabel(user.role)}</Text>
                 <View style={ui.wrap}>
-                  <PrimaryButton label="View User Profile" variant="secondary" onPress={() => undefined} />
+                  <PrimaryButton label="View User Profile" variant="secondary" onPress={() => router.push(`/admin/user/${user.id}`)} />
                   <PrimaryButton label="Suspend User" variant="secondary" onPress={() => handleUserStatus(user.id, 'suspended')} />
                   <PrimaryButton label="Block User" variant="secondary" onPress={() => handleUserStatus(user.id, 'banned')} />
                 </View>
@@ -435,18 +328,6 @@ function supportDateTime(value: unknown) {
   }
 
   return 'Just now';
-}
-
-function getSupportErrorMessage(error: unknown) {
-  console.error('[PromptFund Admin Support] Firebase support error', error);
-  const code = typeof error === 'object' && error && 'code' in error ? String((error as { code: unknown }).code) : null;
-  const message = error instanceof Error ? error.message : String(error);
-
-  if (code === 'permission-denied') {
-    return `Firestore permission denied for admin support action. Check supportTickets status/message rules for admin role. Firebase: ${message}`;
-  }
-
-  return code ? `${code}: ${message}` : message;
 }
 
 function sortSupportTickets(tickets: SupportTicket[]) {
@@ -665,6 +546,10 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: colors.danger,
+    lineHeight: 22,
+  },
+  successText: {
+    color: colors.success,
     lineHeight: 22,
   },
   unreadText: {

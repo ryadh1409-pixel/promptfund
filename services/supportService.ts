@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, onSnapshot, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch, type Unsubscribe } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, onSnapshot, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch, type Unsubscribe } from 'firebase/firestore';
 
 import { firestoreCollections, getPromptFundFirestore } from '@/firebase/firestore';
 import type { SupportTicket, SupportTicketAttachment, SupportTicketCategory, SupportTicketMessage } from '@/types/User';
@@ -203,6 +203,18 @@ export const supportService = {
       status,
       updatedAt: serverTimestamp(),
     });
+  },
+
+  async deleteTicket(ticketId: string) {
+    const db = getPromptFundFirestore();
+    const ticketRef = doc(db, firestoreCollections.supportTickets, ticketId);
+    const messagesSnapshot = await getDocs(collection(ticketRef, 'messages'));
+    const batch = writeBatch(db);
+    messagesSnapshot.docs.forEach((message) => {
+      batch.delete(message.ref);
+    });
+    batch.delete(ticketRef);
+    await batch.commit();
   },
 
   async getTicket(ticketId: string): Promise<SupportTicket | null> {
