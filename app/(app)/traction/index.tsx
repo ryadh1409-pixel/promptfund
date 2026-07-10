@@ -5,7 +5,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { StartupPlayingCard, type StartupCard } from '@/components/cards/StartupPlayingCard';
 import { Card, EmptyState, FieldPreview, LoadingState, PrimaryButton, Screen, StatCard, ui } from '@/components/ui/Primitives';
-import { colors, spacing } from '@/constants/theme';
+import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { getPromptFundFirestore } from '@/firebase/firestore';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
@@ -225,10 +225,27 @@ function PortfolioCompanyCard({
       </View>
 
       <View style={styles.detailGrid}>
-        <FieldPreview label="Investment Amount" value={safeCurrency(investment.fundedAmount ?? investment.amount)} />
-        <FieldPreview label="Equity" value={safePercent(investment.allocation)} />
-        <FieldPreview label="Investment Date" value={safeDate(investment.completedAt ?? investment.fundedAt ?? investment.createdAt)} />
-        <FieldPreview label="Current Status" value={formatTractionStatus(investment.status)} />
+        <View style={styles.detailGridCell}>
+          <FieldPreview label="Investment Amount" value={safeCurrency(investment.fundedAmount ?? investment.amount)} />
+        </View>
+        <View style={styles.detailGridRow}>
+          <View style={styles.detailGridHalf}>
+            <FieldPreview label="Equity" value={safePercent(investment.allocation)} />
+          </View>
+          <View style={styles.detailGridHalf}>
+            <PortfolioDetailField
+              label="Startup Valuation"
+              value="$2,200 USD"
+              subtitle="Pre-Seed Valuation"
+            />
+          </View>
+        </View>
+        <View style={styles.detailGridCell}>
+          <FieldPreview label="Investment Date" value={safeDate(investment.completedAt ?? investment.fundedAt ?? investment.createdAt)} />
+        </View>
+        <View style={styles.detailGridCell}>
+          <FieldPreview label="Current Status" value={formatTractionStatus(investment.status)} />
+        </View>
       </View>
 
       <PrimaryButton
@@ -238,6 +255,24 @@ function PortfolioCompanyCard({
         disabled={isOpeningChat}
       />
     </Card>
+  );
+}
+
+function PortfolioDetailField({
+  label,
+  value,
+  subtitle,
+}: {
+  label: string;
+  value: string;
+  subtitle?: string;
+}) {
+  return (
+    <View style={styles.detailField}>
+      <Text style={styles.detailFieldLabel}>{label}</Text>
+      <Text style={styles.detailFieldValue}>{value}</Text>
+      {subtitle ? <Text style={styles.detailFieldSubtitle}>{subtitle}</Text> : null}
+    </View>
   );
 }
 
@@ -359,5 +394,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
+  },
+  detailGridCell: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    minWidth: '47%',
+  },
+  detailGridRow: {
+    flexBasis: '100%',
+    flexDirection: 'row',
+    flexGrow: 1,
+    gap: spacing.sm,
+    minWidth: '100%',
+  },
+  detailGridHalf: {
+    flex: 1,
+    minWidth: 0,
+  },
+  detailField: {
+    backgroundColor: colors.black,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.xs,
+    padding: spacing.md,
+  },
+  detailFieldLabel: {
+    color: colors.subtle,
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  detailFieldValue: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  detailFieldSubtitle: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 16,
   },
 });
