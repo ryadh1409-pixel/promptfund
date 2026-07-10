@@ -1,16 +1,17 @@
 import { Redirect, router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AdminInvestmentChats } from '@/components/admin/AdminInvestmentChats';
+import { ScreenHeaderBackButton } from '@/components/layout/ScreenHeader';
 import { Card, LoadingState, PrimaryButton, Screen, StatCard, ui } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
-import { adminService } from '@/services/adminService';
+import { adminService, isUserBlocked } from '@/services/adminService';
 import type { AgreementRoom } from '@/types/Agreement';
 import type { InvestmentInterest, Match } from '@/types/FundingRequest';
 import type { Project } from '@/types/Project';
-import type { ModerationFlag, SupportTicket, User, UserReport, ActivityTimelineEvent } from '@/types/User';
+import type { ModerationFlag, SupportTicket, User, UserReport, ActivityTimelineEvent, UserStatus } from '@/types/User';
 import type { ChatMessage } from '@/types/InvestmentChat';
 import type { DiscussionRoom, InvestmentAgreement, InvestmentOpportunity, StartupInterest, V5Investment } from '@/types/InvestmentFlow';
 import { formatCurrency } from '@/utils/format';
@@ -39,18 +40,115 @@ type AdminData = {
 };
 
 type AdminFilter = 'all' | 'active' | 'completed' | 'reported' | 'blocked' | 'archived';
+type AdminToast = { type: 'success' | 'error'; message: string };
 
 export default function AdminDashboardScreen() {
   const { authUser, initializing, profile } = useAuth();
   const [data, setData] = useState<AdminData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<AdminToast | null>(null);
+  const [workingKeys, setWorkingKeys] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<AdminFilter>('active');
   const [search, setSearch] = useState('');
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementBody, setAnnouncementBody] = useState('');
   const [announcementNotice, setAnnouncementNotice] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+
+  const usersById = useMemo(
+    () => Object.fromEntries((data?.users ?? []).map((user) => [user.id, user])),
+    [data?.users],
+  );
+
+  const showToast = useCallback((type: AdminToast['type'], message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 3200);
+  }, []);
+
+  const runAdminAction = useCallback(async (
+    key: string,
+    action: () => Promise<void>,
+    successMessage: string,
+  ) => {
+    try {
+      setWorkingKeys((current) => new Set(current).add(key));
+      setError(null);
+      await action();
+      showToast('success', successMessage);
+    } catch (actionError) {
+      const message = getFriendlyErrorMessage(actionError);
+      setError(message);
+      showToast('error', message);
+      throw actionError;
+    } finally {
+      setWorkingKeys((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
+    }
+  }, [showToast]);
+
+  const updateUserInData = useCallback((userId: string, status: UserStatus) => {
+    setData((current) => (
+      current
+        ? {
+          ...current,
+          users: current.users.map((user) => (
+            user.id === userId ? { ...user, status } : user
+          )),
+        }
+        : current
+    ));
+  }, []);
+
+  const removeStartupFromData = useCallback((startupId: string) => {
+    const roomIds = new Set(
+      (data?.discussionRooms ?? [])
+        .filter((room) => room.opportunityId === startupId || room.startupOpportunityId === startupId)
+        .map((room) => room.id),
+    );
+
+    setData((current) => {
+      if (!current) return current;
+
+      const agreementIds = new Set(
+        current.investmentAgreements
+          .filter((agreement) => agreement.opportunityId === startupId)
+          .map((agreement) => agreement.id),
+      );
+
+      return {
+        ...current,
+        startupOpportunities: current.startupOpportunities.filter((startup) => startup.id !== startupId),
+        projects: current.projects.filter((project) => project.id !== startupId),
+        interests: current.interests.filter((interest) => interest.startupOpportunityId !== startupId),
+        matches: current.matches.filter((match) => match.startupId !== startupId),
+        discussionRooms: current.discussionRooms.filter((room) => !roomIds.has(room.id)),
+        investmentAgreements: current.investmentAgreements.filter((agreement) => agreement.opportunityId !== startupId),
+        investments: current.investments.filter((investment) => (
+          investment.opportunityId !== startupId
+          && investment.startupId !== startupId
+          && investment.projectId !== startupId
+        )),
+        reports: current.reports.filter((report) => report.startupId !== startupId),
+        moderationFlags: current.moderationFlags.filter((flag) => (
+          flag.discussionRoomId ? !roomIds.has(flag.discussionRoomId) : true
+        )),
+        activityTimeline: current.activityTimeline.filter((event) => (
+          event.startupId !== startupId
+          && (event.discussionRoomId ? !roomIds.has(event.discussionRoomId) : true)
+          && (event.agreementId ? !agreementIds.has(event.agreementId) : true)
+        )),
+      };
+    });
+
+    setChatMessages((current) => current.filter((message) => {
+      const roomId = message.roomId ?? message.discussionRoomId;
+      return roomId ? !roomIds.has(roomId) : true;
+    }));
+  }, [data?.discussionRooms]);
 
   useEffect(() => {
     async function loadAdminData() {
@@ -83,59 +181,64 @@ export default function AdminDashboardScreen() {
     return <Redirect href="/profile" />;
   }
 
-  async function handleUserStatus(userId: string, status: 'suspended' | 'banned') {
-    const confirmed = await confirmAction(`${status === 'banned' ? 'Block' : 'Suspend'} this user?`);
-    if (!confirmed) {
-      return;
-    }
+  async function handleSuspendUser(userId: string) {
+    const confirmed = await confirmAction('Suspend this user?');
+    if (!confirmed) return;
 
-    try {
-      setError(null);
-      await adminService.updateUserStatus(userId, status);
-      setData(await adminService.getDashboardData());
-    } catch (statusError) {
-      setError(getFriendlyErrorMessage(statusError));
-    }
+    await runAdminAction(`suspend:${userId}`, async () => {
+      await adminService.updateUserStatus(userId, 'suspended');
+      updateUserInData(userId, 'suspended');
+    }, 'User suspended.');
   }
 
-  async function handleProjectStatus(projectId: string, status: Project['status']) {
-    try {
-      setError(null);
-      await adminService.updateProjectStatus(projectId, status);
-      setData(await adminService.getDashboardData());
-    } catch (projectError) {
-      setError(getFriendlyErrorMessage(projectError));
-    }
+  async function handleToggleBlockUser(userId: string) {
+    const user = usersById[userId];
+    const blocked = isUserBlocked(user);
+    const confirmed = await confirmAction(
+      blocked ? 'Unblock this user and restore account access?' : 'Block this user from PromptFund?',
+    );
+    if (!confirmed) return;
+
+    await runAdminAction(`block:${userId}`, async () => {
+      if (blocked) {
+        await adminService.unblockUserAccount(userId);
+        updateUserInData(userId, 'active');
+      } else {
+        await adminService.blockUserAccount(userId);
+        updateUserInData(userId, 'banned');
+      }
+    }, blocked ? 'User unblocked.' : 'User blocked.');
   }
 
   async function handleStartupStatus(startupId: string, status: InvestmentOpportunity['status']) {
     const confirmed = await confirmAction(`Set this startup to ${status}?`);
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
-    try {
-      setError(null);
+    await runAdminAction(`startup-status:${startupId}:${status}`, async () => {
       await adminService.updateStartupStatus(startupId, status);
-      setData(await adminService.getDashboardData());
-    } catch (startupError) {
-      setError(getFriendlyErrorMessage(startupError));
-    }
+      setData((current) => (
+        current
+          ? {
+            ...current,
+            startupOpportunities: current.startupOpportunities.map((startup) => (
+              startup.id === startupId ? { ...startup, status } : startup
+            )),
+          }
+          : current
+      ));
+    }, `Startup status updated to ${status}.`);
   }
 
   async function handleDeleteStartup(startupId: string) {
-    const confirmed = await confirmAction('Delete this startup? This action cannot be undone.');
-    if (!confirmed) {
-      return;
-    }
+    const confirmed = await confirmAction(
+      'Delete this startup permanently?\n\nThis action cannot be undone.',
+    );
+    if (!confirmed) return;
 
-    try {
-      setError(null);
+    await runAdminAction(`delete-startup:${startupId}`, async () => {
       await adminService.deleteStartup(startupId);
-      setData(await adminService.getDashboardData());
-    } catch (deleteError) {
-      setError(getFriendlyErrorMessage(deleteError));
-    }
+      removeStartupFromData(startupId);
+    }, 'Startup and all related records were deleted.');
   }
 
   async function handleSendAnnouncement() {
@@ -143,9 +246,7 @@ export default function AdminDashboardScreen() {
       return;
     }
 
-    try {
-      setError(null);
-      setAnnouncementNotice(null);
+    await runAdminAction('announcement', async () => {
       await adminService.sendAnnouncement({
         title: announcementTitle.trim(),
         body: announcementBody.trim(),
@@ -155,22 +256,31 @@ export default function AdminDashboardScreen() {
       setAnnouncementTitle('');
       setAnnouncementBody('');
       setAnnouncementNotice('Announcement delivered to all users. Offline users will see it the next time they open the app.');
-    } catch (announcementError) {
-      setError(getFriendlyErrorMessage(announcementError));
-    }
+    }, 'Announcement sent to all users.');
   }
 
   async function handleDeleteChatMessage(messageId: string) {
-    try {
+    const confirmed = await confirmAction('Delete this chat message permanently?');
+    if (!confirmed) return;
+
+    await runAdminAction(`delete-message:${messageId}`, async () => {
       await adminService.deleteMessage(messageId);
       setChatMessages((current) => current.filter((message) => message.id !== messageId));
-    } catch (deleteError) {
-      setError(getFriendlyErrorMessage(deleteError));
-    }
+    }, 'Chat message deleted.');
   }
 
   return (
-    <Screen eyebrow="Admin" title="PromptFund Admin Dashboard" subtitle="Private operations console for trusted administrators.">
+    <Screen
+      eyebrow="Admin"
+      title="PromptFund Admin Dashboard"
+      subtitle="Private operations console for trusted administrators."
+      leftAction={<ScreenHeaderBackButton />}
+    >
+      {toast ? (
+        <Card style={toast.type === 'success' ? styles.successToast : styles.errorToast}>
+          <Text style={toast.type === 'success' ? styles.successText : styles.errorText}>{toast.message}</Text>
+        </Card>
+      ) : null}
       {isLoading || !data ? <LoadingState label="Loading admin dashboard" /> : null}
       {error ? (
         <Card>
@@ -204,10 +314,12 @@ export default function AdminDashboardScreen() {
               onChangeText={setSearch}
               style={styles.input}
             />
-            {buildAdminPipelines(data, search, filter).map((item) => (
+            {buildAdminPipelines(data, search, filter, usersById).map((item) => (
               <AdminStartupCard
                 key={item.pipeline.id}
                 item={item}
+                usersById={usersById}
+                workingKeys={workingKeys}
                 onArchive={() => handleStartupStatus(item.pipeline.id, 'archived')}
                 onFreeze={() => handleStartupStatus(item.pipeline.id, 'frozen')}
                 onSuspend={() => handleStartupStatus(item.pipeline.id, 'suspended')}
@@ -218,10 +330,9 @@ export default function AdminDashboardScreen() {
                     router.push(`/discussion-room/${roomId}`);
                   }
                 }}
-                onBlockFounder={() => item.pipeline.opportunity?.founderId ? handleUserStatus(item.pipeline.opportunity.founderId, 'banned') : undefined}
-                onBlockInvestor={() => item.pipeline.room?.investorId ? handleUserStatus(item.pipeline.room.investorId, 'banned') : undefined}
+                onToggleBlockUser={handleToggleBlockUser}
                 onDelete={() => handleDeleteStartup(item.pipeline.id)}
-                onViewTimeline={() => router.push(`/admin`)}
+                onViewTimeline={() => router.push('/admin')}
               />
             ))}
           </AdminSection>
@@ -290,17 +401,32 @@ export default function AdminDashboardScreen() {
           </AdminSection>
 
           <AdminSection title="Users">
-            {data.users.slice(0, 8).map((user) => (
-              <Card key={user.id}>
-                <Text style={styles.itemTitle}>{user.displayName ?? user.name}</Text>
-                <Text style={styles.itemMeta}>{user.username ?? user.handle} · {user.status ?? 'active'} · {getRoleBadgeLabel(user.role)}</Text>
-                <View style={ui.wrap}>
-                  <PrimaryButton label="View User Profile" variant="secondary" onPress={() => router.push(`/admin/user/${user.id}`)} />
-                  <PrimaryButton label="Suspend User" variant="secondary" onPress={() => handleUserStatus(user.id, 'suspended')} />
-                  <PrimaryButton label="Block User" variant="secondary" onPress={() => handleUserStatus(user.id, 'banned')} />
-                </View>
-              </Card>
-            ))}
+            {data.users.slice(0, 8).map((user) => {
+              const blocked = isUserBlocked(user);
+              const blockKey = `block:${user.id}`;
+              const suspendKey = `suspend:${user.id}`;
+              return (
+                <Card key={user.id}>
+                  <Text style={styles.itemTitle}>{user.displayName ?? user.name}</Text>
+                  <Text style={styles.itemMeta}>{user.username ?? user.handle} · {user.status ?? 'active'} · {getRoleBadgeLabel(user.role)}</Text>
+                  <View style={ui.wrap}>
+                    <PrimaryButton label="View User Profile" variant="secondary" onPress={() => router.push(`/admin/user/${user.id}`)} />
+                    <PrimaryButton
+                      label={workingKeys.has(suspendKey) ? 'Working...' : 'Suspend User'}
+                      variant="secondary"
+                      disabled={workingKeys.has(suspendKey)}
+                      onPress={() => handleSuspendUser(user.id)}
+                    />
+                    <PrimaryButton
+                      label={workingKeys.has(blockKey) ? 'Working...' : blocked ? 'Unblock User' : 'Block User'}
+                      variant="secondary"
+                      disabled={workingKeys.has(blockKey)}
+                      onPress={() => handleToggleBlockUser(user.id)}
+                    />
+                  </View>
+                </Card>
+              );
+            })}
           </AdminSection>
         </>
       ) : null}
@@ -354,7 +480,12 @@ function mapStartupInterestToLegacy(interest: StartupInterest): InvestmentIntere
   };
 }
 
-function buildAdminPipelines(data: AdminData, search: string, filter: AdminFilter) {
+function buildAdminPipelines(
+  data: AdminData,
+  search: string,
+  filter: AdminFilter,
+  usersById: Record<string, User>,
+) {
   const opportunities = Object.fromEntries(data.startupOpportunities.map((startup) => [startup.id, startup]));
   const pipelines = buildDealPipelines({
     founderCards: data.startupOpportunities,
@@ -380,7 +511,12 @@ function buildAdminPipelines(data: AdminData, search: string, filter: AdminFilte
       stage: getPipelineStageMeta(pipeline),
       reportCount: reportCounts.get(pipeline.id) ?? 0,
       lastActivity: pipeline.agreement?.updatedAt ?? pipeline.room?.updatedAt ?? pipeline.opportunity?.createdAt,
-      isBlocked: false,
+      founderUser: pipeline.opportunity?.founderId ? usersById[pipeline.opportunity.founderId] : undefined,
+      investorUser: pipeline.room?.investorId ? usersById[pipeline.room.investorId] : undefined,
+      isBlocked: Boolean(
+        (pipeline.opportunity?.founderId && isUserBlocked(usersById[pipeline.opportunity.founderId]))
+        || (pipeline.room?.investorId && isUserBlocked(usersById[pipeline.room.investorId])),
+      ),
       timeline: data.activityTimeline
         .filter((event) => event.startupId === pipeline.id || event.discussionRoomId === pipeline.room?.id || event.agreementId === pipeline.agreement?.id)
         .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt))),
@@ -405,24 +541,26 @@ function buildAdminPipelines(data: AdminData, search: string, filter: AdminFilte
 
 function AdminStartupCard({
   item,
+  usersById,
+  workingKeys,
   onArchive,
   onFreeze,
   onSuspend,
   onRestore,
   onOpenDiscussion,
-  onBlockFounder,
-  onBlockInvestor,
+  onToggleBlockUser,
   onDelete,
   onViewTimeline,
 }: {
   item: ReturnType<typeof buildAdminPipelines>[number];
+  usersById: Record<string, User>;
+  workingKeys: Set<string>;
   onArchive: () => void;
   onFreeze: () => void;
   onSuspend: () => void;
   onRestore: () => void;
   onOpenDiscussion: () => void;
-  onBlockFounder: () => void;
-  onBlockInvestor: () => void;
+  onToggleBlockUser: (userId: string) => void;
   onDelete: () => void;
   onViewTimeline: () => void;
 }) {
@@ -430,6 +568,11 @@ function AdminStartupCard({
   const startup = pipeline.opportunity;
   const founder = startup?.founderName ?? pipeline.agreement?.founderName ?? 'Founder';
   const investor = pipeline.room?.investorName ?? pipeline.agreement?.investorName ?? 'Angel Investor';
+  const founderId = startup?.founderId ?? pipeline.agreement?.founderId;
+  const investorId = pipeline.room?.investorId ?? pipeline.agreement?.investorId;
+  const founderBlocked = founderId ? isUserBlocked(usersById[founderId]) : false;
+  const investorBlocked = investorId ? isUserBlocked(usersById[investorId]) : false;
+  const deleteKey = `delete-startup:${pipeline.id}`;
   const amount = pipeline.agreement?.investmentAmount ?? pipeline.room?.investmentAmount ?? startup?.fundingNeeded ?? 0;
   const equity = pipeline.agreement?.investorAllocation ?? pipeline.room?.investorAllocation ?? startup?.investorAllocation ?? 0;
 
@@ -458,9 +601,28 @@ function AdminStartupCard({
         <PrimaryButton label="Freeze Startup" variant="secondary" onPress={onFreeze} />
         <PrimaryButton label="Suspend Startup" variant="secondary" onPress={onSuspend} />
         <PrimaryButton label="Restore Startup" variant="secondary" onPress={onRestore} />
-        <PrimaryButton label="Block Founder" variant="secondary" onPress={onBlockFounder} />
-        <PrimaryButton label="Block Investor" variant="secondary" onPress={onBlockInvestor} />
-        <PrimaryButton label="Delete Startup" variant="secondary" onPress={onDelete} />
+        {founderId ? (
+          <PrimaryButton
+            label={workingKeys.has(`block:${founderId}`) ? 'Working...' : founderBlocked ? 'Unblock Founder' : 'Block Founder'}
+            variant="secondary"
+            disabled={workingKeys.has(`block:${founderId}`)}
+            onPress={() => onToggleBlockUser(founderId)}
+          />
+        ) : null}
+        {investorId ? (
+          <PrimaryButton
+            label={workingKeys.has(`block:${investorId}`) ? 'Working...' : investorBlocked ? 'Unblock Investor' : 'Block Investor'}
+            variant="secondary"
+            disabled={workingKeys.has(`block:${investorId}`)}
+            onPress={() => onToggleBlockUser(investorId)}
+          />
+        ) : null}
+        <PrimaryButton
+          label={workingKeys.has(deleteKey) ? 'Deleting...' : 'Delete Startup'}
+          variant="secondary"
+          disabled={workingKeys.has(deleteKey)}
+          onPress={onDelete}
+        />
         <PrimaryButton label="View Timeline History" variant="secondary" onPress={onViewTimeline} />
       </View>
     </Card>
@@ -551,6 +713,12 @@ const styles = StyleSheet.create({
   successText: {
     color: colors.success,
     lineHeight: 22,
+  },
+  successToast: {
+    borderColor: 'rgba(46, 125, 50, 0.45)',
+  },
+  errorToast: {
+    borderColor: 'rgba(177, 18, 38, 0.45)',
   },
   unreadText: {
     alignSelf: 'flex-start',

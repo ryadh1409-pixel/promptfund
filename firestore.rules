@@ -466,7 +466,7 @@ service cloud.firestore {
 
     match /fundingRequests/{requestId} {
       allow read, create: if isSignedIn();
-      allow update, delete: if isSignedIn() && resource.data.requestedBy == request.auth.uid;
+      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.requestedBy == request.auth.uid);
     }
 
     match /investments/{investmentId} {
@@ -482,7 +482,7 @@ service cloud.firestore {
       allow get: if isAdmin() || canAccessInvestmentAsParticipant(investmentId);
       allow list: if canListInvestment();
       allow update: if isAdmin() || canUpdateInvestmentAsParticipant(investmentId);
-      allow delete: if false;
+      allow delete: if isAdmin();
     }
 
     match /investmentOpportunities/{opportunityId} {
@@ -618,7 +618,7 @@ service cloud.firestore {
           )
           && request.resource.data.status in ['discussion', 'accepted', 'expired']
         );
-      allow delete: if false;
+      allow delete: if isAdmin();
     }
 
     match /investmentInterests/{interestId} {
@@ -659,7 +659,7 @@ service cloud.firestore {
           resource.data.founderUid == request.auth.uid
           || resource.data.investorUid == request.auth.uid
         ));
-      allow delete: if false;
+      allow delete: if isAdmin();
     }
 
     match /blockedUsers/{blockId} {
@@ -761,7 +761,7 @@ service cloud.firestore {
             || (request.resource.data.senderRole == 'user' && ownsSupportTicketAfter(ticketId))
           );
         allow read: if isAdmin() || ownsSupportTicket(ticketId);
-        allow update, delete: if false;
+        allow update, delete: if isAdmin();
       }
     }
 
@@ -851,7 +851,7 @@ service cloud.firestore {
     match /agreementRooms/{agreementId} {
       allow create: if createsOwnAgreementRoom();
       allow read, update: if isAdmin() || hasAgreementAccess(agreementId);
-      allow delete: if false;
+      allow delete: if isAdmin();
     }
 
     match /agreements/{agreementId} {
@@ -866,7 +866,7 @@ service cloud.firestore {
             || resource.data.investorId == request.auth.uid
           )
         );
-      allow delete: if false;
+      allow delete: if isAdmin();
     }
 
     match /investmentContracts/{agreementId} {

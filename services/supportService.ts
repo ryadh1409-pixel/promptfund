@@ -1,6 +1,7 @@
-import { collection, doc, getDoc, getDocs, onSnapshot, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch, type Unsubscribe } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch, type Unsubscribe } from 'firebase/firestore';
 
 import { firestoreCollections, getPromptFundFirestore } from '@/firebase/firestore';
+import { adminDocumentPath } from '@/utils/adminFirestoreAudit';
 import type { SupportTicket, SupportTicketAttachment, SupportTicketCategory, SupportTicketMessage } from '@/types/User';
 
 function dateKeyForTicket(date = new Date()) {
@@ -209,12 +210,28 @@ export const supportService = {
     const db = getPromptFundFirestore();
     const ticketRef = doc(db, firestoreCollections.supportTickets, ticketId);
     const messagesSnapshot = await getDocs(collection(ticketRef, 'messages'));
-    const batch = writeBatch(db);
-    messagesSnapshot.docs.forEach((message) => {
-      batch.delete(message.ref);
-    });
-    batch.delete(ticketRef);
-    await batch.commit();
+
+    for (const message of messagesSnapshot.docs) {
+      const path = adminDocumentPath(`${firestoreCollections.supportTickets}/${ticketId}/messages`, message.id);
+      console.info('[PromptFund Admin Firestore] write start', { operation: 'delete', path });
+      try {
+        await deleteDoc(message.ref);
+        console.info('[PromptFund Admin Firestore] write success', { operation: 'delete', path });
+      } catch (error) {
+        console.error('[PromptFund Admin Firestore] permission failure', { operation: 'delete', path, error });
+        throw error;
+      }
+    }
+
+    const ticketPath = adminDocumentPath(firestoreCollections.supportTickets, ticketId);
+    console.info('[PromptFund Admin Firestore] write start', { operation: 'delete', path: ticketPath });
+    try {
+      await deleteDoc(ticketRef);
+      console.info('[PromptFund Admin Firestore] write success', { operation: 'delete', path: ticketPath });
+    } catch (error) {
+      console.error('[PromptFund Admin Firestore] permission failure', { operation: 'delete', path: ticketPath, error });
+      throw error;
+    }
   },
 
   async getTicket(ticketId: string): Promise<SupportTicket | null> {
