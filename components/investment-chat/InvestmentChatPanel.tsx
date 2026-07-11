@@ -132,6 +132,7 @@ function InvestmentChatPanelContent({
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
   const [toast, setToast] = useState<ChatToastPayload | null>(null);
+  const [composerHeight, setComposerHeight] = useState(0);
   const listRef = useRef<FlatList<ChatListItem> | null>(null);
   const lastTypingRef = useRef<boolean | null>(null);
   const deliveredRef = useRef<string>('');
@@ -277,6 +278,65 @@ function InvestmentChatPanelContent({
     );
   }, [currentUser.id, handleLongPress, handleOpenUrl, onNotice, participantRole]);
 
+  const listContentStyle = embedded ? styles.listContentEmbedded : styles.listContent;
+
+  const handleComposerLayout = useCallback((height: number) => {
+    setComposerHeight((current) => (current === height ? current : height));
+  }, []);
+
+  const messageList = listData.length === 0 ? (
+    <ChatEmptyState />
+  ) : (
+    <FlatList
+      ref={listRef}
+      inverted
+      data={listData}
+      keyExtractor={(item) => item.id}
+      renderItem={renderItem}
+      onEndReached={handleLoadOlder}
+      onEndReachedThreshold={0.2}
+      initialNumToRender={18}
+      maxToRenderPerBatch={24}
+      windowSize={12}
+      style={styles.messageList}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+      contentContainerStyle={listContentStyle}
+      ListFooterComponent={isLoadingOlder ? (
+        <View style={styles.loader}>
+          <ActivityIndicator color={colors.accent} />
+        </View>
+      ) : null}
+    />
+  );
+
+  const statusMessages = (
+    <>
+      {typingLabel ? <Text style={styles.typing}>{typingLabel}</Text> : null}
+      {blockStatus.blockedByMe ? <Text style={styles.blocked}>You have blocked this user.</Text> : null}
+      {blockStatus.blockedMe ? <Text style={styles.blocked}>This user has blocked you.</Text> : null}
+    </>
+  );
+
+  const composer = canParticipate ? (
+    <View
+      style={embedded ? styles.composerWrap : null}
+      onLayout={embedded ? (event) => handleComposerLayout(event.nativeEvent.layout.height) : undefined}
+    >
+      <ChatComposer
+        roomId={room.id}
+        userId={currentUser.id}
+        value={draft}
+        bottomInset={bottomInset}
+        disabled={isBlocked}
+        embedded={embedded}
+        onChangeText={setDraft}
+        onSend={handleSend}
+        onError={(message) => handleToast({ type: 'error', message })}
+      />
+    </View>
+  ) : null;
+
   return (
     <View style={[styles.container, embedded ? styles.containerEmbedded : null, style]}>
       {embedded ? (
@@ -295,54 +355,31 @@ function InvestmentChatPanelContent({
         <ChatHeader unreadCount={unreadCount} onSettingsPress={openSettings} />
       )}
 
-      <View style={[styles.messagesArea, embedded ? styles.messagesAreaEmbedded : null]}>
-        <ChatToastBanner toast={toast} />
-        {listData.length === 0 ? (
-          <ChatEmptyState />
-        ) : (
-          <FlatList
-            ref={listRef}
-            inverted
-            data={listData}
-            keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            onEndReached={handleLoadOlder}
-            onEndReachedThreshold={0.2}
-            initialNumToRender={18}
-            maxToRenderPerBatch={24}
-            windowSize={12}
-            style={styles.messageList}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-            contentContainerStyle={styles.listContent}
-            ListFooterComponent={isLoadingOlder ? (
-              <View style={styles.loader}>
-                <ActivityIndicator color={colors.accent} />
-              </View>
-            ) : null}
-          />
-        )}
-      </View>
-
-      {typingLabel ? <Text style={styles.typing}>{typingLabel}</Text> : null}
-      {blockStatus.blockedByMe ? <Text style={styles.blocked}>You have blocked this user.</Text> : null}
-      {blockStatus.blockedMe ? <Text style={styles.blocked}>This user has blocked you.</Text> : null}
-
-      {canParticipate ? (
-        <View style={embedded ? styles.composerWrap : null}>
-          <ChatComposer
-            roomId={room.id}
-            userId={currentUser.id}
-            value={draft}
-            bottomInset={bottomInset}
-            disabled={isBlocked}
-            embedded={embedded}
-            onChangeText={setDraft}
-            onSend={handleSend}
-            onError={(message) => handleToast({ type: 'error', message })}
-          />
+      {embedded ? (
+        <View style={styles.embeddedChatWrap}>
+          <View
+            style={[
+              styles.messagesArea,
+              styles.messagesAreaEmbedded,
+              composerHeight > 0 ? { paddingBottom: composerHeight } : null,
+            ]}
+          >
+            <ChatToastBanner toast={toast} />
+            {messageList}
+            {statusMessages}
+          </View>
+          {composer}
         </View>
-      ) : null}
+      ) : (
+        <>
+          <View style={styles.messagesArea}>
+            <ChatToastBanner toast={toast} />
+            {messageList}
+          </View>
+          {statusMessages}
+          {composer}
+        </>
+      )}
 
       <Modal visible={isEditModalVisible} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
@@ -403,6 +440,12 @@ const styles = StyleSheet.create({
   },
   containerEmbedded: {
     backgroundColor: colors.panelMuted,
+    overflow: 'hidden',
+  },
+  embeddedChatWrap: {
+    flex: 1,
+    minHeight: 0,
+    position: 'relative',
   },
   chatSectionHeader: {
     alignItems: 'center',
@@ -440,6 +483,7 @@ const styles = StyleSheet.create({
   messagesArea: {
     flex: 1,
     minHeight: 0,
+    overflow: 'hidden',
     paddingHorizontal: spacing.sm,
   },
   messagesAreaEmbedded: {
@@ -451,13 +495,21 @@ const styles = StyleSheet.create({
   },
   composerWrap: {
     backgroundColor: colors.panel,
-    flexShrink: 0,
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    zIndex: 2,
   },
   listContent: {
-    flexGrow: 1,
     gap: 4,
     paddingBottom: 8,
     paddingTop: 8,
+  },
+  listContentEmbedded: {
+    gap: 4,
+    paddingBottom: 8,
+    paddingTop: spacing.md,
   },
   dateWrap: {
     alignItems: 'center',

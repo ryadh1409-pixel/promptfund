@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DealCancelButton } from '@/components/cards/DealCancelButton';
 import { DealRoomHeader } from '@/components/deal-room/DealRoomHeader';
@@ -57,6 +58,7 @@ export default function DiscussionRoomScreen() {
   const [reportDetails, setReportDetails] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const roomId = typeof id === 'string' ? id : '';
+  const insets = useSafeAreaInsets();
 
   const participantRole = useMemo(() => {
     if (!authUser?.uid || !room) return null;
@@ -352,7 +354,7 @@ export default function DiscussionRoomScreen() {
             embedded
             currentUser={chatCurrentUser}
             participantRole={participantRole}
-            bottomInset={0}
+            bottomInset={insets.bottom}
             onNotice={handleChatNotice}
             onReportUser={handleOpenReportModal}
             onConversationDeleted={handleConversationDeleted}
