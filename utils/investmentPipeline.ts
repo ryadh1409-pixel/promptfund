@@ -95,6 +95,9 @@ export function buildDealPipelines({
   function ensurePipeline(startupId: string) {
     const existing = pipelines.get(startupId);
     if (existing) {
+      if (opportunities[startupId]) {
+        existing.opportunity = opportunities[startupId];
+      }
       return existing;
     }
 
@@ -135,7 +138,11 @@ export function buildDealPipelines({
 
   investments.forEach((investment) => {
     const agreement = investment.agreementId ? agreementById.get(investment.agreementId) : undefined;
-    const startupId = investment.opportunityId ?? agreement?.opportunityId ?? investment.projectId ?? investment.id;
+    const startupId = investment.opportunityId
+      ?? investment.startupId
+      ?? agreement?.opportunityId
+      ?? investment.projectId
+      ?? investment.id;
     const pipeline = ensurePipeline(startupId);
     pipeline.investment = pipeline.investment ?? investment;
   });

@@ -245,6 +245,136 @@ function isPermissionDenied(error: unknown) {
     && (error as { code?: unknown }).code === 'permission-denied';
 }
 
+function belongsToOpportunity(
+  opportunityId: string,
+  item: { opportunityId?: string; startupOpportunityId?: string; startupId?: string },
+) {
+  return item.opportunityId === opportunityId
+    || item.startupOpportunityId === opportunityId
+    || item.startupId === opportunityId;
+}
+
+function isDealCompleted(
+  opportunity: InvestmentOpportunity,
+  agreements: InvestmentAgreement[],
+  investments: V5Investment[],
+) {
+  if (opportunity.status === 'completed') {
+    return true;
+  }
+
+  return agreements.some((agreement) => agreement.status === 'completed')
+    || investments.some((investment) => investment.status === 'completed');
+}
+
+type CancellationBatchUpdate = {
+  collection: keyof typeof firestoreCollections;
+  id: string;
+  data: Record<string, unknown>;
+};
+
+async function commitCancellationBatch(updates: CancellationBatchUpdate[], logLabel: string) {
+  if (updates.length === 0) {
+    console.info('[PromptFund Cancel] batch skipped', { logLabel, reason: 'no updates' });
+    return [] as string[];
+  }
+
+  const database = getPromptFundFirestore();
+  const batch = writeBatch(database);
+  const updatedPaths: string[] = [];
+
+  for (const update of updates) {
+    const path = `${firestoreCollections[update.collection]}/${update.id}`;
+    updatedPaths.push(path);
+    batch.update(doc(database, firestoreCollections[update.collection], update.id), {
+      ...update.data,
+      updatedAt: serverTimestamp(),
+    });
+  }
+
+  try {
+    await batch.commit();
+    console.info('[PromptFund Cancel] batch success', {
+      logLabel,
+      documentsUpdated: updatedPaths,
+      count: updatedPaths.length,
+    });
+    return updatedPaths;
+  } catch (error) {
+    console.error('[PromptFund Cancel] batch failure', {
+      logLabel,
+      operation: 'batch.commit',
+      documentsUpdated: updatedPaths,
+      permissionDenied: isPermissionDenied(error),
+      error,
+    });
+    throw error;
+  }
+}
+
+async function loadFounderDealDocuments(opportunityId: string, founderId: string) {
+  const interestQuery = { collection: 'interests', field: 'founderId', value: founderId };
+  const [interests, rooms, agreements, investments] = await Promise.all([
+    firestoreAdapter.queryByField<StartupInterest>('interests', 'founderId', founderId)
+      .then((items) => items.filter((item) => item.startupOpportunityId === opportunityId)),
+    firestoreAdapter.queryByField<DiscussionRoom>('discussionRooms', 'founderId', founderId)
+      .then((items) => items.filter((item) => belongsToOpportunity(opportunityId, item))),
+    firestoreAdapter.queryByField<InvestmentAgreement>('agreements', 'founderId', founderId)
+      .then((items) => items.filter((item) => item.opportunityId === opportunityId)),
+    firestoreAdapter.queryByField<V5Investment>('investments', 'founderId', founderId)
+      .then((items) => items.filter((item) => belongsToOpportunity(opportunityId, item))),
+  ]);
+
+  return { interestQuery, interests, rooms, agreements, investments };
+}
+
+async function resolveInvestorInterest({
+  interestId,
+  investorId,
+  opportunityId,
+}: {
+  interestId?: string;
+  investorId: string;
+  opportunityId: string;
+}) {
+  const interestQuery = interestId
+    ? { collection: 'interests', operation: 'getById', id: interestId }
+    : { collection: 'interests', field: 'investorId', value: investorId, filter: { startupOpportunityId: opportunityId } };
+
+  if (interestId) {
+    const interest = await firestoreAdapter.getById<StartupInterest>('interests', interestId);
+    if (!interest || interest.investorId !== investorId || interest.startupOpportunityId !== opportunityId) {
+      return { interestQuery, interest: null };
+    }
+    return { interestQuery, interest };
+  }
+
+  const interests = await firestoreAdapter.queryByField<StartupInterest>('interests', 'investorId', investorId);
+  const interest = interests.find((item) => item.startupOpportunityId === opportunityId) ?? null;
+  return { interestQuery, interest };
+}
+
+async function resolveInvestorRoom({
+  roomId,
+  investorId,
+  opportunityId,
+}: {
+  roomId?: string;
+  investorId: string;
+  opportunityId: string;
+}) {
+  if (roomId) {
+    const room = await firestoreAdapter.getById<DiscussionRoom>('discussionRooms', roomId);
+    if (!room || room.investorId !== investorId || !belongsToOpportunity(opportunityId, room)) {
+      return null;
+    }
+    return room;
+  }
+
+  const rooms = await firestoreAdapter.queryByField<DiscussionRoom>('discussionRooms', 'investorId', investorId);
+  return rooms.find((item) => belongsToOpportunity(opportunityId, item)) ?? null;
+}
+
 function recordTimeline(input: Omit<ActivityTimelineEvent, 'id' | 'createdAt'>) {
   return firestoreAdapter.create<Omit<ActivityTimelineEvent, 'id'>>('activityTimeline', {
     ...input,
@@ -1021,36 +1151,95 @@ export const investmentFlowService = {
     opportunityId: string;
     founderId: string;
   }) {
+    console.info('[PromptFund Cancel] start', {
+      uid: founderId,
+      role: 'founder',
+      opportunityId,
+    });
+
     const opportunity = await this.getOpportunity(opportunityId);
     if (!opportunity || opportunity.founderId !== founderId) {
       throw new Error('Startup opportunity not found.');
     }
 
-    await firestoreAdapter.update<InvestmentOpportunity>('startupOpportunities', opportunityId, {
-      status: 'archived',
+    const { interestQuery, interests, rooms, agreements, investments } = await loadFounderDealDocuments(
+      opportunityId,
+      founderId,
+    );
+
+    console.info('[PromptFund Cancel] documents loaded', {
+      uid: founderId,
+      role: 'founder',
+      opportunityId,
+      interestQuery,
+      documentsFound: {
+        interests: interests.length,
+        rooms: rooms.length,
+        agreements: agreements.length,
+        investments: investments.length,
+      },
     });
 
-    const [interests, rooms, agreements, investments] = await Promise.all([
-      firestoreAdapter.queryByField<StartupInterest>('interests', 'startupOpportunityId', opportunityId),
-      firestoreAdapter.queryByField<DiscussionRoom>('discussionRooms', 'opportunityId', opportunityId),
-      firestoreAdapter.queryByField<InvestmentAgreement>('agreements', 'opportunityId', opportunityId),
-      firestoreAdapter.queryByField<V5Investment>('investments', 'opportunityId', opportunityId),
-    ]);
+    if (isDealCompleted(opportunity, agreements, investments)) {
+      throw new AppError('Deal is already completed and cannot be cancelled.');
+    }
 
-    await Promise.all([
+    const updates: CancellationBatchUpdate[] = [
+      {
+        collection: 'startupOpportunities',
+        id: opportunityId,
+        data: { status: 'archived' },
+      },
       ...interests
         .filter((interest) => interest.status !== 'expired')
-        .map((interest) => firestoreAdapter.update<StartupInterest>('interests', interest.id, { status: 'expired' })),
+        .map((interest) => ({
+          collection: 'interests' as const,
+          id: interest.id,
+          data: { status: 'expired' },
+        })),
       ...rooms
         .filter((room) => room.status !== 'archived' && room.status !== 'completed')
-        .map((room) => firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, { status: 'archived' })),
+        .map((room) => ({
+          collection: 'discussionRooms' as const,
+          id: room.id,
+          data: { status: 'archived' },
+        })),
       ...agreements
         .filter((agreement) => agreement.status !== 'completed')
-        .map((agreement) => firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, { status: 'archived' })),
+        .map((agreement) => ({
+          collection: 'agreements' as const,
+          id: agreement.id,
+          data: { status: 'archived' },
+        })),
       ...investments
         .filter((investment) => investment.status !== 'completed')
-        .map((investment) => firestoreAdapter.update<V5Investment>('investments', investment.id, { status: 'archived' })),
-    ]);
+        .map((investment) => ({
+          collection: 'investments' as const,
+          id: investment.id,
+          data: { status: 'archived' },
+        })),
+    ];
+
+    try {
+      const updatedPaths = await commitCancellationBatch(updates, 'founder-cancel');
+      console.info('[PromptFund Cancel] success', {
+        uid: founderId,
+        role: 'founder',
+        opportunityId,
+        documentsUpdated: updatedPaths,
+        batchSuccess: true,
+      });
+    } catch (error) {
+      console.error('[PromptFund Cancel] failure', {
+        uid: founderId,
+        role: 'founder',
+        opportunityId,
+        operation: 'founder-cancel',
+        permissionDenied: isPermissionDenied(error),
+        error,
+      });
+      throw error;
+    }
 
     await recordTimeline({
       startupId: opportunityId,
@@ -1077,45 +1266,117 @@ export const investmentFlowService = {
     investorId: string;
     opportunityId: string;
   }) {
-    let resolvedInterestId = interestId;
-    if (!resolvedInterestId) {
-      const interests = await firestoreAdapter.queryByField<StartupInterest>('interests', 'startupOpportunityId', opportunityId);
-      resolvedInterestId = interests.find((interest) => interest.investorId === investorId)?.id;
+    console.info('[PromptFund Cancel] start', {
+      uid: investorId,
+      role: 'investor',
+      opportunityId,
+      investmentId: roomId,
+      interestId,
+    });
+
+    const opportunity = await this.getOpportunity(opportunityId);
+    if (!opportunity) {
+      throw new Error('Startup opportunity not found.');
     }
 
-    if (resolvedInterestId) {
-      const interest = await firestoreAdapter.getById<StartupInterest>('interests', resolvedInterestId);
-      if (!interest || interest.investorId !== investorId) {
-        throw new Error('Investment interest not found.');
-      }
-      await firestoreAdapter.update<StartupInterest>('interests', interest.id, { status: 'expired' });
+    const { interestQuery, interest } = await resolveInvestorInterest({
+      interestId,
+      investorId,
+      opportunityId,
+    });
+    const room = await resolveInvestorRoom({ roomId, investorId, opportunityId });
+
+    const agreementId = room?.agreementId ?? (room ? `agreement-${room.id}` : undefined);
+    const [agreement, investment] = await Promise.all([
+      agreementId ? firestoreAdapter.getById<InvestmentAgreement>('agreements', agreementId) : Promise.resolve(null),
+      agreementId ? firestoreAdapter.getById<V5Investment>('investments', agreementId) : Promise.resolve(null),
+    ]);
+
+    console.info('[PromptFund Cancel] documents loaded', {
+      uid: investorId,
+      role: 'investor',
+      opportunityId,
+      investmentId: investment?.id ?? agreementId,
+      interestQuery,
+      documentsFound: {
+        interest: interest?.id ?? null,
+        room: room?.id ?? null,
+        agreement: agreement?.id ?? null,
+        investment: investment?.id ?? null,
+      },
+    });
+
+    if (opportunity.status === 'completed') {
+      throw new AppError('Deal is already completed and cannot be cancelled.');
+    }
+    if (agreement?.status === 'completed' || investment?.status === 'completed') {
+      throw new AppError('Deal is already completed and cannot be cancelled.');
     }
 
-    if (roomId) {
-      const room = await firestoreAdapter.getById<DiscussionRoom>('discussionRooms', roomId);
-      if (!room || room.investorId !== investorId) {
-        throw new Error('Deal room not found.');
-      }
-      await firestoreAdapter.update<DiscussionRoom>('discussionRooms', roomId, { status: 'archived' });
+    const updates: CancellationBatchUpdate[] = [];
 
-      const agreementId = room.agreementId ?? `agreement-${room.id}`;
-      const [agreement, investment] = await Promise.all([
-        firestoreAdapter.getById<InvestmentAgreement>('agreements', agreementId),
-        firestoreAdapter.getById<V5Investment>('investments', agreementId),
-      ]);
+    if (interest && interest.status !== 'expired') {
+      updates.push({
+        collection: 'interests',
+        id: interest.id,
+        data: { status: 'expired' },
+      });
+    }
 
-      if (agreement && agreement.status !== 'completed') {
-        await firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, { status: 'archived' });
-      }
+    if (room && room.status !== 'archived' && room.status !== 'completed') {
+      updates.push({
+        collection: 'discussionRooms',
+        id: room.id,
+        data: { status: 'archived' },
+      });
+    }
 
-      if (investment && investment.status !== 'completed') {
-        await firestoreAdapter.update<V5Investment>('investments', investment.id, { status: 'archived' });
-      }
+    if (agreement) {
+      updates.push({
+        collection: 'agreements',
+        id: agreement.id,
+        data: { status: 'archived' },
+      });
+    }
+
+    if (investment) {
+      updates.push({
+        collection: 'investments',
+        id: investment.id,
+        data: { status: 'archived' },
+      });
+    }
+
+    if (updates.length === 0) {
+      throw new Error('No active investment participation found to cancel.');
+    }
+
+    try {
+      const updatedPaths = await commitCancellationBatch(updates, 'investor-cancel');
+      console.info('[PromptFund Cancel] success', {
+        uid: investorId,
+        role: 'investor',
+        opportunityId,
+        investmentId: investment?.id ?? agreementId,
+        documentsUpdated: updatedPaths,
+        batchSuccess: true,
+      });
+    } catch (error) {
+      console.error('[PromptFund Cancel] failure', {
+        uid: investorId,
+        role: 'investor',
+        opportunityId,
+        investmentId: investment?.id ?? agreementId,
+        operation: 'investor-cancel',
+        permissionDenied: isPermissionDenied(error),
+        error,
+      });
+      throw error;
     }
 
     await recordTimeline({
       startupId: opportunityId,
-      discussionRoomId: roomId,
+      discussionRoomId: room?.id,
       actorId: investorId,
       eventType: 'cancelled',
       label: 'Investment Cancelled',

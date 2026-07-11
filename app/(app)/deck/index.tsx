@@ -25,6 +25,54 @@ import {
 import { filterVisiblePipelines } from '@/utils/dealPipelineVisibility';
 import { getActiveRole } from '@/utils/roles';
 
+function collectOpportunityIds({
+  interests,
+  matches,
+  discussionRooms,
+  agreements,
+  investments,
+}: {
+  interests: InvestmentInterest[];
+  matches: Match[];
+  discussionRooms: DiscussionRoom[];
+  agreements: InvestmentAgreement[];
+  investments: V5Investment[];
+}) {
+  return Array.from(new Set([
+    ...interests.map((interest) => interest.startupId),
+    ...matches.map((match) => match.startupId),
+    ...discussionRooms.map((room) => room.opportunityId),
+    ...agreements.map((agreement) => agreement.opportunityId),
+    ...investments.flatMap((investment) => [
+      investment.opportunityId,
+      investment.startupId,
+      investment.projectId,
+    ].filter((id): id is string => Boolean(id))),
+  ]));
+}
+
+function attachOpportunityToPipeline(
+  pipeline: DealPipeline,
+  opportunities: OpportunityMap,
+): DealPipeline {
+  const opportunityId = pipeline.opportunity?.id
+    ?? pipeline.investment?.opportunityId
+    ?? pipeline.investment?.startupId
+    ?? pipeline.room?.opportunityId
+    ?? pipeline.agreement?.opportunityId
+    ?? pipeline.interest?.startupId
+    ?? pipeline.match?.startupId
+    ?? pipeline.id;
+
+  return {
+    ...pipeline,
+    id: opportunityId,
+    opportunity: pipeline.opportunity
+      ?? opportunities[opportunityId]
+      ?? opportunities[pipeline.id],
+  };
+}
+
 export default function MyCardsScreen() {
   const { authUser, profile } = useAuth();
   const activeRole = getActiveRole(profile);
@@ -40,6 +88,11 @@ export default function MyCardsScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const requestedOpportunityIdsRef = useRef<Set<string>>(new Set());
 
+  const visibleInvestments = useMemo(
+    () => investments.filter((investment) => investment.status !== 'archived'),
+    [investments],
+  );
+
   const dealPipelines = useMemo(
     () => filterVisiblePipelines(buildDealPipelines({
       founderCards: founderCards.filter((card) => card.status !== 'archived' && card.status !== 'deleted'),
@@ -53,11 +106,11 @@ export default function MyCardsScreen() {
       }),
       discussionRooms: discussionRooms.filter((room) => room.status !== 'archived'),
       agreements,
-      investments,
+      investments: visibleInvestments,
       opportunities,
       includeFounderCards: isFounderMode,
-    })),
-    [agreements, discussionRooms, founderCards, interests, investments, isFounderMode, matches, opportunities],
+    })).map((pipeline) => attachOpportunityToPipeline(pipeline, opportunities)),
+    [agreements, discussionRooms, founderCards, interests, investments, isFounderMode, matches, opportunities, visibleInvestments],
   );
   const { activePipelines } = useMemo(() => splitPipelinesByActivity(dealPipelines), [dealPipelines]);
 
@@ -178,13 +231,16 @@ export default function MyCardsScreen() {
     return unsubscribe;
   }, [authUser?.uid, isFounderMode]);
 
-  const missingOpportunityIds = useMemo(() => Array.from(new Set([
-    ...interests.map((interest) => interest.startupId),
-    ...matches.map((match) => match.startupId),
-    ...discussionRooms.map((room) => room.opportunityId),
-    ...agreements.map((agreement) => agreement.opportunityId),
-    ...investments.map((investment) => investment.opportunityId).filter((opportunityId): opportunityId is string => Boolean(opportunityId)),
-  ])).filter((startupId) => !opportunities[startupId]), [agreements, discussionRooms, interests, investments, matches, opportunities]);
+  const missingOpportunityIds = useMemo(
+    () => collectOpportunityIds({
+      interests,
+      matches,
+      discussionRooms,
+      agreements,
+      investments: visibleInvestments,
+    }).filter((startupId) => !opportunities[startupId]),
+    [agreements, discussionRooms, interests, matches, opportunities, visibleInvestments],
+  );
 
   useEffect(() => {
     requestedOpportunityIdsRef.current = new Set();
@@ -214,6 +270,13 @@ export default function MyCardsScreen() {
         }
 
         const nextEntries = entries.filter((entry): entry is readonly [string, InvestmentOpportunity] => entry !== null);
+        const loadedIds = new Set(nextEntries.map(([startupId]) => startupId));
+        idsToLoad.forEach((startupId) => {
+          if (!loadedIds.has(startupId)) {
+            requestedOpportunityIdsRef.current.delete(startupId);
+          }
+        });
+
         if (nextEntries.length === 0) {
           return;
         }

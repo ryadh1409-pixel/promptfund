@@ -527,6 +527,7 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.resource.data.founderId == request.auth.uid;
       allow update: if isAdmin()
         || (isSignedIn() && resource.data.founderId == request.auth.uid)
+        || founderArchivesOwnStartup()
         || (
           isSignedIn()
           && request.resource.data.status in [
@@ -556,6 +557,44 @@ service cloud.firestore {
         );
     }
 
+    function participantArchivesDealRecord() {
+      return isSignedIn()
+        && resource != null
+        && resource.data.status != 'completed'
+        && request.resource.data.status == 'archived'
+        && (
+          resource.data.founderId == request.auth.uid
+          || resource.data.investorId == request.auth.uid
+        );
+    }
+
+    function founderArchivesOwnStartup() {
+      return isSignedIn()
+        && resource != null
+        && resource.data.founderId == request.auth.uid
+        && resource.data.status != 'completed'
+        && request.resource.data.status == 'archived';
+    }
+
+    function interestParticipantCanRead() {
+      return isAdmin()
+        || (isSignedIn() && (
+          resource.data.investorId == request.auth.uid
+          || resource.data.founderId == request.auth.uid
+        ));
+    }
+
+    function interestParticipantExpires() {
+      return isSignedIn()
+        && resource != null
+        && (
+          resource.data.founderId == request.auth.uid
+          || resource.data.investorId == request.auth.uid
+        )
+        && resource.data.status in ['interested', 'discussion', 'accepted']
+        && request.resource.data.status == 'expired';
+    }
+
     match /discussionRooms/{roomId} {
       allow create: if request.auth != null
         && (
@@ -570,7 +609,8 @@ service cloud.firestore {
             || resource.data.investorId == request.auth.uid
           )
         );
-      allow update: if isDiscussionRoomParticipant(roomId);
+      allow update: if isDiscussionRoomParticipant(roomId)
+        || participantArchivesDealRecord();
       allow delete: if isAdmin();
     }
 
@@ -614,12 +654,10 @@ service cloud.firestore {
         && startupExists(request.resource.data.startupOpportunityId)
         && request.resource.data.founderId == startupOwner(request.resource.data.startupOpportunityId)
         && !isBlockedBetween(request.auth.uid, request.resource.data.founderId);
-      allow read: if isAdmin()
-        || (isSignedIn() && (
-          resource.data.investorId == request.auth.uid
-          || resource.data.founderId == request.auth.uid
-        ));
+      allow read: if interestParticipantCanRead();
+      allow list: if interestParticipantCanRead();
       allow update: if isAdmin()
+        || interestParticipantExpires()
         || (
           isSignedIn()
           && (
@@ -627,15 +665,6 @@ service cloud.firestore {
             || resource.data.investorId == request.auth.uid
           )
           && request.resource.data.status in ['discussion', 'accepted', 'expired', 'interested']
-        )
-        || (
-          isSignedIn()
-          && (
-            resource.data.founderId == request.auth.uid
-            || resource.data.investorId == request.auth.uid
-          )
-          && resource.data.status in ['interested', 'discussion', 'accepted']
-          && request.resource.data.status == 'expired'
         );
       allow delete: if isAdmin();
     }
@@ -884,7 +913,8 @@ service cloud.firestore {
             resource.data.founderId == request.auth.uid
             || resource.data.investorId == request.auth.uid
           )
-        );
+        )
+        || participantArchivesDealRecord();
       allow delete: if isAdmin();
     }
 
