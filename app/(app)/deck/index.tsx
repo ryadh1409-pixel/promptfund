@@ -3,7 +3,8 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { StartupPlayingCard, type StartupCard } from '@/components/cards/StartupPlayingCard';
+import { DealCancelButton } from '@/components/cards/DealCancelButton';
+import { StartupPlayingCard, mapOpportunityToStartupCard } from '@/components/cards/StartupPlayingCard';
 import { Card, EmptyState, LoadingState, PrimaryButton, PrimaryLink, Screen, StatCard, ui } from '@/components/ui/Primitives';
 import { colors, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -279,10 +280,12 @@ export default function MyCardsScreen() {
       key={pipeline.id}
       pipeline={pipeline}
       founderMode={isFounderMode}
+      userId={authUser?.uid ?? ''}
       onAcceptInterest={handleAcceptInterest}
       onOpenMatch={handleOpenMatch}
+      onNotice={setNotice}
     />
-  )), [activePipelines, handleAcceptInterest, handleOpenMatch, isFounderMode]);
+  )), [activePipelines, authUser?.uid, handleAcceptInterest, handleOpenMatch, isFounderMode]);
 
   return (
     <Screen
@@ -348,13 +351,17 @@ export default function MyCardsScreen() {
 const DealPipelineCard = memo(function DealPipelineCard({
   pipeline,
   founderMode,
+  userId,
   onAcceptInterest,
   onOpenMatch,
+  onNotice,
 }: {
   pipeline: DealPipeline;
   founderMode: boolean;
+  userId: string;
   onAcceptInterest: (interest: InvestmentInterest) => void;
   onOpenMatch: (match: Match) => void;
+  onNotice: (message: string | null) => void;
 }) {
   const opportunity = pipeline.opportunity;
   const title = opportunity?.startupName
@@ -384,22 +391,22 @@ const DealPipelineCard = memo(function DealPipelineCard({
 
   return (
     <Card style={styles.pipelineCard}>
-      <View style={styles.rowHeader}>
-        <View style={styles.pipelineTitleBlock}>
-          <Text style={styles.cardTitle}>{title}</Text>
-          <Text style={styles.meta}>Founder: {founderName}</Text>
-          {!founderMode ? <Text style={styles.meta}>Investor: {investorName}</Text> : null}
-        </View>
-        <View style={[styles.stageBadge, { borderColor: stageMeta.badgeColor }]}>
-          <Text style={[styles.stageBadgeText, { color: stageMeta.badgeColor }]}>{stageMeta.badge}</Text>
-        </View>
-      </View>
-
       {startupCard ? (
         <View style={styles.playingCardWrap}>
-          <StartupPlayingCard card={startupCard} compact />
+          <StartupPlayingCard card={startupCard} stageLabel={stageMeta.label} />
         </View>
-      ) : null}
+      ) : (
+        <View style={styles.rowHeader}>
+          <View style={styles.pipelineTitleBlock}>
+            <Text style={styles.cardTitle}>{title}</Text>
+            <Text style={styles.meta}>Founder: {founderName}</Text>
+            {!founderMode ? <Text style={styles.meta}>Investor: {investorName}</Text> : null}
+          </View>
+          <View style={[styles.stageBadge, { borderColor: stageMeta.badgeColor }]}>
+            <Text style={[styles.stageBadgeText, { color: stageMeta.badgeColor }]}>{stageMeta.badge}</Text>
+          </View>
+        </View>
+      )}
 
       <View style={styles.detailGrid}>
         <Detail label="Founder" value={founderName} />
@@ -436,6 +443,13 @@ const DealPipelineCard = memo(function DealPipelineCard({
           );
         })}
       </View>
+
+      <DealCancelButton
+        pipeline={pipeline}
+        founderMode={founderMode}
+        userId={userId}
+        onError={onNotice}
+      />
 
       <PipelineAction
         pipeline={pipeline}
@@ -510,40 +524,6 @@ function mapStartupInterestToLegacy(interest: StartupInterest): InvestmentIntere
   };
 }
 
-function mapOpportunityToStartupCard(opportunity: InvestmentOpportunity): StartupCard {
-  const title = opportunity.title ?? opportunity.startupName;
-  const description = opportunity.description ?? opportunity.shortDescription ?? opportunity.purpose;
-  const askAmount = opportunity.askAmount ?? opportunity.fundingGoal ?? opportunity.fundingNeeded;
-  const equity = opportunity.equity ?? opportunity.investorAllocation;
-
-  return {
-    id: opportunity.id,
-    developerId: opportunity.founderId,
-    ownerId: opportunity.founderId,
-    title,
-    startupName: title,
-    shortDescription: opportunity.shortDescription ?? description,
-    tagline: description,
-    description,
-    fundingNeeded: opportunity.fundingNeeded ?? askAmount,
-    goalAmount: askAmount,
-    equityOffered: equity,
-    metric: '$22 angel check',
-    founderName: opportunity.founderName,
-    founderAvatar: opportunity.founderName
-      .split(' ')
-      .map((part) => part[0])
-      .join('')
-      .slice(0, 2)
-      .toUpperCase() || 'PF',
-    founderVerified: true,
-    rank: 'A' as const,
-    coverImage: opportunity.imageUrl,
-    stage: opportunity.stage,
-    shortPitch: description,
-  };
-}
-
 function updateIfChanged<T>(current: T, next: T) {
   return stableStringify(current) === stableStringify(next) ? current : next;
 }
@@ -583,8 +563,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   playingCardWrap: {
-    alignSelf: 'center',
-    width: 180,
+    width: '100%',
   },
   rowHeader: {
     alignItems: 'flex-start',

@@ -9,8 +9,8 @@ import { formatCurrency } from '@/utils/format';
 export function ProjectCard({ project }: { project: Project }) {
   return (
     <Card>
-      <View style={{ maxWidth: 220, alignSelf: 'center', width: '100%' }}>
-        <StartupPlayingCard card={mapProjectToStartupCard(project)} compact />
+      <View style={{ width: '100%' }}>
+        <StartupPlayingCard card={mapProjectToStartupCard(project)} />
       </View>
       <View>
         <Text style={{ color: colors.text, fontSize: 20, fontWeight: '800' }}>{project.title}</Text>

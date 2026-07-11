@@ -1,12 +1,11 @@
 import { memo } from 'react';
 import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import {
-  PlayingCardFrame,
-} from '@/components/cards/PlayingCardDecor';
+import { PlayingCardFrame } from '@/components/cards/PlayingCardDecor';
 import { colors, radii, spacing } from '@/constants/theme';
+import type { InvestmentOpportunity, V5Investment } from '@/types/InvestmentFlow';
 import type { Project, StartupCardRank } from '@/types/Project';
-import { safeCurrency } from '@/utils/safeFormat';
+import { safeCurrency, safePercent } from '@/utils/safeFormat';
 
 export type StartupCard = Pick<
   Project,
@@ -125,15 +124,80 @@ export function mapProjectToStartupCard(project: Project): StartupCard {
   };
 }
 
+function founderInitials(name?: string) {
+  return name
+    ?.split(' ')
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'PF';
+}
+
+export function mapOpportunityToStartupCard(opportunity: InvestmentOpportunity): StartupCard {
+  const title = opportunity.title ?? opportunity.startupName;
+  const description = opportunity.description ?? opportunity.shortDescription ?? opportunity.purpose;
+  const askAmount = opportunity.askAmount ?? opportunity.fundingGoal ?? opportunity.fundingNeeded;
+  const equity = opportunity.equity ?? opportunity.investorAllocation;
+
+  return {
+    id: opportunity.id,
+    developerId: opportunity.founderId,
+    ownerId: opportunity.founderId,
+    title,
+    startupName: title,
+    shortDescription: opportunity.shortDescription ?? description,
+    tagline: description,
+    description,
+    fundingNeeded: opportunity.fundingNeeded ?? askAmount,
+    goalAmount: askAmount,
+    equityOffered: equity,
+    metric: '$22 angel check',
+    founderName: opportunity.founderName,
+    founderAvatar: founderInitials(opportunity.founderName),
+    founderVerified: true,
+    rank: 'A',
+    coverImage: opportunity.imageUrl,
+    stage: opportunity.stage,
+    traction: description,
+    shortPitch: description,
+  };
+}
+
+export function mapInvestmentToStartupCard(investment: V5Investment): StartupCard {
+  const fundedAmount = investment.fundedAmount ?? investment.amount ?? 0;
+
+  return {
+    id: investment.startupId ?? investment.opportunityId ?? investment.id,
+    startupName: investment.startupName ?? 'Portfolio Company',
+    title: investment.startupName ?? 'Portfolio Company',
+    tagline: 'Funded PromptFund portfolio company',
+    shortDescription: 'Funded PromptFund portfolio company',
+    description: 'Funded PromptFund portfolio company',
+    fundingNeeded: fundedAmount,
+    goalAmount: fundedAmount,
+    equityOffered: investment.allocation,
+    metric: 'Portfolio Company',
+    founderName: investment.founderName ?? 'Founder',
+    founderAvatar: founderInitials(investment.founderName),
+    founderVerified: true,
+    rank: 'A',
+    coverImage: investment.startupImage,
+    stage: 'Portfolio Company',
+    shortPitch: 'Funded PromptFund portfolio company',
+  };
+}
+
 export const StartupPlayingCard = memo(function StartupPlayingCard({
   card,
-  compact = false,
   showBack = false,
+  stageLabel,
   style,
 }: {
   card: StartupCard;
   compact?: boolean;
   showBack?: boolean;
+  stageLabel?: string;
   style?: StyleProp<ViewStyle>;
 }) {
   const rank = card.rank ?? 'J';
@@ -142,9 +206,11 @@ export const StartupPlayingCard = memo(function StartupPlayingCard({
   const founderName = card.founderName ?? 'Founder';
   const shortDescription = card.shortDescription ?? card.description ?? card.shortPitch ?? card.tagline ?? 'Startup opportunity';
   const fundingGoal = card.fundingNeeded ?? card.goalAmount;
+  const allocation = card.equityOffered;
+  const badgeLabel = stageLabel ?? card.stage;
 
   return (
-    <PlayingCardFrame compact={compact} style={[styles.card, compact ? styles.compactCard : null, style]}>
+    <PlayingCardFrame style={[styles.card, style]}>
       <View style={styles.innerBorder}>
         {showBack ? (
           <View style={styles.backContent}>
@@ -154,17 +220,13 @@ export const StartupPlayingCard = memo(function StartupPlayingCard({
           </View>
         ) : (
           <>
-            <View style={styles.cardHeader}>
-              <Text style={styles.title} numberOfLines={1}>
-                {startupName}
-              </Text>
-              <Text style={styles.byline} numberOfLines={1}>
-                by {founderName}
-              </Text>
-            </View>
             <View style={styles.imagePanel}>
               {card.coverImage ? (
-                <Image source={{ uri: card.coverImage }} style={styles.coverImage} />
+                <Image
+                  source={{ uri: card.coverImage }}
+                  style={styles.coverImage}
+                  resizeMode="cover"
+                />
               ) : (
                 <View style={styles.coverFallback}>
                   <Text style={styles.imageSuit}>{suit}</Text>
@@ -172,14 +234,37 @@ export const StartupPlayingCard = memo(function StartupPlayingCard({
                 </View>
               )}
             </View>
-            <View style={styles.lowerSection}>
-              <Text style={styles.pitch} numberOfLines={compact ? 2 : 3}>
+
+            <View style={styles.contentSection}>
+              <Text style={styles.title} numberOfLines={2}>
+                {startupName}
+              </Text>
+              <Text style={styles.byline} numberOfLines={1}>
+                {founderName}
+              </Text>
+              <Text style={styles.pitch} numberOfLines={2}>
                 {shortDescription}
               </Text>
-              <View style={styles.goalLine}>
-                <Text style={styles.goalLabel}>Goal</Text>
-                <Text style={styles.goalValue}>{safeCurrency(fundingGoal)}</Text>
+            </View>
+
+            <View style={styles.footerSection}>
+              <View style={styles.metricsRow}>
+                <View style={styles.metricBlock}>
+                  <Text style={styles.metricLabel}>Goal</Text>
+                  <Text style={styles.metricValue}>{safeCurrency(fundingGoal)}</Text>
+                </View>
+                <View style={styles.metricBlock}>
+                  <Text style={styles.metricLabel}>Allocation</Text>
+                  <Text style={styles.metricValue}>{safePercent(allocation)}</Text>
+                </View>
               </View>
+              {badgeLabel ? (
+                <View style={styles.stageBadge}>
+                  <Text style={styles.stageBadgeText} numberOfLines={1}>
+                    {badgeLabel}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </>
         )}
@@ -191,252 +276,118 @@ export const StartupPlayingCard = memo(function StartupPlayingCard({
 const styles = StyleSheet.create({
   card: {
     width: '100%',
-    aspectRatio: 0.714,
     padding: spacing.md,
-  },
-  compactCard: {
-    aspectRatio: 0.714,
-    padding: spacing.sm,
   },
   innerBorder: {
-    flex: 1,
-    justifyContent: 'space-between',
+    gap: spacing.md,
     overflow: 'hidden',
     padding: spacing.md,
   },
-  cardHeader: {
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderColor: 'rgba(20, 20, 20, 0.12)',
-    paddingBottom: spacing.sm,
-  },
   imagePanel: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 0,
-    marginVertical: spacing.sm,
-    borderRadius: radii.lg,
+    aspectRatio: 16 / 9,
     backgroundColor: '#F3E8D0',
+    borderRadius: radii.lg,
     overflow: 'hidden',
+    width: '100%',
   },
   coverImage: {
-    width: '100%',
     height: '100%',
+    width: '100%',
   },
   coverFallback: {
     alignItems: 'center',
+    height: '100%',
     justifyContent: 'center',
     width: '100%',
-    height: '100%',
   },
   imageSuit: {
     color: colors.pokerRed,
-    fontSize: 78,
+    fontSize: 72,
     fontWeight: '900',
-    lineHeight: 86,
+    lineHeight: 80,
   },
   imageText: {
     color: colors.pokerBlack,
     fontSize: 13,
     fontWeight: '900',
-    letterSpacing: 1.6,
+    letterSpacing: 1.4,
+    marginTop: spacing.xs,
+    textAlign: 'center',
     textTransform: 'uppercase',
   },
-  logoBadge: {
-    position: 'absolute',
-    left: spacing.md,
-    bottom: -22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 54,
-    height: 54,
-    borderWidth: 2,
-    borderColor: colors.cardIvory,
-    borderRadius: 16,
-    backgroundColor: colors.pokerBlack,
-  },
-  logoImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 14,
-  },
-  logoText: {
-    color: colors.ivory,
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  content: {
+  contentSection: {
     gap: spacing.sm,
-    paddingTop: spacing.lg,
-  },
-  lowerSection: {
-    borderTopWidth: 1,
-    borderColor: 'rgba(20, 20, 20, 0.12)',
-    gap: spacing.sm,
-    paddingTop: spacing.sm,
-  },
-  metaRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
-  },
-  metaText: {
-    color: colors.pokerBlack,
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  metaDot: {
-    color: colors.luxuryGold,
-    fontSize: 14,
-    fontWeight: '900',
+    paddingTop: spacing.xs,
   },
   title: {
     color: colors.pokerBlack,
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '900',
-    letterSpacing: -1,
-    textAlign: 'center',
+    letterSpacing: -0.6,
+    lineHeight: 30,
   },
   byline: {
-    color: 'rgba(20, 20, 20, 0.72)',
-    fontSize: 14,
-    fontWeight: '900',
-    marginTop: 2,
-    textAlign: 'center',
+    color: 'rgba(20, 20, 20, 0.68)',
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 20,
   },
   pitch: {
     color: 'rgba(20, 20, 20, 0.76)',
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 19,
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 21,
+    marginTop: spacing.xs,
   },
-  goalLine: {
-    alignItems: 'center',
+  footerSection: {
+    borderTopColor: 'rgba(20, 20, 20, 0.12)',
+    borderTopWidth: 1,
+    gap: spacing.md,
+    paddingTop: spacing.md,
+  },
+  metricsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
+    gap: spacing.md,
   },
-  goalLabel: {
+  metricBlock: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  metricLabel: {
     color: 'rgba(20, 20, 20, 0.55)',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
-  goalValue: {
+  metricValue: {
     color: colors.pokerRed,
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  statGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  statBox: {
-    width: '48%',
-    borderWidth: 1,
-    borderColor: 'rgba(20, 20, 20, 0.12)',
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.58)',
-    padding: 8,
-  },
-  statLabel: {
-    color: 'rgba(20, 20, 20, 0.55)',
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  statValue: {
-    color: colors.pokerBlack,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  goal: {
-    color: colors.pokerRed,
-    fontSize: 19,
-    fontWeight: '900',
-  },
-  metric: {
-    color: colors.pokerBlack,
     fontSize: 18,
-    fontWeight: '800',
-  },
-  tractionRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  growth: {
-    color: colors.success,
-    fontSize: 14,
     fontWeight: '900',
+    lineHeight: 22,
   },
-  revenue: {
-    color: colors.pokerBlack,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  risk: {
-    color: colors.pokerRed,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  founderRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingTop: spacing.sm,
-  },
-  avatar: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 48,
-    height: 48,
+  stageBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(166, 35, 35, 0.08)',
+    borderColor: 'rgba(166, 35, 35, 0.24)',
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: colors.luxuryGold,
-    borderRadius: 24,
-    backgroundColor: colors.pokerBlack,
-    overflow: 'hidden',
+    maxWidth: '100%',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
   },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarText: {
-    color: colors.ivory,
-    fontSize: 14,
+  stageBadgeText: {
+    color: colors.pokerRed,
+    fontSize: 12,
     fontWeight: '900',
-  },
-  founderText: {
-    flex: 1,
-  },
-  founderName: {
-    color: colors.pokerBlack,
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  verified: {
-    color: colors.luxuryGold,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  roleBadge: {
-    color: '#409CFF',
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.7,
+    letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
   backContent: {
     flex: 1,
-    justifyContent: 'center',
     gap: spacing.md,
+    justifyContent: 'center',
+    minHeight: 320,
   },
   backLabel: {
     color: colors.pokerRed,
@@ -457,22 +408,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     lineHeight: 25,
-    textAlign: 'center',
-  },
-  backRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  backStat: {
-    flex: 1,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.luxuryGold,
-    borderRadius: radii.md,
-    color: colors.pokerBlack,
-    fontSize: 15,
-    fontWeight: '900',
-    padding: spacing.sm,
     textAlign: 'center',
   },
 });

@@ -10,6 +10,8 @@ import {
   View,
 } from 'react-native';
 
+import { DealCancelButton } from '@/components/cards/DealCancelButton';
+import { StartupPlayingCard, mapOpportunityToStartupCard } from '@/components/cards/StartupPlayingCard';
 import { DealRoomHeader } from '@/components/deal-room/DealRoomHeader';
 import { DealRoomWorkflowWizard } from '@/components/deal-room/DealRoomWorkflowWizard';
 import { InvestmentChatPanel } from '@/components/investment-chat/InvestmentChatPanel';
@@ -24,8 +26,8 @@ import { investmentFlowService } from '@/services/investmentFlowService';
 import { userService } from '@/services/userService';
 import type { WorkflowAction } from '@/utils/dealRoom';
 import { getWorkflowSteps } from '@/utils/dealRoom';
-import { buildDealPipelineFromEntities } from '@/utils/investmentPipeline';
-import type { DiscussionRoom, InvestmentAgreement, V5Investment } from '@/types/InvestmentFlow';
+import { buildDealPipelineFromEntities, getPipelineStageMeta } from '@/utils/investmentPipeline';
+import type { DiscussionRoom, InvestmentAgreement, InvestmentOpportunity, V5Investment } from '@/types/InvestmentFlow';
 import type { DiscussionReportReason, User } from '@/types/User';
 
 const reportReasons: DiscussionReportReason[] = [
@@ -45,6 +47,7 @@ export default function DiscussionRoomScreen() {
   const router = useRouter();
   const { authUser, profile } = useAuth();
   const [room, setRoom] = useState<DiscussionRoom | null>(null);
+  const [opportunity, setOpportunity] = useState<InvestmentOpportunity | null>(null);
   const [agreement, setAgreement] = useState<InvestmentAgreement | null>(null);
   const [investment, setInvestment] = useState<V5Investment | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -65,9 +68,42 @@ export default function DiscussionRoomScreen() {
   }, [authUser?.uid, room?.founderId, room?.investorId]);
 
   const pipeline = useMemo(
-    () => buildDealPipelineFromEntities({ room: room ?? undefined, agreement: agreement ?? undefined, investment: investment ?? undefined }),
-    [agreement, investment, room],
+    () => buildDealPipelineFromEntities({
+      room: room ?? undefined,
+      agreement: agreement ?? undefined,
+      investment: investment ?? undefined,
+      opportunity: opportunity ?? undefined,
+    }),
+    [agreement, investment, opportunity, room],
   );
+
+  const stageMeta = useMemo(() => getPipelineStageMeta(pipeline), [pipeline]);
+  const startupCard = useMemo(() => {
+    if (opportunity) {
+      return mapOpportunityToStartupCard(opportunity);
+    }
+
+    if (!room) {
+      return null;
+    }
+
+    return {
+      id: room.opportunityId,
+      title: room.startupName,
+      startupName: room.startupName,
+      shortDescription: `${room.startupName} investment discussion`,
+      description: `${room.startupName} investment discussion`,
+      tagline: `${room.startupName} investment discussion`,
+      fundingNeeded: room.investmentAmount,
+      goalAmount: room.investmentAmount,
+      equityOffered: room.investorAllocation,
+      founderName: room.founderName,
+      founderAvatar: room.founderName.slice(0, 2).toUpperCase(),
+      founderVerified: true,
+      rank: 'A' as const,
+      stage: room.status,
+    };
+  }, [opportunity, room]);
 
   const workflowSteps = useMemo(() => {
     if (!room) return [];
@@ -95,6 +131,30 @@ export default function DiscussionRoomScreen() {
     );
     return unsubscribe;
   }, [roomId]);
+
+  useEffect(() => {
+    if (!room?.opportunityId) {
+      setOpportunity(null);
+      return undefined;
+    }
+
+    let isMounted = true;
+    investmentFlowService.getOpportunity(room.opportunityId)
+      .then((nextOpportunity) => {
+        if (isMounted) {
+          setOpportunity(nextOpportunity);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setOpportunity(null);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [room?.opportunityId]);
 
   const agreementId = room?.agreementId ?? (room ? `agreement-${room.id}` : null);
 
@@ -328,6 +388,18 @@ export default function DiscussionRoomScreen() {
         <View style={styles.dealRoom}>
           <View style={styles.workflowZone}>
             <DealRoomHeader startupName={room.startupName} />
+            {startupCard ? (
+              <View style={styles.summaryCardWrap}>
+                <StartupPlayingCard card={startupCard} stageLabel={stageMeta.label} />
+              </View>
+            ) : null}
+            <DealCancelButton
+              pipeline={pipeline}
+              founderMode={participantRole === 'founder'}
+              userId={authUser?.uid ?? ''}
+              onCancelled={() => router.back()}
+              onError={setNotice}
+            />
             <DealRoomWorkflowWizard
               steps={workflowSteps}
               isSaving={isWorkflowSaving}
@@ -438,8 +510,12 @@ const styles = StyleSheet.create({
   workflowZone: {
     flexGrow: 0,
     flexShrink: 0,
-    gap: spacing.xs,
+    gap: spacing.sm,
     paddingBottom: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  summaryCardWrap: {
+    width: '100%',
   },
   chatPanel: {
     borderTopColor: 'rgba(216, 201, 163, 0.14)',

@@ -3,7 +3,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { StartupPlayingCard, type StartupCard } from '@/components/cards/StartupPlayingCard';
+import { StartupPlayingCard, mapInvestmentToStartupCard } from '@/components/cards/StartupPlayingCard';
 import { Card, EmptyState, FieldPreview, LoadingState, PrimaryButton, Screen, StatCard, ui } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -211,7 +211,10 @@ function PortfolioCompanyCard({
       </View>
 
       <View style={styles.cardWrap}>
-        <StartupPlayingCard card={mapInvestmentToStartupCard(investment)} compact />
+        <StartupPlayingCard
+          card={mapInvestmentToStartupCard(investment)}
+          stageLabel="Deal Completed"
+        />
       </View>
 
       <View style={styles.founderRow}>
@@ -300,30 +303,6 @@ function formatTractionStatus(status?: V5Investment['status']) {
   return status ?? 'Active';
 }
 
-function mapInvestmentToStartupCard(investment: V5Investment): StartupCard {
-  const fundedAmount = investment.fundedAmount ?? investment.amount ?? 0;
-
-  return {
-    id: investment.startupId ?? investment.opportunityId ?? investment.id,
-    startupName: investment.startupName ?? 'Portfolio Company',
-    title: investment.startupName ?? 'Portfolio Company',
-    tagline: 'Funded PromptFund portfolio company',
-    shortDescription: 'Funded PromptFund portfolio company',
-    description: 'Funded PromptFund portfolio company',
-    fundingNeeded: fundedAmount,
-    goalAmount: fundedAmount,
-    equityOffered: investment.allocation,
-    metric: 'Portfolio Company',
-    founderName: investment.founderName ?? 'Founder',
-    founderAvatar: initials(investment.founderName),
-    founderVerified: true,
-    rank: 'A',
-    coverImage: investment.startupImage,
-    stage: 'Portfolio Company',
-    shortPitch: 'Funded PromptFund portfolio company',
-  };
-}
-
 function initials(value?: string) {
   return value
     ?.split(' ')
@@ -364,8 +343,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   cardWrap: {
-    alignSelf: 'center',
-    width: 190,
+    width: '100%',
   },
   founderRow: {
     alignItems: 'center',

@@ -1013,4 +1013,84 @@ export const investmentFlowService = {
     const investments = await firestoreAdapter.queryByField<V5Investment>('investments', 'investorId', investorId);
     return investments.map(normalizeInvestment);
   },
+
+  async cancelFounderFundingRequest({
+    opportunityId,
+    founderId,
+  }: {
+    opportunityId: string;
+    founderId: string;
+  }) {
+    const opportunity = await this.getOpportunity(opportunityId);
+    if (!opportunity || opportunity.founderId !== founderId) {
+      throw new Error('Startup opportunity not found.');
+    }
+
+    await firestoreAdapter.update<InvestmentOpportunity>('startupOpportunities', opportunityId, {
+      status: 'archived',
+    });
+
+    const [interests, rooms] = await Promise.all([
+      firestoreAdapter.queryByField<StartupInterest>('interests', 'startupOpportunityId', opportunityId),
+      firestoreAdapter.queryByField<DiscussionRoom>('discussionRooms', 'opportunityId', opportunityId),
+    ]);
+
+    await Promise.all([
+      ...interests
+        .filter((interest) => interest.status !== 'expired')
+        .map((interest) => firestoreAdapter.update<StartupInterest>('interests', interest.id, { status: 'expired' })),
+      ...rooms
+        .filter((room) => room.status !== 'archived' && room.status !== 'completed')
+        .map((room) => firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, { status: 'archived' })),
+    ]);
+
+    await recordTimeline({
+      startupId: opportunityId,
+      actorId: founderId,
+      eventType: 'cancelled',
+      label: 'Funding Request Cancelled',
+    });
+    await notifyAdmins(
+      'Startup archived',
+      `${opportunity.startupName} funding request was cancelled.`,
+      'startup_archived',
+      { startupId: opportunityId },
+    );
+  },
+
+  async cancelInvestorParticipation({
+    interestId,
+    roomId,
+    investorId,
+    opportunityId,
+  }: {
+    interestId?: string;
+    roomId?: string;
+    investorId: string;
+    opportunityId: string;
+  }) {
+    if (interestId) {
+      const interest = await firestoreAdapter.getById<StartupInterest>('interests', interestId);
+      if (!interest || interest.investorId !== investorId) {
+        throw new Error('Investment interest not found.');
+      }
+      await firestoreAdapter.update<StartupInterest>('interests', interest.id, { status: 'expired' });
+    }
+
+    if (roomId) {
+      const room = await firestoreAdapter.getById<DiscussionRoom>('discussionRooms', roomId);
+      if (!room || room.investorId !== investorId) {
+        throw new Error('Deal room not found.');
+      }
+      await firestoreAdapter.update<DiscussionRoom>('discussionRooms', roomId, { status: 'archived' });
+    }
+
+    await recordTimeline({
+      startupId: opportunityId,
+      discussionRoomId: roomId,
+      actorId: investorId,
+      eventType: 'cancelled',
+      label: 'Investment Cancelled',
+    });
+  },
 };

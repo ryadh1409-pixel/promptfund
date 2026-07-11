@@ -14,8 +14,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import {
+  mapOpportunityToStartupCard,
   StartupPlayingCard,
-  type StartupCard,
 } from '@/components/cards/StartupPlayingCard';
 import { IdentityCard } from '@/components/cards/IdentityCard';
 import { Card, EmptyState, LoadingState, Pill, PrimaryButton, PrimaryLink, Screen } from '@/components/ui/Primitives';
@@ -278,12 +278,12 @@ function SwipeDeck({
     <View style={styles.deckStage}>
       {thirdCard ? (
         <View style={[styles.deckCard, styles.thirdCard]}>
-          <StartupPlayingCard card={thirdCard} />
+          <StartupPlayingCard card={thirdCard} stageLabel={thirdOpportunity?.stage} />
         </View>
       ) : null}
       {nextCard ? (
         <View style={[styles.deckCard, styles.nextCard]}>
-          <StartupPlayingCard card={nextCard} />
+          <StartupPlayingCard card={nextCard} stageLabel={nextOpportunity?.stage} />
         </View>
       ) : null}
       <GestureDetector gesture={panGesture}>
@@ -294,46 +294,11 @@ function SwipeDeck({
           <Animated.View style={[styles.swipeBadge, styles.passBadge, passBadgeStyle]}>
             <Text style={styles.passText}>PASS</Text>
           </Animated.View>
-          <StartupPlayingCard card={activeCard} />
+          <StartupPlayingCard card={activeCard} stageLabel={activeOpportunity.stage} />
         </Animated.View>
       </GestureDetector>
     </View>
   );
-}
-
-function mapOpportunityToStartupCard(opportunity: InvestmentOpportunity): StartupCard {
-  const title = opportunity.title ?? opportunity.startupName;
-  const description = opportunity.description ?? opportunity.shortDescription ?? opportunity.purpose;
-  const askAmount = opportunity.askAmount ?? opportunity.fundingGoal ?? opportunity.fundingNeeded;
-  const equity = opportunity.equity ?? opportunity.investorAllocation;
-
-  return {
-    id: opportunity.id,
-    developerId: opportunity.founderId,
-    ownerId: opportunity.founderId,
-    title,
-    startupName: title,
-    shortDescription: opportunity.shortDescription ?? description,
-    tagline: description,
-    description,
-    fundingNeeded: opportunity.fundingNeeded ?? askAmount,
-    goalAmount: askAmount,
-    equityOffered: equity,
-    metric: '$22 angel check',
-    founderName: opportunity.founderName,
-    founderAvatar: opportunity.founderName
-      .split(' ')
-      .map((part) => part[0])
-      .join('')
-      .slice(0, 2)
-      .toUpperCase() || 'PF',
-    founderVerified: true,
-    rank: 'A',
-    coverImage: opportunity.imageUrl,
-    stage: opportunity.stage,
-    traction: description,
-    shortPitch: description,
-  };
 }
 
 const styles = StyleSheet.create({
@@ -357,7 +322,7 @@ const styles = StyleSheet.create({
   deckStage: {
     alignItems: 'center',
     justifyContent: 'center',
-    height: 560,
+    height: 620,
     marginTop: spacing.sm,
   },
   deckCard: {

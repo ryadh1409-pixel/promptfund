@@ -176,14 +176,14 @@ export default function DealsScreen() {
       {profile ? <Pill label={getRoleBadgeLabel(profile.role)} tone="rgba(200,162,74,0.18)" /> : null}
       <View style={styles.table}>
         <View style={styles.smallCard}>
-          <StartupPlayingCard card={founderCard} compact />
+          <StartupPlayingCard card={founderCard} stageLabel={founderCard.stage} />
           <Text style={styles.cardLabel}>Founder Card</Text>
         </View>
         <View style={styles.handshake}>
           <Text style={styles.handshakeText}>♣</Text>
         </View>
         <View style={styles.smallCard}>
-          <StartupPlayingCard card={investorCard} compact />
+          <StartupPlayingCard card={investorCard} stageLabel="Angel Investor" />
           <Text style={styles.cardLabel}>Investor Card</Text>
         </View>
       </View>
@@ -257,13 +257,13 @@ export default function DealsScreen() {
 
 const styles = StyleSheet.create({
   table: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
+    alignItems: 'stretch',
+    flexDirection: 'column',
+    gap: spacing.md,
   },
   smallCard: {
-    flex: 1,
     gap: spacing.sm,
+    width: '100%',
   },
   cardLabel: {
     color: colors.muted,
