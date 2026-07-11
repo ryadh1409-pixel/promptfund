@@ -81,6 +81,7 @@ export default function AppLayout() {
           tabBarIcon: ({ color }) => <TabGlyph color={color} label="K" />,
         }}
       />
+      <Tabs.Screen name="deck/[id]" options={{ href: null }} />
       <Tabs.Screen
         name="traction/index"
         options={{
@@ -89,6 +90,7 @@ export default function AppLayout() {
           tabBarIcon: ({ color }) => <TabGlyph color={color} label="T" />,
         }}
       />
+      <Tabs.Screen name="traction/[id]" options={{ href: null }} />
       <Tabs.Screen
         name="profile/index"
         options={{

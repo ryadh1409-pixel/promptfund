@@ -481,7 +481,17 @@ service cloud.firestore {
         );
       allow get: if isAdmin() || canAccessInvestmentAsParticipant(investmentId);
       allow list: if canListInvestment();
-      allow update: if isAdmin() || canUpdateInvestmentAsParticipant(investmentId);
+      allow update: if isAdmin()
+        || canUpdateInvestmentAsParticipant(investmentId)
+        || (
+          isSignedIn()
+          && resource != null
+          && (
+            resource.data.founderId == request.auth.uid
+            || resource.data.investorId == request.auth.uid
+          )
+          && request.resource.data.status == 'archived'
+        );
       allow delete: if isAdmin();
     }
 
@@ -616,7 +626,16 @@ service cloud.firestore {
             resource.data.founderId == request.auth.uid
             || resource.data.investorId == request.auth.uid
           )
-          && request.resource.data.status in ['discussion', 'accepted', 'expired']
+          && request.resource.data.status in ['discussion', 'accepted', 'expired', 'interested']
+        )
+        || (
+          isSignedIn()
+          && (
+            resource.data.founderId == request.auth.uid
+            || resource.data.investorId == request.auth.uid
+          )
+          && resource.data.status in ['interested', 'discussion', 'accepted']
+          && request.resource.data.status == 'expired'
         );
       allow delete: if isAdmin();
     }

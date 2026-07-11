@@ -164,16 +164,32 @@ export function mapOpportunityToStartupCard(opportunity: InvestmentOpportunity):
   };
 }
 
-export function mapInvestmentToStartupCard(investment: V5Investment): StartupCard {
+export function mapInvestmentToStartupCard(
+  investment: V5Investment,
+  opportunity?: InvestmentOpportunity | null,
+): StartupCard {
+  if (opportunity) {
+    const card = mapOpportunityToStartupCard(opportunity);
+    return {
+      ...card,
+      coverImage: opportunity.imageUrl ?? investment.startupImage ?? card.coverImage,
+      goalAmount: opportunity.askAmount ?? opportunity.fundingGoal ?? opportunity.fundingNeeded ?? card.goalAmount,
+      equityOffered: investment.allocation ?? opportunity.equity ?? opportunity.investorAllocation ?? card.equityOffered,
+    };
+  }
+
   const fundedAmount = investment.fundedAmount ?? investment.amount ?? 0;
+  const fallbackDescription = investment.note?.trim()
+    || investment.startupName
+    || 'Startup opportunity';
 
   return {
     id: investment.startupId ?? investment.opportunityId ?? investment.id,
     startupName: investment.startupName ?? 'Portfolio Company',
     title: investment.startupName ?? 'Portfolio Company',
-    tagline: 'Funded PromptFund portfolio company',
-    shortDescription: 'Funded PromptFund portfolio company',
-    description: 'Funded PromptFund portfolio company',
+    tagline: fallbackDescription,
+    shortDescription: fallbackDescription,
+    description: fallbackDescription,
     fundingNeeded: fundedAmount,
     goalAmount: fundedAmount,
     equityOffered: investment.allocation,
@@ -183,8 +199,8 @@ export function mapInvestmentToStartupCard(investment: V5Investment): StartupCar
     founderVerified: true,
     rank: 'A',
     coverImage: investment.startupImage,
-    stage: 'Portfolio Company',
-    shortPitch: 'Funded PromptFund portfolio company',
+    stage: 'Deal Completed',
+    shortPitch: fallbackDescription,
   };
 }
 

@@ -1,12 +1,13 @@
 import { router } from 'expo-router';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { StartupPlayingCard, mapInvestmentToStartupCard } from '@/components/cards/StartupPlayingCard';
+import { StartupDetailCard } from '@/components/cards/StartupDetailCard';
 import { Card, EmptyState, FieldPreview, LoadingState, PrimaryButton, Screen, StatCard, ui } from '@/components/ui/Primitives';
 import { colors, radii, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useStartupCardFromInvestment } from '@/hooks/useStartupCardFromOpportunity';
 import { getPromptFundFirestore } from '@/firebase/firestore';
 import { getFriendlyErrorMessage } from '@/services/errorHandler';
 import { investmentFlowService } from '@/services/investmentFlowService';
@@ -168,6 +169,7 @@ export default function TractionScreen() {
           key={investment.id}
           investment={investment}
           onNotice={setNotice}
+          onOpenDetails={() => router.push(`/traction/${investment.id}`)}
         />
       ))}
     </Screen>
@@ -177,11 +179,14 @@ export default function TractionScreen() {
 function PortfolioCompanyCard({
   investment,
   onNotice,
+  onOpenDetails,
 }: {
   investment: V5Investment;
   onNotice: (message: string | null) => void;
+  onOpenDetails: () => void;
 }) {
   const [isOpeningChat, setIsOpeningChat] = useState(false);
+  const { card: startupCard, isLoading: isLoadingCard } = useStartupCardFromInvestment(investment);
 
   async function handleOpenChat() {
     try {
@@ -202,20 +207,26 @@ function PortfolioCompanyCard({
 
   return (
     <Card style={styles.companyCard}>
-      <View style={styles.headerRow}>
-        <View style={styles.titleBlock}>
-          <Text style={styles.companyTitle}>{investment.startupName ?? 'Portfolio Company'}</Text>
-          <Text style={styles.meta}>Founder: {investment.founderName ?? 'Founder'}</Text>
-          <Text style={styles.meta}>Angel Investor: {investment.investorName ?? 'Angel Investor'}</Text>
+      <Pressable onPress={onOpenDetails}>
+        <View style={styles.headerRow}>
+          <View style={styles.titleBlock}>
+            <Text style={styles.companyTitle}>{investment.startupName ?? 'Portfolio Company'}</Text>
+            <Text style={styles.meta}>Founder: {investment.founderName ?? 'Founder'}</Text>
+            <Text style={styles.meta}>Angel Investor: {investment.investorName ?? 'Angel Investor'}</Text>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.cardWrap}>
-        <StartupPlayingCard
-          card={mapInvestmentToStartupCard(investment)}
-          stageLabel="Deal Completed"
-        />
-      </View>
+        <View style={styles.cardWrap}>
+          {isLoadingCard ? (
+            <LoadingState label="Loading startup card" />
+          ) : startupCard ? (
+            <StartupDetailCard
+              card={startupCard}
+              stageLabel="Deal Completed"
+            />
+          ) : null}
+        </View>
+      </Pressable>
 
       <View style={styles.founderRow}>
         <View style={styles.founderAvatar}>
@@ -256,6 +267,10 @@ function PortfolioCompanyCard({
         variant="secondary"
         onPress={handleOpenChat}
         disabled={isOpeningChat}
+      />
+      <PrimaryButton
+        label="View Full Profile"
+        onPress={onOpenDetails}
       />
     </Card>
   );

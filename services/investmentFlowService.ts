@@ -1030,9 +1030,11 @@ export const investmentFlowService = {
       status: 'archived',
     });
 
-    const [interests, rooms] = await Promise.all([
+    const [interests, rooms, agreements, investments] = await Promise.all([
       firestoreAdapter.queryByField<StartupInterest>('interests', 'startupOpportunityId', opportunityId),
       firestoreAdapter.queryByField<DiscussionRoom>('discussionRooms', 'opportunityId', opportunityId),
+      firestoreAdapter.queryByField<InvestmentAgreement>('agreements', 'opportunityId', opportunityId),
+      firestoreAdapter.queryByField<V5Investment>('investments', 'opportunityId', opportunityId),
     ]);
 
     await Promise.all([
@@ -1042,6 +1044,12 @@ export const investmentFlowService = {
       ...rooms
         .filter((room) => room.status !== 'archived' && room.status !== 'completed')
         .map((room) => firestoreAdapter.update<DiscussionRoom>('discussionRooms', room.id, { status: 'archived' })),
+      ...agreements
+        .filter((agreement) => agreement.status !== 'completed')
+        .map((agreement) => firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, { status: 'archived' })),
+      ...investments
+        .filter((investment) => investment.status !== 'completed')
+        .map((investment) => firestoreAdapter.update<V5Investment>('investments', investment.id, { status: 'archived' })),
     ]);
 
     await recordTimeline({
@@ -1069,8 +1077,14 @@ export const investmentFlowService = {
     investorId: string;
     opportunityId: string;
   }) {
-    if (interestId) {
-      const interest = await firestoreAdapter.getById<StartupInterest>('interests', interestId);
+    let resolvedInterestId = interestId;
+    if (!resolvedInterestId) {
+      const interests = await firestoreAdapter.queryByField<StartupInterest>('interests', 'startupOpportunityId', opportunityId);
+      resolvedInterestId = interests.find((interest) => interest.investorId === investorId)?.id;
+    }
+
+    if (resolvedInterestId) {
+      const interest = await firestoreAdapter.getById<StartupInterest>('interests', resolvedInterestId);
       if (!interest || interest.investorId !== investorId) {
         throw new Error('Investment interest not found.');
       }
@@ -1083,6 +1097,20 @@ export const investmentFlowService = {
         throw new Error('Deal room not found.');
       }
       await firestoreAdapter.update<DiscussionRoom>('discussionRooms', roomId, { status: 'archived' });
+
+      const agreementId = room.agreementId ?? `agreement-${room.id}`;
+      const [agreement, investment] = await Promise.all([
+        firestoreAdapter.getById<InvestmentAgreement>('agreements', agreementId),
+        firestoreAdapter.getById<V5Investment>('investments', agreementId),
+      ]);
+
+      if (agreement && agreement.status !== 'completed') {
+        await firestoreAdapter.update<InvestmentAgreement>('agreements', agreement.id, { status: 'archived' });
+      }
+
+      if (investment && investment.status !== 'completed') {
+        await firestoreAdapter.update<V5Investment>('investments', investment.id, { status: 'archived' });
+      }
     }
 
     await recordTimeline({

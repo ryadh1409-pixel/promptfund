@@ -38,7 +38,7 @@ export function DealCancelButton({
       [
         { text: 'Keep Deal', style: 'cancel' },
         {
-          text: 'Cancel Deal',
+          text: founderMode ? 'Cancel Funding Request' : 'Cancel Investment',
           style: 'destructive',
           onPress: () => {
             void handleCancel();
