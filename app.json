@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "PromptFund",
+    "name": "Ai PromptFund",
     "slug": "PromptFund",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,15 +11,15 @@
       "bundleIdentifier": "com.thamer.promptfund",
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "PromptFund needs camera access for Agreement Room video sessions.",
-        "NSMicrophoneUsageDescription": "PromptFund needs microphone access to record agreement meetings.",
-        "NSPhotoLibraryUsageDescription": "PromptFund needs photo library access so you can attach photos to Investment Chat and update your profile photo.",
+        "NSCameraUsageDescription": "Ai PromptFund needs camera access for Agreement Room video sessions.",
+        "NSMicrophoneUsageDescription": "Ai PromptFund needs microphone access to record agreement meetings.",
+        "NSPhotoLibraryUsageDescription": "Ai PromptFund needs photo library access so you can attach photos to Investment Chat and update your profile photo.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#050816",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -41,23 +41,23 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow PromptFund to access your camera for Agreement Room video sessions.",
-          "microphonePermission": "Allow PromptFund to access your microphone for Agreement Room recordings.",
+          "cameraPermission": "Allow Ai PromptFund to access your camera for Agreement Room video sessions.",
+          "microphonePermission": "Allow Ai PromptFund to access your microphone for Agreement Room recordings.",
           "recordAudioAndroid": true
         }
       ],
       [
         "expo-audio",
         {
-          "microphonePermission": "Allow PromptFund to record Agreement Room audio.",
+          "microphonePermission": "Allow Ai PromptFund to record Agreement Room audio.",
           "enableBackgroundRecording": false
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow PromptFund to access your photos so you can upload startup screenshots and Investment Chat photos.",
-          "cameraPermission": "Allow PromptFund to use your camera for profile photos.",
+          "photosPermission": "Allow Ai PromptFund to access your photos so you can upload startup screenshots and Investment Chat photos.",
+          "cameraPermission": "Allow Ai PromptFund to use your camera for profile photos.",
           "microphonePermission": false
         }
       ],

@@ -37,7 +37,7 @@ export function ReportDialog({
         <View style={styles.card}>
           <Text style={styles.title}>Report Message</Text>
           <Text style={styles.subtitle}>
-            Reports are reviewed by the PromptFund Trust & Safety team.
+            Reports are reviewed by the Ai PromptFund Trust & Safety team.
           </Text>
           <ScrollView style={styles.reasonList}>
             {MESSAGE_REPORT_REASONS.map((item) => (

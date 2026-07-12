@@ -110,7 +110,7 @@ export default function EditProfileScreen() {
   }
 
   return (
-    <Screen eyebrow="Account" title="Edit Profile" subtitle="Manage your public PromptFund identity.">
+    <Screen eyebrow="Account" title="Edit Profile" subtitle="Manage your public Ai PromptFund identity.">
       <Card>
         <View style={styles.photoRow}>
           {photoURL ? (

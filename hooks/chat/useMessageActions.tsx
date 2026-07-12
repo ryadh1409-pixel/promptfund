@@ -103,7 +103,7 @@ export function useMessageActions({
         type: 'success',
         message: result.alreadyExists
           ? 'You have already reported this message.'
-          : 'Report submitted. Thank you for helping keep PromptFund safe.',
+          : 'Report submitted. Thank you for helping keep Ai PromptFund safe.',
       });
     } catch (error) {
       onToast({ type: 'error', message: getFriendlyErrorMessage(error) });

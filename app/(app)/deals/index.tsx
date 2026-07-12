@@ -154,7 +154,7 @@ export default function DealsScreen() {
       investmentAmount: amount,
       equityPercentage: equity,
       termType: 'SAFE',
-      customTerms: 'Investor and founder will review SAFE, convertible note, revenue share, or custom terms with PromptFund Witness.',
+      customTerms: 'Investor and founder will review SAFE, convertible note, revenue share, or custom terms with Ai PromptFund Witness.',
       editedBy: profile?.id ?? match.investorUid,
       });
       await fundingService.updateMatch(match.id, {

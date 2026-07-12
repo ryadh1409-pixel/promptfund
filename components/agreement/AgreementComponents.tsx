@@ -59,7 +59,7 @@ export function PromptFundWitnessCard({
         <View style={[styles.agentPulse, status === 'speaking' ? styles.agentPulseActive : null]} />
         <Text style={styles.agentAvatarText}>AI</Text>
       </View>
-      <Text style={styles.agentName}>PromptFund Witness</Text>
+      <Text style={styles.agentName}>Ai PromptFund Witness</Text>
       <Text style={styles.agentRole}>Neutral platform representative</Text>
       <Pill label={status} tone="rgba(64, 156, 255, 0.2)" />
       <View style={styles.waveform}>
@@ -89,7 +89,7 @@ export function AgreementCertificatePanel({ certificate }: { certificate: Agreem
     ['Transcript Generated', certificate?.transcriptGenerated],
     ['AI Summary Generated', certificate?.aiSummaryGenerated],
     ['Agreement Signed', certificate?.agreementSigned],
-    ['PromptFund Witness Verification', certificate?.promptFundWitnessVerified],
+    ['Ai PromptFund Witness Verification', certificate?.promptFundWitnessVerified],
   ] as const;
 
   return (

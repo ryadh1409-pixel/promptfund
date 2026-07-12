@@ -27,7 +27,7 @@ function firebaseExtraFromEnv(): FirebaseExtraConfig {
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: config.name ?? 'PromptFund',
+  name: config.name ?? 'Ai PromptFund',
   slug: config.slug ?? 'PromptFund',
   extra: {
     ...config.extra,

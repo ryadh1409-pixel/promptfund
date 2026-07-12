@@ -40,7 +40,7 @@ export default function ReportUserScreen() {
   }
 
   return (
-    <Screen eyebrow="Safety" title="Report a User" subtitle="Reports are reviewed by PromptFund admins.">
+    <Screen eyebrow="Safety" title="Report a User" subtitle="Reports are reviewed by Ai PromptFund admins.">
       <Card>
         <TextInput placeholder="Reported user UID" placeholderTextColor={colors.subtle} value={reportedUid} onChangeText={setReportedUid} autoCapitalize="none" style={styles.input} />
         <View style={styles.reasonGrid}>

@@ -25,7 +25,7 @@ export function useAgreementRecording() {
     async function preparePermissions() {
       const audioPermission = await AudioModule.requestRecordingPermissionsAsync();
       if (!audioPermission.granted) {
-        Alert.alert('Microphone permission denied', 'PromptFund needs microphone access to record agreement audio.');
+        Alert.alert('Microphone permission denied', 'Ai PromptFund needs microphone access to record agreement audio.');
       }
 
       if (!cameraPermission?.granted) {

@@ -195,7 +195,7 @@ export default function AdminDashboardScreen() {
     const user = usersById[userId];
     const blocked = isUserBlocked(user);
     const confirmed = await confirmAction(
-      blocked ? 'Unblock this user and restore account access?' : 'Block this user from PromptFund?',
+      blocked ? 'Unblock this user and restore account access?' : 'Block this user from Ai PromptFund?',
     );
     if (!confirmed) return;
 
@@ -272,7 +272,7 @@ export default function AdminDashboardScreen() {
   return (
     <Screen
       eyebrow="Admin"
-      title="PromptFund Admin Dashboard"
+      title="Ai PromptFund Admin Dashboard"
       subtitle="Private operations console for trusted administrators."
       leftAction={<ScreenHeaderBackButton />}
     >

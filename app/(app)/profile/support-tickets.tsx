@@ -40,13 +40,13 @@ export default function SupportTicketsScreen() {
   }, [authUser?.uid]);
 
   return (
-    <Screen eyebrow="Support" title="My Support Tickets" subtitle="Track support conversations with the PromptFund team.">
+    <Screen eyebrow="Support" title="My Support Tickets" subtitle="Track support conversations with the Ai PromptFund team.">
       <PrimaryLink href="/profile/contact-support" label="New Support Ticket" />
       {isLoading ? <LoadingState label="Loading support tickets" /> : null}
       {!isLoading && tickets.length === 0 ? (
         <Card>
           <Text style={styles.emptyTitle}>No tickets yet</Text>
-          <Text style={styles.copy}>When you contact PromptFund Support, your conversations will appear here.</Text>
+          <Text style={styles.copy}>When you contact Ai PromptFund Support, your conversations will appear here.</Text>
         </Card>
       ) : null}
       {tickets.map((ticket) => (

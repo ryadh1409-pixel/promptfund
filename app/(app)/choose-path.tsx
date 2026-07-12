@@ -39,7 +39,7 @@ function PathDescription({ role }: { role: ActiveRole }) {
         </Text>
         <Text style={styles.copy}>
           The proposed funding is independently negotiated between you and the investor{' '}
-          <Text style={styles.accent}>outside the PromptFund platform</Text>.
+          <Text style={styles.accent}>outside the Ai PromptFund platform</Text>.
         </Text>
       </View>
     );
@@ -53,7 +53,7 @@ function PathDescription({ role }: { role: ActiveRole }) {
       </Text>
       <Text style={styles.copy}>
         All investment decisions are voluntary and negotiated directly between the investor and the founder{' '}
-        <Text style={styles.accent}>outside PromptFund</Text>.
+        <Text style={styles.accent}>outside Ai PromptFund</Text>.
       </Text>
     </View>
   );
@@ -87,9 +87,9 @@ export default function ChoosePathScreen() {
 
   return (
     <Screen
-      eyebrow="PromptFund"
+      eyebrow="Ai PromptFund"
       title="Choose Your Path"
-      subtitle="PromptFund connects founders seeking small AI tool funding with angel investors looking to support promising early-stage ideas."
+      subtitle="Ai PromptFund connects founders seeking small AI tool funding with angel investors looking to support promising early-stage ideas."
     >
       <View style={styles.cardsSection}>
         {pathOptions.map((option) => (
@@ -108,7 +108,7 @@ export default function ChoosePathScreen() {
         ))}
       </View>
       <Text style={styles.legalNote}>
-        PromptFund only facilitates introductions between founders and angel investors. It does not process payments, hold funds, negotiate investments, provide legal or financial advice, or participate in any funding agreement. All funding transactions, equity discussions, and contractual arrangements occur independently outside the PromptFund platform.
+        Ai PromptFund only facilitates introductions between founders and angel investors. It does not process payments, hold funds, negotiate investments, provide legal or financial advice, or participate in any funding agreement. All funding transactions, equity discussions, and contractual arrangements occur independently outside the Ai PromptFund platform.
       </Text>
     </Screen>
   );

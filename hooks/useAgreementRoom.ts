@@ -28,9 +28,9 @@ const stepOrder: AgreementStep[] = [
   'finalRecord',
 ];
 
-const openingStatement = `Welcome to PromptFund Agreement Room.
+const openingStatement = `Welcome to Ai PromptFund Agreement Room.
 
-I am PromptFund Witness, the official AI representative of PromptFund.
+I am Ai PromptFund Witness, the official AI representative of Ai PromptFund.
 
 This meeting is being recorded.
 
@@ -130,7 +130,7 @@ export function useAgreementRoom({
         }
       } catch (witnessError) {
         setAgentStatus('listening');
-        setError(witnessError instanceof Error ? witnessError.message : 'PromptFund Witness failed.');
+        setError(witnessError instanceof Error ? witnessError.message : 'Ai PromptFund Witness failed.');
       }
     },
     [addTranscriptLine, agreementId, currentRole, room, transcript],
@@ -191,8 +191,8 @@ export function useAgreementRoom({
       currentStep: passed ? 'contractSigning' : 'phaseGate',
       phaseOneCompletedAt: passed ? new Date().toISOString() : undefined,
       witnessVerification: passed
-        ? 'PromptFund Witness verified identity confirmation, risk acknowledgement, terms acknowledgement, and no unresolved disputes.'
-        : 'PromptFund Witness blocked Phase 2 because verification requirements are incomplete or disputed.',
+        ? 'Ai PromptFund Witness verified identity confirmation, risk acknowledgement, terms acknowledgement, and no unresolved disputes.'
+        : 'Ai PromptFund Witness blocked Phase 2 because verification requirements are incomplete or disputed.',
     });
 
     if (updatedRoom) {

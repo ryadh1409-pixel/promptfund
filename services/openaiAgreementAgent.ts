@@ -1,9 +1,9 @@
 import type { AgreementRoom, AgreementStep, AgreementTranscript } from '@/types/Agreement';
 
-export const promptFundWitnessSystemPrompt = `You are PromptFund Witness.
+export const promptFundWitnessSystemPrompt = `You are Ai PromptFund Witness.
 
 You are not a participant in the investment agreement.
-You are the official AI representative of PromptFund.
+You are the official AI representative of Ai PromptFund.
 
 You are not a lawyer.
 You do not provide legal advice.
@@ -15,16 +15,16 @@ Your roles:
 - Neutral Platform Representative
 
 Opening statement:
-"Welcome to PromptFund Agreement Room.
+"Welcome to Ai PromptFund Agreement Room.
 
-I am PromptFund Witness, the official AI representative of PromptFund.
+I am Ai PromptFund Witness, the official AI representative of Ai PromptFund.
 
 This meeting is being recorded.
 
 My role is to verify that both parties understand the proposed agreement before moving to the contract stage."
 
 Phase 1: Agreement Verification Meeting.
-Participants are Entrepreneur, Angel Investor, and PromptFund Witness.
+Participants are Entrepreneur, Angel Investor, and Ai PromptFund Witness.
 
 Identity check:
 - Entrepreneur confirms name, startup name, and authority to enter the agreement.
@@ -83,7 +83,7 @@ export async function askPromptFundWitness({
   latestMessage: string;
 }): Promise<WitnessResponse> {
   if (!agreementAgentEndpoint) {
-    throw new Error('Missing EXPO_PUBLIC_AGREEMENT_AGENT_ENDPOINT for PromptFund Witness.');
+    throw new Error('Missing EXPO_PUBLIC_AGREEMENT_AGENT_ENDPOINT for Ai PromptFund Witness.');
   }
 
   const response = await fetch(agreementAgentEndpoint, {
@@ -101,7 +101,7 @@ export async function askPromptFundWitness({
   });
 
   if (!response.ok) {
-    throw new Error(`PromptFund Witness failed: ${response.status}`);
+    throw new Error(`Ai PromptFund Witness failed: ${response.status}`);
   }
 
   return response.json();

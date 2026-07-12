@@ -21,7 +21,7 @@ function discussionReportId(discussionRoomId: string, reporterUid: string) {
 }
 
 function displayName(profile: Pick<User, 'displayName' | 'name' | 'username' | 'handle'>) {
-  return profile.displayName ?? profile.name ?? profile.username ?? profile.handle ?? 'PromptFund Member';
+  return profile.displayName ?? profile.name ?? profile.username ?? profile.handle ?? 'Ai PromptFund Member';
 }
 
 function blockRole(profile: Pick<User, 'activeRole' | 'roles' | 'role'>): 'Founder' | 'Angel Investor' {

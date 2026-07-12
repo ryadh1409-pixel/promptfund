@@ -24,7 +24,7 @@ export default function LoginScreen() {
 
   return (
     <Screen
-      eyebrow="PromptFund"
+      eyebrow="Ai PromptFund"
       title="Swipe. Match. Fund."
       subtitle="Investors swipe startup cards. Founders create one card and meet investors."
     >
@@ -56,14 +56,14 @@ export default function LoginScreen() {
           <Text style={styles.forgotLink}>Forgot Password?</Text>
         </Link>
         <View style={styles.footerRow}>
-          <Text style={styles.footerText}>New to PromptFund?</Text>
+          <Text style={styles.footerText}>New to Ai PromptFund?</Text>
           <Link href="/register" asChild>
             <Text style={styles.footerLink}>Create account</Text>
           </Link>
         </View>
       </Card>
 
-      <FieldPreview label="PromptFund V2" value="Startup investing through cards." />
+      <FieldPreview label="Ai PromptFund V2" value="Startup investing through cards." />
     </Screen>
   );
 }

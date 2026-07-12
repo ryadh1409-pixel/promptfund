@@ -49,7 +49,7 @@ export async function generateAgreementPdf({
         </style>
       </head>
       <body>
-        <h1>PromptFund Agreement Certificate</h1>
+        <h1>Ai PromptFund Agreement Certificate</h1>
         <div class="cert">
           <p><strong>Agreement ID:</strong> ${escapeHtml(room.agreementId)}</p>
           <p><strong>Agreement Hash:</strong> ${escapeHtml(certificate.agreementHash)}</p>

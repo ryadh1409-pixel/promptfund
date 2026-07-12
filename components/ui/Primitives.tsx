@@ -50,11 +50,11 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <View style={styles.brandRow}>
       <View style={compact ? styles.logoCompact : styles.logo}>
-        <Text style={compact ? styles.logoTextCompact : styles.logoText}>PF</Text>
+        <Text style={compact ? styles.logoTextCompact : styles.logoText}>Ai</Text>
       </View>
       {!compact ? (
         <View>
-          <Text style={styles.brandName}>PromptFund</Text>
+          <Text style={styles.brandName}>Ai PromptFund</Text>
           <Text style={styles.brandTagline}>Swipe. Match. Fund.</Text>
         </View>
       ) : null}
@@ -153,7 +153,7 @@ export function PrimaryButton({
   );
 }
 
-export function LoadingState({ label = 'Loading PromptFund workspace' }: { label?: string }) {
+export function LoadingState({ label = 'Loading Ai PromptFund workspace' }: { label?: string }) {
   return (
     <Card style={styles.stateCard}>
       <ActivityIndicator color={colors.accent} />

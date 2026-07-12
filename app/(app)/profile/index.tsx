@@ -45,7 +45,7 @@ export default function UserProfileScreen() {
           avatar={profile.avatar}
           photoURL={profile.photoURL}
           location={profile.location}
-          bio={profile.bio || 'PromptFund member building a verified investment record.'}
+          bio={profile.bio || 'Ai PromptFund member building a verified investment record.'}
           memberSince={profile.memberSince}
         />
       </View>
@@ -137,7 +137,7 @@ function SupportSection() {
         <Link href="/profile/contact-support" asChild>
           <Pressable accessibilityRole="button" style={styles.legalRow}>
             <View style={styles.legalTextBlock}>
-              <Text style={styles.legalTitle}>Contact PromptFund Support</Text>
+              <Text style={styles.legalTitle}>Contact Ai PromptFund Support</Text>
               <Text style={styles.legalPreview}>Send a message to our team. We typically respond within 24 hours.</Text>
             </View>
             <Text style={styles.chevron}>›</Text>
@@ -147,7 +147,7 @@ function SupportSection() {
           <Pressable accessibilityRole="button" style={styles.legalRow}>
             <View style={styles.legalTextBlock}>
               <Text style={styles.legalTitle}>My Support Tickets</Text>
-              <Text style={styles.legalPreview}>View status and replies from PromptFund Support.</Text>
+              <Text style={styles.legalPreview}>View status and replies from Ai PromptFund Support.</Text>
             </View>
             <Text style={styles.chevron}>›</Text>
           </Pressable>

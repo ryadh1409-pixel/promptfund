@@ -72,7 +72,7 @@ export default function BlockedUsersScreen() {
             )}
             <View style={styles.userMeta}>
               <Text style={styles.title}>{blocked.blockedName ?? blocked.blockedUid}</Text>
-              <Text style={styles.copy}>{blocked.blockedRole ?? 'PromptFund Member'}</Text>
+              <Text style={styles.copy}>{blocked.blockedRole ?? 'Ai PromptFund Member'}</Text>
               <Text style={styles.copy}>Blocked on {safeDate(blocked.createdAt)}</Text>
             </View>
           </View>

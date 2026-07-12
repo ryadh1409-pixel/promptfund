@@ -164,7 +164,7 @@ function getActiveStepContent(
     const contactLines = formatContactLines(founderProfile, agreement);
     return {
       title: 'Funding Instructions',
-      body: 'Transfer instructions are now available. Arrange funding directly outside PromptFund.',
+      body: 'Transfer instructions are now available. Arrange funding directly outside Ai PromptFund.',
       buttonLabel: 'Continue',
       action: 'continue_funding_instructions',
       detailLines: contactLines,

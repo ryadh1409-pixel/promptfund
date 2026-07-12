@@ -24,7 +24,7 @@ const moderationPatterns: ModerationPattern[] = [
   },
   {
     category: 'hate_speech',
-    reason: 'Hate speech is not allowed on PromptFund.',
+    reason: 'Hate speech is not allowed on Ai PromptFund.',
     pattern: /\b(kill all|racial slur|nazi|white supremac)\b/i,
   },
   {

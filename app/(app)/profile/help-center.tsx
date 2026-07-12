@@ -5,7 +5,7 @@ import { colors } from '@/constants/theme';
 
 export default function HelpCenterScreen() {
   return (
-    <Screen eyebrow="Support" title="Help Center" subtitle="PromptFund account, safety, and agreement guidance.">
+    <Screen eyebrow="Support" title="Help Center" subtitle="Ai PromptFund account, safety, and agreement guidance.">
       <Card>
         <Text style={{ color: colors.text, fontSize: 18, fontWeight: '900' }}>Common workflows</Text>
         <Text style={{ color: colors.muted, lineHeight: 22 }}>

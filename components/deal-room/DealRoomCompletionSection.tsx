@@ -31,7 +31,7 @@ export function DealRoomCompletionSection({
         <FieldPreview label="Allocation" value={safePercent(investment?.allocation ?? agreement?.investorAllocation)} />
         <FieldPreview label="Completion Date" value={safeDate(agreement?.completedAt ?? investment?.completedAt)} />
       </View>
-      <Text style={styles.disclaimer}>PromptFund did not process or handle any funds related to this agreement.</Text>
+      <Text style={styles.disclaimer}>Ai PromptFund did not process or handle any funds related to this agreement.</Text>
     </View>
   );
 }

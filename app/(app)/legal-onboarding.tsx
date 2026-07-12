@@ -25,7 +25,7 @@ function WelcomeOnboardingBody() {
   return (
     <Card style={styles.heroCard}>
       <Text style={styles.heroParagraph}>
-        PromptFund is a networking platform that connects startup founders with angel investors.
+        Ai PromptFund is a networking platform that connects startup founders with angel investors.
       </Text>
       <Text style={styles.heroParagraph}>
         Founders may seek a small initial investment, such as <Text style={styles.heroAccent}>USD $22</Text>, to cover the subscription cost of an AI development tool that helps them build applications, write prompts, and accelerate product development.
@@ -34,13 +34,13 @@ function WelcomeOnboardingBody() {
         An angel investor may voluntarily provide this funding in exchange for an initial proposed <Text style={styles.heroAccent}>1% equity</Text> interest, subject entirely to private negotiation and mutual agreement between both parties. The proposed percentage is only a starting point and may be negotiated, modified, or rejected by either party.
       </Text>
       <Text style={styles.heroParagraph}>
-        PromptFund is not a broker, financial institution, investment advisor, crowdfunding platform, or legal representative. PromptFund does not participate in negotiations, investment decisions, contracts, equity allocation, due diligence, or dispute resolution.
+        Ai PromptFund is not a broker, financial institution, investment advisor, crowdfunding platform, or legal representative. Ai PromptFund does not participate in negotiations, investment decisions, contracts, equity allocation, due diligence, or dispute resolution.
       </Text>
       <Text style={styles.heroParagraph}>
-        All funding, payments, equity agreements, contracts, ownership transfers, and financial transactions occur entirely <Text style={styles.heroAccent}>outside the PromptFund platform</Text> and are solely the responsibility of the founder and the investor.
+        All funding, payments, equity agreements, contracts, ownership transfers, and financial transactions occur entirely <Text style={styles.heroAccent}>outside the Ai PromptFund platform</Text> and are solely the responsibility of the founder and the investor.
       </Text>
       <Text style={styles.heroParagraphLast}>
-        By continuing, you acknowledge that PromptFund merely facilitates introductions between founders and investors and accepts no legal, financial, tax, regulatory, or contractual liability arising from any interaction or agreement between users.
+        By continuing, you acknowledge that Ai PromptFund merely facilitates introductions between founders and investors and accepts no legal, financial, tax, regulatory, or contractual liability arising from any interaction or agreement between users.
       </Text>
     </Card>
   );
@@ -69,8 +69,8 @@ export default function LegalOnboardingScreen() {
 
     return (
       <Card style={styles.heroCard}>
-        <Text style={styles.heroTitle}>Accept PromptFund Legal Documents</Text>
-        <Text style={styles.heroCopy}>Review and accept the documents below to continue into PromptFund.</Text>
+        <Text style={styles.heroTitle}>Accept Ai PromptFund Legal Documents</Text>
+        <Text style={styles.heroCopy}>Review and accept the documents below to continue into Ai PromptFund.</Text>
         <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: hasAccepted }} onPress={() => setHasAccepted((current) => !current)} style={styles.checkboxRow}>
           <View style={[styles.checkbox, hasAccepted ? styles.checkboxChecked : null]}>
             <Text style={styles.checkboxMark}>{hasAccepted ? '✓' : ''}</Text>
@@ -121,7 +121,7 @@ export default function LegalOnboardingScreen() {
   }
 
   return (
-    <Screen eyebrow="Legal Onboarding" title={step === 'Welcome' ? 'Welcome to PromptFund' : String(step)} subtitle={`Step ${progressLabel}`}>
+    <Screen eyebrow="Legal Onboarding" title={step === 'Welcome' ? 'Welcome to Ai PromptFund' : String(step)} subtitle={`Step ${progressLabel}`}>
       {notice ? (
         <Card>
           <Text style={styles.notice}>{notice}</Text>

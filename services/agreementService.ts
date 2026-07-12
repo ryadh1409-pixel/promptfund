@@ -88,7 +88,7 @@ export const agreementService = {
       investmentAmount: 0,
       equityPercentage: 0,
       repaymentTerms: 'To be confirmed in the Agreement Room.',
-      agreementText: 'PromptFund investment agreement pending participant confirmation.',
+      agreementText: 'Ai PromptFund investment agreement pending participant confirmation.',
       investorSigned: false,
       founderSigned: false,
     });

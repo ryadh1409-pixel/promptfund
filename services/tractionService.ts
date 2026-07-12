@@ -12,7 +12,7 @@ function now() {
 }
 
 function displayName(profile: Pick<User, 'displayName' | 'name' | 'username' | 'handle'>) {
-  return profile.displayName ?? profile.name ?? profile.username ?? profile.handle ?? 'PromptFund Member';
+  return profile.displayName ?? profile.name ?? profile.username ?? profile.handle ?? 'Ai PromptFund Member';
 }
 
 async function assertAllowedContent({
@@ -39,7 +39,7 @@ async function assertAllowedContent({
     createdAt: now(),
   });
   console.info('[PromptFund Moderation] blocked traction content', { investmentId, updateId });
-  throw new AppError('This content violates PromptFund Community Guidelines.', 'moderation/blocked-content');
+  throw new AppError('This content violates Ai PromptFund Community Guidelines.', 'moderation/blocked-content');
 }
 
 function participantIds(investment: V5Investment) {

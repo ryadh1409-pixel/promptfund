@@ -37,7 +37,7 @@ function now() {
 }
 
 function displayName(profile: Pick<User, 'displayName' | 'name' | 'username' | 'handle'> | null | undefined) {
-  return profile?.displayName ?? profile?.name ?? profile?.username ?? profile?.handle ?? 'PromptFund Member';
+  return profile?.displayName ?? profile?.name ?? profile?.username ?? profile?.handle ?? 'Ai PromptFund Member';
 }
 
 function buildTractionInvestmentPayload(
@@ -544,13 +544,13 @@ export const investmentFlowService = {
     if (options.type === 'system') {
       const moderation = moderateChatMessage(body);
       if (!moderation.allowed) {
-        throw new AppError('This message violates PromptFund Community Guidelines.', 'moderation/blocked-message');
+        throw new AppError('This message violates Ai PromptFund Community Guidelines.', 'moderation/blocked-message');
       }
       const createdAt = now();
       await firestoreAdapter.create('discussionMessages', {
         discussionRoomId: room.id,
         senderId: 'system',
-        senderName: 'PromptFund System',
+        senderName: 'Ai PromptFund System',
         body,
         createdAt,
         type: 'system',
@@ -1028,14 +1028,14 @@ export const investmentFlowService = {
     await Promise.all([
       notificationService.createNotification({
         userId: agreement.founderId,
-        title: 'Funding confirmed outside PromptFund',
+        title: 'Funding confirmed outside Ai PromptFund',
         body: `${agreement.investorName} marked funding as arranged for ${agreement.startupName}. Continue in Traction.`,
         type: 'funding_confirmed',
         data: { agreementId: agreement.id, investmentId: agreement.id },
       }),
       notificationService.createNotification({
         userId: agreement.investorId,
-        title: 'Funding confirmed outside PromptFund',
+        title: 'Funding confirmed outside Ai PromptFund',
         body: `${agreement.startupName} is now in your Traction portfolio.`,
         type: 'funding_confirmed',
         data: { agreementId: agreement.id, investmentId: agreement.id },

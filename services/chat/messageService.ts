@@ -41,7 +41,7 @@ function now() {
 }
 
 function displayName(profile: Pick<User, 'displayName' | 'name' | 'username' | 'handle'> | null | undefined) {
-  return profile?.displayName ?? profile?.name ?? profile?.username ?? profile?.handle ?? 'PromptFund Member';
+  return profile?.displayName ?? profile?.name ?? profile?.username ?? profile?.handle ?? 'Ai PromptFund Member';
 }
 
 function omitUndefined<T extends object>(input: T) {

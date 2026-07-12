@@ -105,7 +105,7 @@ export default function ContactSupportScreen() {
     }
 
     if (!authUser?.uid) {
-      setNotice('You must be signed in to contact PromptFund Support.');
+      setNotice('You must be signed in to contact Ai PromptFund Support.');
       return;
     }
 
@@ -148,7 +148,7 @@ export default function ContactSupportScreen() {
       const ticket = await supportService.createTicket({
         ticketId: ticketRef.id,
         userId: authUser.uid,
-        userName: profile?.displayName ?? profile?.name ?? authUser.displayName ?? 'PromptFund Member',
+        userName: profile?.displayName ?? profile?.name ?? authUser.displayName ?? 'Ai PromptFund Member',
         userEmail: profile?.email ?? authUser.email ?? '',
         subject,
         category,
@@ -172,7 +172,7 @@ export default function ContactSupportScreen() {
   }
 
   return (
-    <Screen eyebrow="Support" title="Support" subtitle="Need help? Send a message to the PromptFund team.">
+    <Screen eyebrow="Support" title="Support" subtitle="Need help? Send a message to the Ai PromptFund team.">
       {submittedTicket ? (
         <Card style={styles.successCard}>
           <Text style={styles.successTitle}>✓ Support request submitted successfully</Text>

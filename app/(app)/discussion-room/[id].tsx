@@ -405,7 +405,7 @@ function ReportUserModal({
         <View style={styles.modalCard}>
           <Text style={styles.modalTitle}>Report User</Text>
           <Text style={styles.modalSubtitle}>
-            Help us understand what happened. Reports are reviewed by the PromptFund Trust & Safety team.
+            Help us understand what happened. Reports are reviewed by the Ai PromptFund Trust & Safety team.
           </Text>
           <View style={styles.reasonList}>
             {reportReasons.map((item) => (

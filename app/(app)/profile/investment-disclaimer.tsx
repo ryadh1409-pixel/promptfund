@@ -4,7 +4,7 @@ import { legalDocuments } from '@/constants/legal';
 
 export default function InvestmentDisclaimerScreen() {
   return (
-    <Screen eyebrow="Legal" title="Investment Disclaimer" subtitle="Important limits on PromptFund’s role.">
+    <Screen eyebrow="Legal" title="Investment Disclaimer" subtitle="Important limits on Ai PromptFund’s role.">
       <LegalDocumentView document={legalDocuments.investmentDisclaimer} />
     </Screen>
   );

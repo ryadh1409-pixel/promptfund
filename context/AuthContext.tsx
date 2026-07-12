@@ -46,7 +46,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 function getInitials(value: string | null) {
-  const source = value?.trim() || 'PromptFund User';
+  const source = value?.trim() || 'Ai PromptFund User';
 
   return source
     .split(/\s+/)
@@ -74,7 +74,7 @@ function buildRecoveredProfile(user: AuthUser): CreateUserInput {
     hasChosenPath: false,
     legalOnboardingRequired: false,
     avatar: getInitials(displayName),
-    bio: 'PromptFund profile restored automatically after Firebase Auth sign-in.',
+    bio: 'Ai PromptFund profile restored automatically after Firebase Auth sign-in.',
     location: '',
     stack: [],
     trustScore: 50,

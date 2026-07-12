@@ -50,7 +50,7 @@ export function DealRoomFundingSection({
           <FieldPreview label="Equity Allocation" value={safePercent(agreement.investorAllocation)} />
         </View>
         <Text style={styles.disclaimer}>
-          PromptFund is not involved in the transfer of funds. Founders and investors arrange funding directly outside the app.
+          Ai PromptFund is not involved in the transfer of funds. Founders and investors arrange funding directly outside the app.
         </Text>
       </View>
 
@@ -74,9 +74,9 @@ export function DealRoomFundingSection({
           <Text style={styles.sectionTitle}>Arrangement Status</Text>
           {participantRole === 'investor' ? (
             <>
-              <Text style={styles.body}>Arrange funding directly with the Founder outside PromptFund, then confirm here.</Text>
+              <Text style={styles.body}>Arrange funding directly with the Founder outside Ai PromptFund, then confirm here.</Text>
               <PrimaryButton
-                label={isSaving ? 'Saving...' : 'I Have Arranged Funding Outside PromptFund'}
+                label={isSaving ? 'Saving...' : 'I Have Arranged Funding Outside Ai PromptFund'}
                 onPress={onFundingArranged}
                 disabled={isSaving || !isAwaitingInvestor}
               />
@@ -87,12 +87,12 @@ export function DealRoomFundingSection({
             <>
               <Text style={styles.body}>
                 {isFundingArranged
-                  ? 'Investor has indicated that funding arrangements were completed outside PromptFund.'
-                  : 'Arrange funding directly with the Investor outside PromptFund, then confirm here.'}
+                  ? 'Investor has indicated that funding arrangements were completed outside Ai PromptFund.'
+                  : 'Arrange funding directly with the Investor outside Ai PromptFund, then confirm here.'}
               </Text>
               {isAwaitingInvestor ? (
                 <PrimaryButton
-                  label={isSaving ? 'Saving...' : 'I Have Arranged Funding Outside PromptFund'}
+                  label={isSaving ? 'Saving...' : 'I Have Arranged Funding Outside Ai PromptFund'}
                   onPress={onFundingArranged}
                   disabled={isSaving}
                 />

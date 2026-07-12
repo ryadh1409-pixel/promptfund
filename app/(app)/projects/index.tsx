@@ -51,7 +51,7 @@ export default function ProjectsScreen() {
 
   return (
     <Screen
-      eyebrow="PromptFund Projects"
+      eyebrow="Ai PromptFund Projects"
       title={isEntrepreneur ? 'Funding Progress' : 'Funded startup builds'}
       subtitle={
         isEntrepreneur
@@ -69,13 +69,13 @@ export default function ProjectsScreen() {
         action={<PrimaryLink href="/projects/create" label={isEntrepreneur ? 'Edit card' : 'New project'} variant="secondary" />}
       />
 
-      {isLoading ? <LoadingState label="Loading PromptFund projects" /> : null}
+      {isLoading ? <LoadingState label="Loading Ai PromptFund projects" /> : null}
       {error ? <Text style={{ color: colors.danger, lineHeight: 22 }}>{error}</Text> : null}
 
       {!isLoading && projects.length === 0 ? (
         <EmptyState
           title="No projects yet"
-          message={isEntrepreneur ? 'Create your startup card to start receiving investor interest.' : 'Create a PromptFund project to give investors a clear funding goal, tool list, and milestone trail.'}
+          message={isEntrepreneur ? 'Create your startup card to start receiving investor interest.' : 'Create an Ai PromptFund project to give investors a clear funding goal, tool list, and milestone trail.'}
           action={<PrimaryLink href="/projects/create" label={isEntrepreneur ? 'Create My Startup' : 'Create first project'} />}
         />
       ) : null}
@@ -86,7 +86,7 @@ export default function ProjectsScreen() {
             <ProjectCard key={project.id} project={project} />
           ))}
           <Text style={{ color: colors.muted, lineHeight: 21 }}>
-            PromptFund ranks projects by funding clarity, expense transparency, and recent progress.
+            Ai PromptFund ranks projects by funding clarity, expense transparency, and recent progress.
           </Text>
         </>
       ) : null}

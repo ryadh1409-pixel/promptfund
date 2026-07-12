@@ -150,7 +150,7 @@ export default function AgreementRoomScreen() {
         investmentAmount: Number.isFinite(amount) ? amount : 0,
         equityPercentage: Number.isFinite(equity) ? equity : 0,
         repaymentTerms: customTerms.trim(),
-        agreementText: `${contractTermType} investment draft reviewed by PromptFund Witness.`,
+        agreementText: `${contractTermType} investment draft reviewed by Ai PromptFund Witness.`,
       });
       await agreement.reload();
       setContractVersions(await agreementService.listContractVersions(agreementId));
@@ -161,7 +161,7 @@ export default function AgreementRoomScreen() {
 
   if (agreement.isLoading) {
     return (
-      <Screen eyebrow="Agreement Room" title="Loading secure room" subtitle="Preparing PromptFund Witness.">
+      <Screen eyebrow="Agreement Room" title="Loading secure room" subtitle="Preparing Ai PromptFund Witness.">
         <LoadingState label="Loading Agreement Room" />
       </Screen>
     );
@@ -235,7 +235,7 @@ export default function AgreementRoomScreen() {
       <Card>
         <Text style={styles.sectionTitle}>Phase 1 · Agreement Verification Meeting</Text>
         <Text style={styles.bodyText}>
-          PromptFund Witness represents PromptFund as meeting moderator, agreement witness, process validator, and neutral platform representative.
+          Ai PromptFund Witness represents Ai PromptFund as meeting moderator, agreement witness, process validator, and neutral platform representative.
         </Text>
         <VerificationRow
           label="Founder confirmed name, startup, and authority"
@@ -263,7 +263,7 @@ export default function AgreementRoomScreen() {
           onPress={() => agreement.updateVerification({ unresolvedDisputes: !agreement.room?.unresolvedDisputes })}
         />
         <PrimaryButton
-          label={phaseOnePassed ? 'Phase 1 Complete' : 'Run PromptFund Phase Gate'}
+          label={phaseOnePassed ? 'Phase 1 Complete' : 'Run Ai PromptFund Phase Gate'}
           variant={phaseOnePassed ? 'secondary' : 'primary'}
           onPress={agreement.runPhaseGate}
         />
@@ -273,7 +273,7 @@ export default function AgreementRoomScreen() {
       </Card>
 
       <Card>
-        <Text style={styles.sectionTitle}>PromptFund Witness Term Review</Text>
+        <Text style={styles.sectionTitle}>Ai PromptFund Witness Term Review</Text>
         <TermLine label="Investment Amount" value={`$${agreement.room?.investmentAmount ?? 0}`} />
         <TermLine label="Equity %" value={`${agreement.room?.equityPercentage ?? 0}%`} />
         <TermLine label="SAFE terms" value={contractTermType === 'SAFE' ? customTerms || 'Draft pending' : 'Not selected'} />
@@ -288,8 +288,8 @@ export default function AgreementRoomScreen() {
         <Text style={styles.sectionTitle}>Phase 2 · Contract & Signatures</Text>
         <Text style={styles.bodyText}>
           {phaseOnePassed
-            ? 'Verification passed. Founder and investor can finalize official PromptFund Contract terms.'
-            : 'Locked until PromptFund Witness marks Phase 1 Complete.'}
+            ? 'Verification passed. Founder and investor can finalize official Ai PromptFund Contract terms.'
+            : 'Locked until Ai PromptFund Witness marks Phase 1 Complete.'}
         </Text>
         <View style={styles.contractGrid}>
           <TextInput
@@ -360,7 +360,7 @@ export default function AgreementRoomScreen() {
           onChangeText={setChatMessage}
           style={styles.input}
         />
-        <PrimaryButton label="Send to PromptFund Witness" onPress={handleSendMessage} />
+        <PrimaryButton label="Send to Ai PromptFund Witness" onPress={handleSendMessage} />
       </Card>
 
       <Card>

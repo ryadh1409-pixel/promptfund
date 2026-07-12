@@ -146,7 +146,7 @@ export default function AdminSupportTicketScreen() {
             <Text style={styles.sectionTitle}>Conversation History</Text>
             {messages.map((message) => (
               <View key={message.id} style={[styles.messageBubble, message.senderRole === 'admin' ? styles.messageAdmin : styles.messageUser]}>
-                <Text style={styles.messageSender}>{message.senderRole === 'admin' ? 'PromptFund Support' : ticket.userName}</Text>
+                <Text style={styles.messageSender}>{message.senderRole === 'admin' ? 'Ai PromptFund Support' : ticket.userName}</Text>
                 <Text style={styles.messageBody}>{message.text}</Text>
                 {message.attachments.length > 0 ? (
                   <View style={styles.attachmentList}>

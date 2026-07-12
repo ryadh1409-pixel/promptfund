@@ -61,7 +61,7 @@ export function AnnouncementGate() {
     <Modal visible transparent animationType="fade" onRequestClose={handleDismiss}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
-          <Text style={styles.eyebrow}>PromptFund Announcement</Text>
+          <Text style={styles.eyebrow}>Ai PromptFund Announcement</Text>
           <Text style={styles.title}>{current.title}</Text>
           <Text style={styles.body}>{current.body}</Text>
           <Pressable

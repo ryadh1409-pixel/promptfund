@@ -36,7 +36,7 @@ export default function DownloadDataScreen() {
   }, [authUser?.uid, profile]);
 
   return (
-    <Screen eyebrow="Data" title="Download My Data" subtitle="Review your exportable PromptFund account data.">
+    <Screen eyebrow="Data" title="Download My Data" subtitle="Review your exportable Ai PromptFund account data.">
       {!data ? <LoadingState label="Preparing data export" /> : null}
       {error ? (
         <Card>

@@ -88,7 +88,7 @@ export default function PaymentScreen() {
 
     try {
       await investmentFlowService.markFundingArrangedOutsidePromptFund(agreement);
-      setNotice('Funding arrangements marked as completed outside PromptFund. Waiting for Founder confirmation.');
+      setNotice('Funding arrangements marked as completed outside Ai PromptFund. Waiting for Founder confirmation.');
     } catch (fundingError) {
       setNotice(getFriendlyErrorMessage(fundingError));
     } finally {
@@ -131,7 +131,7 @@ export default function PaymentScreen() {
     <Screen
       eyebrow="Investment Funding"
       title={isCompleted ? 'Funding Agreement Completed' : 'Funding Instructions'}
-      subtitle="PromptFund is only a matching and agreement platform between founders and investors."
+      subtitle="Ai PromptFund is only a matching and agreement platform between founders and investors."
     >
       {isLoading ? <LoadingState label="Loading funding details" /> : null}
       {notice ? (
@@ -176,7 +176,7 @@ export default function PaymentScreen() {
 
           <Card>
             <Text style={styles.disclaimer}>
-              PromptFund is not involved in the transfer of funds. Founders and investors arrange funding directly
+              Ai PromptFund is not involved in the transfer of funds. Founders and investors arrange funding directly
               outside the app.
             </Text>
           </Card>
@@ -187,10 +187,10 @@ export default function PaymentScreen() {
               {participantRole === 'investor' ? (
                 <>
                   <Text style={styles.copy}>
-                    Arrange funding directly with the Founder outside PromptFund, then confirm the arrangement here.
+                    Arrange funding directly with the Founder outside Ai PromptFund, then confirm the arrangement here.
                   </Text>
                   <PrimaryButton
-                    label={isSaving ? 'Saving...' : 'I Have Arranged Funding Outside PromptFund'}
+                    label={isSaving ? 'Saving...' : 'I Have Arranged Funding Outside Ai PromptFund'}
                     onPress={handleFundingArranged}
                     disabled={isSaving || !isAwaitingInvestor}
                   />
@@ -202,12 +202,12 @@ export default function PaymentScreen() {
                 <>
                   <Text style={styles.copy}>
                     {isFundingArranged
-                      ? 'Investor has indicated that funding arrangements were completed outside PromptFund.'
-                      : 'Arrange funding directly with the Investor outside PromptFund, then confirm here or wait for Investor confirmation.'}
+                      ? 'Investor has indicated that funding arrangements were completed outside Ai PromptFund.'
+                      : 'Arrange funding directly with the Investor outside Ai PromptFund, then confirm here or wait for Investor confirmation.'}
                   </Text>
                   {isAwaitingInvestor ? (
                     <PrimaryButton
-                      label={isSaving ? 'Saving...' : 'I Have Arranged Funding Outside PromptFund'}
+                      label={isSaving ? 'Saving...' : 'I Have Arranged Funding Outside Ai PromptFund'}
                       onPress={handleFundingArranged}
                       disabled={isSaving}
                     />
@@ -220,7 +220,7 @@ export default function PaymentScreen() {
                   <PrimaryButton
                     label="Report Issue"
                     variant="secondary"
-                    onPress={() => setNotice('Issue reported. PromptFund support will review the agreement issue.')}
+                    onPress={() => setNotice('Issue reported. Ai PromptFund support will review the agreement issue.')}
                   />
                 </>
               ) : null}
@@ -237,7 +237,7 @@ export default function PaymentScreen() {
                 <FieldPreview label="Completion Date" value={safeDate(agreement.completedAt ?? agreement.updatedAt)} />
               </View>
               <Text style={styles.disclaimer}>
-                PromptFund did not process or handle any funds related to this agreement.
+                Ai PromptFund did not process or handle any funds related to this agreement.
               </Text>
               <PrimaryButton label="Back To My Cards" onPress={() => router.replace('/deck')} />
             </Card>

@@ -8,7 +8,7 @@ export const CHAT_SAFETY_THRESHOLDS = {
 export const CHAT_MODERATION_BLOCKED_MESSAGE = 'Please keep the conversation professional.';
 
 export const CHAT_COMPLIANCE_BANNER =
-  'Messages are encrypted in transit. PromptFund administrators may review conversations that are reported for fraud prevention, abuse prevention, and dispute resolution.';
+  'Messages are encrypted in transit. Ai PromptFund administrators may review conversations that are reported for fraud prevention, abuse prevention, and dispute resolution.';
 
 export const MESSAGE_REPORT_REASONS = [
   'Harassment',

@@ -114,7 +114,7 @@ export default function RegisterScreen() {
     <Screen
       eyebrow="Create profile"
       title="Create Account"
-      subtitle="Create your PromptFund identity. You will choose your path next."
+      subtitle="Create your Ai PromptFund identity. You will choose your path next."
     >
       <Card>
         <>

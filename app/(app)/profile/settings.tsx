@@ -21,7 +21,7 @@ export default function ProfileSettingsScreen() {
   }
 
   return (
-    <Screen eyebrow="Settings" title="Account settings" subtitle="Manage your PromptFund investment identity and security.">
+    <Screen eyebrow="Settings" title="Account settings" subtitle="Manage your Ai PromptFund investment identity and security.">
       <SettingsGroup title="Profile">
         <PrimaryLink href="/profile/edit" label="Edit Profile" variant="secondary" />
       </SettingsGroup>

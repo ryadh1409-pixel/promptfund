@@ -42,7 +42,7 @@ export default function ResetPasswordScreen() {
     <Screen
       eyebrow="Account Recovery"
       title="Reset your password"
-      subtitle="Enter the email connected to your PromptFund account."
+      subtitle="Enter the email connected to your Ai PromptFund account."
     >
       <Card>
         <TextInput

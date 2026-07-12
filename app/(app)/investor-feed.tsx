@@ -141,7 +141,7 @@ export default function FundraisingScreen() {
       subtitle={
         isFounderMode
           ? 'Publish a Startup opportunity and review Angel Investor interest from My Cards.'
-          : 'Swipe right to show Interest. Swipe left to pass. The card deck is the core PromptFund experience.'
+          : 'Swipe right to show Interest. Swipe left to pass. The card deck is the core Ai PromptFund experience.'
       }
     >
       {profile ? <Pill label={getRoleBadgeLabel(profile.role)} tone="rgba(200,162,74,0.18)" /> : null}
@@ -190,7 +190,7 @@ export default function FundraisingScreen() {
               onPress={() => handleSwipeComplete('right')}
             />
           </View>
-          <Text style={styles.hint}>Swipe right for Interest. PromptFund opens the Investment Discussion Room.</Text>
+          <Text style={styles.hint}>Swipe right for Interest. Ai PromptFund opens the Investment Discussion Room.</Text>
         </>
       ) : null}
     </Screen>

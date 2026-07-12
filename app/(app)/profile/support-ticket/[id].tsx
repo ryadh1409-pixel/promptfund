@@ -92,7 +92,7 @@ export default function SupportConversationScreen() {
   }
 
   return (
-    <Screen eyebrow="Support" title={ticket ? `Ticket #${ticket.ticketNumber}` : 'Support Conversation'} subtitle="Conversation with PromptFund Support.">
+    <Screen eyebrow="Support" title={ticket ? `Ticket #${ticket.ticketNumber}` : 'Support Conversation'} subtitle="Conversation with Ai PromptFund Support.">
       {!ticket ? <LoadingState label="Loading support conversation" /> : null}
       {notice ? (
         <Card>
@@ -123,7 +123,7 @@ export default function SupportConversationScreen() {
           const isMine = message.senderId === authUser?.uid;
           return (
             <View key={message.id} style={[styles.messageBubble, isMine ? styles.messageMine : styles.messageTheirs]}>
-              <Text style={styles.messageSender}>{message.senderRole === 'admin' ? 'PromptFund Support' : 'You'}</Text>
+              <Text style={styles.messageSender}>{message.senderRole === 'admin' ? 'Ai PromptFund Support' : 'You'}</Text>
               <Text style={styles.messageBody}>{message.text}</Text>
               {message.attachments.length > 0 ? <Text style={styles.attachmentText}>{message.attachments.length} attachment uploaded</Text> : null}
               <Text style={styles.messageTime}>{formatDate(message.createdAt)}</Text>
