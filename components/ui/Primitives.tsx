@@ -2,6 +2,7 @@ import { Link, type Href } from 'expo-router';
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -13,6 +14,8 @@ import {
 import { AppScreen } from '@/components/layout/AppScreen';
 import { ScreenHeader } from '@/components/layout/ScreenHeader';
 import { colors, radii, spacing } from '@/constants/theme';
+
+const brandLogoSource = require('../../assets/brand-logo.png');
 
 type ScreenProps = {
   eyebrow?: string;
@@ -50,7 +53,12 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <View style={styles.brandRow}>
       <View style={compact ? styles.logoCompact : styles.logo}>
-        <Text style={compact ? styles.logoTextCompact : styles.logoText}>Ai</Text>
+        <Image
+          accessibilityLabel="Ai PromptFund logo"
+          resizeMode="contain"
+          source={brandLogoSource}
+          style={compact ? styles.logoImageCompact : styles.logoImage}
+        />
       </View>
       {!compact ? (
         <View>
@@ -236,6 +244,14 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 9,
     backgroundColor: colors.cardIvory,
+  },
+  logoImage: {
+    height: 46,
+    width: 46,
+  },
+  logoImageCompact: {
+    height: 26,
+    width: 26,
   },
   logoText: {
     color: colors.pokerRed,
